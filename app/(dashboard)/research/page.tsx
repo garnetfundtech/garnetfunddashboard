@@ -55,24 +55,32 @@ export default async function ResearchPage() {
             </tr>
           </thead>
           <tbody>
-            {researchItems.map((item) => (
-              <tr key={item.id} className="odd:bg-white/[0.015]">
-                <td className="px-4 py-3 text-white">{item.title}</td>
-                <td className="px-4 py-3 text-zinc-300">{item.ticker}</td>
-                <td className="px-4 py-3 text-zinc-300">{item.author}</td>
-                <td className="px-4 py-3 text-zinc-300 capitalize">{item.confidence}</td>
-                <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
-                <td className="px-4 py-3">
-                  {item.viewUrl ? (
-                    <Link href={item.viewUrl} target="_blank" className="text-[#d88f8d] hover:underline">
-                      View
-                    </Link>
-                  ) : (
-                    <span className="text-zinc-500">N/A</span>
-                  )}
+            {researchItems.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-zinc-500">
+                  No research reports yet. Upload the first one above.
                 </td>
               </tr>
-            ))}
+            ) : (
+              researchItems.map((item) => (
+                <tr key={item.id} className="odd:bg-white/[0.015]">
+                  <td className="px-4 py-3 text-white">{item.title}</td>
+                  <td className="px-4 py-3 text-zinc-300">{item.ticker}</td>
+                  <td className="px-4 py-3 text-zinc-300">{item.author}</td>
+                  <td className="px-4 py-3 text-zinc-300 capitalize">{item.confidence}</td>
+                  <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
+                  <td className="px-4 py-3">
+                    {item.viewUrl ? (
+                      <Link href={item.viewUrl} target="_blank" className="text-[#d88f8d] hover:underline">
+                        View
+                      </Link>
+                    ) : (
+                      <span className="text-zinc-500">N/A</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </section>

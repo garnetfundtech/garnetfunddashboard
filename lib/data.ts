@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { holdings, researchItems, resourceItems } from "@/lib/mock-data";
+import { holdings } from "@/lib/mock-data";
 import { parseFilePath } from "@/lib/storage";
 import type { FundUser, HoldingRow, ResearchItem, ResourceItem, UserRole } from "@/lib/types";
 
@@ -39,7 +39,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
     .order("created_at", { ascending: false })
     .limit(40);
 
-  if (error || !data || data.length === 0) return researchItems;
+  if (error || !data) return [];
 
   const admin = createAdminClient();
   const mapped: ResearchItem[] = [];
@@ -86,9 +86,7 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
     .order("created_at", { ascending: false })
     .limit(40);
 
-  if (error || !data || data.length === 0) {
-    return resourceItems;
-  }
+  if (error || !data) return [];
 
   const admin = createAdminClient();
   const mapped: ResourceWithLinks[] = [];

@@ -60,34 +60,42 @@ export function ResourcesTableClient({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((item) => (
-              <tr key={item.id} className="odd:bg-white/[0.015]">
-                <td className="px-4 py-3 text-white">{item.title}</td>
-                <td className="px-4 py-3 capitalize text-zinc-300">{item.category}</td>
-                <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3 text-xs">
-                    {item.viewUrl ? (
-                      <button
-                        onClick={() => setSelectedUrl(item.viewUrl ?? null)}
-                        className="text-[#d88f8d] hover:underline"
-                      >
-                        View
-                      </button>
-                    ) : (
-                      <span className="text-zinc-500">No preview</span>
-                    )}
-                    {item.downloadEnabled && item.downloadUrl ? (
-                      <Link href={item.downloadUrl} className="text-emerald-300 hover:underline">
-                        Download
-                      </Link>
-                    ) : (
-                      <span className="text-zinc-500">View only</span>
-                    )}
-                  </div>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-zinc-500">
+                  No resources yet. Upload the first one above.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filtered.map((item) => (
+                <tr key={item.id} className="odd:bg-white/[0.015]">
+                  <td className="px-4 py-3 text-white">{item.title}</td>
+                  <td className="px-4 py-3 capitalize text-zinc-300">{item.category}</td>
+                  <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3 text-xs">
+                      {item.viewUrl ? (
+                        <button
+                          onClick={() => setSelectedUrl(item.viewUrl ?? null)}
+                          className="text-[#d88f8d] hover:underline"
+                        >
+                          View
+                        </button>
+                      ) : (
+                        <span className="text-zinc-500">No preview</span>
+                      )}
+                      {item.downloadEnabled && item.downloadUrl ? (
+                        <Link href={item.downloadUrl} className="text-emerald-300 hover:underline">
+                          Download
+                        </Link>
+                      ) : (
+                        <span className="text-zinc-500">View only</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </section>

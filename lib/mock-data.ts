@@ -1,10 +1,4 @@
-import {
-  HoldingRow,
-  MetricCard,
-  PerformancePoint,
-  ResearchItem,
-  ResourceItem,
-} from "@/lib/types";
+import { HoldingRow, MetricCard, PerformancePoint } from "@/lib/types";
 
 export const metricCards: MetricCard[] = [
   { label: "Total AUM", value: "$0", delta: "0.0% MTD", positive: true },
@@ -83,53 +77,3 @@ export const holdings: HoldingRow[] = [
   },
 ];
 
-export const researchItems: ResearchItem[] = [
-  {
-    id: "r1",
-    title: "Apple Services Margin Expansion Thesis",
-    author: "Preston S.",
-    ticker: "AAPL",
-    updatedAt: "2h ago",
-    confidence: "high",
-  },
-  {
-    id: "r2",
-    title: "Healthcare Rotation in a Higher-for-Longer Cycle",
-    author: "Jordan W.",
-    ticker: "XLV",
-    updatedAt: "Yesterday",
-    confidence: "medium",
-  },
-  {
-    id: "r3",
-    title: "Nvidia Earnings Readthrough for AI Supply Chain",
-    author: "Maya R.",
-    ticker: "NVDA",
-    updatedAt: "3d ago",
-    confidence: "high",
-  },
-];
-
-export const resourceItems: ResourceItem[] = [
-  {
-    id: "f1",
-    title: "Spring Analyst Training Deck",
-    category: "training",
-    downloadEnabled: false,
-    updatedAt: "Apr 14",
-  },
-  {
-    id: "f2",
-    title: "Past Pitch: Healthcare Pair Trade",
-    category: "pitch",
-    downloadEnabled: true,
-    updatedAt: "Apr 03",
-  },
-  {
-    id: "f3",
-    title: "Research Process Playbook",
-    category: "playbook",
-    downloadEnabled: false,
-    updatedAt: "Mar 21",
-  },
-];
