@@ -33,7 +33,6 @@ export type ResearchItem = {
   author: string;
   ticker: string;
   updatedAt: string;
-  confidence: "high" | "medium" | "low";
   filePath?: string;
   viewUrl?: string;
   downloadEnabled: boolean;

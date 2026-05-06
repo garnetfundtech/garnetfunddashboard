@@ -12,7 +12,6 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-3 pt-2">
-      <h1 className="page-title">Users</h1>
       <div className="flex items-center gap-3">
         <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />

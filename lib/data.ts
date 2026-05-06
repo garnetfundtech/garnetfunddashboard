@@ -35,7 +35,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker, confidence, created_at, file_path, author_override, download_enabled")
+    .select("id, title, ticker, created_at, file_path, author_override, download_enabled")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -67,7 +67,6 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       author: row.author_override ?? "Unknown",
       ticker: row.ticker ?? "—",
       updatedAt: new Date(row.created_at).toLocaleDateString(),
-      confidence: (row.confidence as "high" | "medium" | "low") ?? "medium",
       filePath: row.file_path ?? undefined,
       viewUrl,
       downloadEnabled: row.download_enabled ?? false,

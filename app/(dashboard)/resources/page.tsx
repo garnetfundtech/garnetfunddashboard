@@ -1,44 +1,80 @@
+import Link from "next/link";
+import { Ban, Download, Search } from "lucide-react";
 import { getResourcesWithUrls } from "@/lib/data";
-import { uploadResourceAction } from "@/app/(dashboard)/resources/actions";
-import { ResourcesTableClient } from "@/components/dashboard/resources-table-client";
+import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
+import { ResourceViewButton } from "@/components/dashboard/resource-view-button";
 
 export default async function ResourcesPage() {
-  const resourceItems = await getResourcesWithUrls();
+  const resources = await getResourcesWithUrls();
 
   return (
     <div className="space-y-3 pt-2">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="page-title">Resources</h1>
-        <form action={uploadResourceAction} className="flex items-center gap-2">
+      {/* Search + upload */}
+      <div className="flex items-center gap-3">
+        <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
           <input
-            name="title"
-            className="glass-input px-3 py-2 text-sm outline-none"
-            placeholder="Resource title"
-            required
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+            placeholder="Search resources..."
           />
-          <select name="category" className="glass-input px-3 py-2 text-sm outline-none">
-            <option value="training">Training</option>
-            <option value="pitch">Pitch</option>
-            <option value="playbook">Playbook</option>
-            <option value="research">Research</option>
-          </select>
-          <label className="glass-input flex items-center gap-2 px-3 py-2 text-xs">
-            <input type="checkbox" name="downloadEnabled" />
-            Download
-          </label>
-          <input type="file" name="file" accept="application/pdf" className="glass-input px-2 py-2 text-xs" required />
-          <button className="rounded-[10px] bg-[#8e0604] px-3 py-2 text-sm font-medium text-white">
-            Upload
-          </button>
-        </form>
+        </div>
+        <select className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none">
+          <option value="">All categories</option>
+          <option value="training">Training</option>
+          <option value="pitch">Pitch</option>
+          <option value="playbook">Playbook</option>
+          <option value="research">Research</option>
+        </select>
+        <ResourcesUploadModal />
       </div>
 
-      <ResourcesTableClient resources={resourceItems} />
-
-      <section className="panel p-3">
-        <p className="text-xs text-zinc-400">
-          Download permissions can be toggled in Account Admin.
-        </p>
+      {/* Table */}
+      <section className="panel overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-zinc-400">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium">Title</th>
+              <th className="px-4 py-2 text-left font-medium">Category</th>
+              <th className="px-4 py-2 text-left font-medium">Date</th>
+              <th className="px-4 py-2 text-left font-medium">File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resources.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-zinc-500">
+                  No resources yet. Upload the first one above.
+                </td>
+              </tr>
+            ) : (
+              resources.map((item) => (
+                <tr key={item.id} className="odd:bg-white/[0.015]">
+                  <td className="px-4 py-3 text-white">{item.title}</td>
+                  <td className="px-4 py-3 capitalize text-zinc-300">{item.category}</td>
+                  <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {item.viewUrl && (
+                        <ResourceViewButton url={item.viewUrl} title={item.title} />
+                      )}
+                      {item.downloadEnabled && item.downloadUrl ? (
+                        <Link
+                          href={item.downloadUrl}
+                          className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Link>
+                      ) : (
+                        <Ban className="h-4 w-4 text-zinc-700" />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </section>
     </div>
   );

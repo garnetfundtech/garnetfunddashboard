@@ -2,9 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
-import { uploadResearchAction } from "@/app/(dashboard)/research/actions";
+import { uploadResourceAction } from "@/app/(dashboard)/resources/actions";
 
-export function ResearchUploadModal() {
+export function ResourcesUploadModal() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [downloadEnabled, setDownloadEnabled] = useState(false);
@@ -21,9 +21,9 @@ export function ResearchUploadModal() {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    formData.set("downloadEnabled", String(downloadEnabled));
+    formData.set("downloadEnabled", downloadEnabled ? "on" : "");
     startTransition(async () => {
-      await uploadResearchAction(formData);
+      await uploadResourceAction(formData);
       handleClose();
     });
   }
@@ -43,8 +43,8 @@ export function ResearchUploadModal() {
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className="caps-label">Research</p>
-                <h2 className="text-base font-semibold text-white">Upload Report</h2>
+                <p className="caps-label">Resources</p>
+                <h2 className="text-base font-semibold text-white">Upload File</h2>
               </div>
               <button
                 onClick={handleClose}
@@ -76,22 +76,26 @@ export function ResearchUploadModal() {
               {/* Title */}
               <input
                 name="title"
-                placeholder="Report title"
+                placeholder="File title"
                 required
                 className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
               />
 
-              {/* Ticker + Download toggle */}
+              {/* Category + Download toggle */}
               <div className="flex gap-3">
-                <input
-                  name="ticker"
-                  placeholder="Ticker"
-                  className="glass-input w-28 shrink-0 px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
-                />
+                <select
+                  name="category"
+                  className="glass-input flex-1 bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none"
+                >
+                  <option value="training">Training</option>
+                  <option value="pitch">Pitch</option>
+                  <option value="playbook">Playbook</option>
+                  <option value="research">Research</option>
+                </select>
                 <button
                   type="button"
                   onClick={() => setDownloadEnabled((v) => !v)}
-                  className={`glass-input flex flex-1 items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
+                  className={`glass-input flex items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
                     downloadEnabled ? "text-zinc-200" : "text-zinc-500"
                   }`}
                 >
