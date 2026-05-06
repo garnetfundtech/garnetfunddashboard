@@ -13,10 +13,24 @@ type SchwabPosition = {
   };
 };
 
+type SchwabBalances = {
+  liquidationValue?: number;
+  cashAvailableForTrading?: number;
+  totalCash?: number;
+  longMarketValue?: number;
+  mutualFundValue?: number;
+};
+
 type SchwabAccount = {
   securitiesAccount?: {
     accountNumber?: string;
+    type?: string;
     positions?: SchwabPosition[];
+    currentBalances?: SchwabBalances;
+  };
+  aggregatedBalance?: {
+    currentLiquidationValue?: number;
+    liquidationValue?: number;
   };
 };
 
@@ -62,6 +76,19 @@ export async function POST() {
     );
 
     const totalMarketValue = positions.reduce((sum, p) => sum + Number(p.marketValue ?? 0), 0);
+
+    const accountBalances = normalized.map((acct) => ({
+      accountNumber: acct?.securitiesAccount?.accountNumber ?? "unknown",
+      accountType: acct?.securitiesAccount?.type ?? "unknown",
+      liquidationValue: Number(
+        acct?.aggregatedBalance?.currentLiquidationValue ??
+        acct?.securitiesAccount?.currentBalances?.liquidationValue ?? 0
+      ),
+      cashAvailableForTrading: Number(acct?.securitiesAccount?.currentBalances?.cashAvailableForTrading ?? 0),
+      longMarketValue: Number(acct?.securitiesAccount?.currentBalances?.longMarketValue ?? 0),
+      mutualFundValue: Number(acct?.securitiesAccount?.currentBalances?.mutualFundValue ?? 0),
+    }));
+
     const rows = positions
       .map((p) => {
         const tickerRaw = p.instrument?.symbol?.trim();
@@ -107,6 +134,7 @@ export async function POST() {
         insertedHoldingsRows: rows.length,
         totalMarketValue,
         capturedAt,
+        accountBalances,
       },
     });
 

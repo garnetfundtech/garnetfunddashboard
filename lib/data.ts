@@ -2,7 +2,45 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { holdings } from "@/lib/mock-data";
 import { parseFilePath } from "@/lib/storage";
-import type { FundUser, HoldingRow, ResearchItem, ResourceItem, UserRole } from "@/lib/types";
+import {
+  fetchPortfolioSummary,
+  fetchMarketOverview,
+  fetchBenchmarkHistory,
+} from "@/lib/market-data";
+import type {
+  FundUser,
+  HoldingRow,
+  ResearchItem,
+  ResourceItem,
+  UserRole,
+  PortfolioSummary,
+  MarketOverview,
+  BenchmarkCandle,
+} from "@/lib/types";
+
+// ── Live homepage data ────────────────────────────────────────────────────────
+
+export type HomepageData = {
+  portfolio: PortfolioSummary | null;
+  market: MarketOverview | null;
+  benchmarkYtd: BenchmarkCandle[];
+};
+
+export async function getHomepageData(): Promise<HomepageData> {
+  const [portfolio, market, benchmark] = await Promise.allSettled([
+    fetchPortfolioSummary(),
+    fetchMarketOverview(),
+    fetchBenchmarkHistory("YTD"),
+  ]);
+
+  return {
+    portfolio: portfolio.status === "fulfilled" ? portfolio.value : null,
+    market: market.status === "fulfilled" ? market.value : null,
+    benchmarkYtd: benchmark.status === "fulfilled" && benchmark.value
+      ? benchmark.value.candles
+      : [],
+  };
+}
 
 export async function getHoldings(): Promise<HoldingRow[]> {
   const supabase = await createClient();
@@ -178,6 +216,96 @@ export async function getAuditEvents(): Promise<AuditEntry[]> {
 
   if (error || !data) return [];
   return data as AuditEntry[];
+}
+
+export type SchwabTokenStatus = {
+  present: boolean;
+  needsReauth: boolean;
+  expiresAt: string | null;
+  updatedAt: string | null;
+};
+
+export type SchwabSyncResult = {
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  level: string | null;
+  message: string | null;
+  accountCount: number;
+  positionCount: number;
+  totalMarketValue: number;
+  insertedHoldingsRows: number;
+  capturedAt: string | null;
+  accountBalances: {
+    accountNumber: string;
+    accountType: string;
+    liquidationValue: number;
+    cashAvailableForTrading: number;
+    longMarketValue: number;
+    mutualFundValue: number;
+  }[];
+};
+
+export type SchwabDiagnostics = {
+  token: SchwabTokenStatus;
+  lastSync: SchwabSyncResult | null;
+};
+
+export async function getSchwabDiagnostics(): Promise<SchwabDiagnostics> {
+  const admin = createAdminClient();
+
+  const { data: tokenRow } = await admin
+    .from("schwab_tokens")
+    .select("needs_reauth, expires_at, updated_at")
+    .eq("id", "trader")
+    .single();
+
+  const { data: jobRow } = await admin
+    .from("sync_jobs")
+    .select("id, status, started_at, finished_at")
+    .eq("provider", "schwab")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  let lastSync: SchwabSyncResult | null = null;
+
+  if (jobRow) {
+    const { data: logRow } = await admin
+      .from("sync_logs")
+      .select("level, message, payload")
+      .eq("sync_job_id", jobRow.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const p = (logRow?.payload ?? {}) as Record<string, unknown>;
+    lastSync = {
+      status: jobRow.status,
+      startedAt: jobRow.started_at,
+      finishedAt: jobRow.finished_at ?? null,
+      level: logRow?.level ?? null,
+      message: logRow?.message ?? null,
+      accountCount: Number(p.accountCount ?? 0),
+      positionCount: Number(p.positionCount ?? 0),
+      totalMarketValue: Number(p.totalMarketValue ?? 0),
+      insertedHoldingsRows: Number(p.insertedHoldingsRows ?? 0),
+      capturedAt: (p.capturedAt as string) ?? null,
+      accountBalances: Array.isArray(p.accountBalances)
+        ? (p.accountBalances as SchwabSyncResult["accountBalances"])
+        : [],
+    };
+  }
+
+  return {
+    token: {
+      present: !!tokenRow,
+      needsReauth: tokenRow?.needs_reauth ?? false,
+      expiresAt: tokenRow?.expires_at ?? null,
+      updatedAt: tokenRow?.updated_at ?? null,
+    },
+    lastSync,
+  };
 }
 
 export async function getFundUsers(): Promise<FundUser[]> {

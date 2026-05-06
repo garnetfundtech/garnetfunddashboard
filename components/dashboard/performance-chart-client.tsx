@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { BenchmarkCandle } from "@/lib/types";
 
 const PerformanceChart = dynamic(
   () =>
@@ -10,7 +11,10 @@ const PerformanceChart = dynamic(
   { ssr: false },
 );
 
-export function PerformanceChartClient() {
-  return <PerformanceChart />;
+export function PerformanceChartClient({
+  initialBenchmark = [],
+}: {
+  initialBenchmark?: BenchmarkCandle[];
+}) {
+  return <PerformanceChart initialBenchmark={initialBenchmark} />;
 }
-

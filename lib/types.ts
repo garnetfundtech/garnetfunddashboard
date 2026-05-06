@@ -1,5 +1,69 @@
 export type UserRole = "developer" | "admin" | "analyst";
 
+// ── Market / Portfolio types ──────────────────────────────────────────────────
+
+export type IndexQuote = {
+  symbol: string;
+  label: string;
+  lastPrice: number;
+  change: number;
+  pctChange: number;
+  high: number;
+  low: number;
+};
+
+export type MarketSession = "pre" | "regular" | "post" | "closed";
+
+export type MarketOverview = {
+  isOpen: boolean;
+  session: MarketSession;
+  sessionStart: string | null;
+  sessionEnd: string | null;
+  indices: IndexQuote[];
+  gainers: Mover[];
+  losers: Mover[];
+  fetchedAt: string;
+};
+
+export type Mover = {
+  symbol?: string;
+  description?: string;
+  lastPrice?: number;
+  change?: number;
+  percentChange?: number;
+  totalVolume?: number;
+  direction?: string;
+};
+
+export type LivePosition = {
+  ticker: string;
+  name: string;
+  assetType: string;
+  quantity: number;
+  avgCost: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPct: number;
+  dayPnl: number;
+  dayPnlPct: number;
+  weight: number;
+};
+
+export type PortfolioSummary = {
+  liquidationValue: number;
+  cashAvailable: number;
+  longMarketValue: number;
+  unrealizedPnl: number;
+  dayPnl: number;
+  positionCount: number;
+  positions: LivePosition[];
+  accountNumber: string | null;
+  verifiedAt: string;
+};
+
+export type BenchmarkCandle = { date: string; value: number };
+
 export type MetricCard = {
   label: string;
   value: string;

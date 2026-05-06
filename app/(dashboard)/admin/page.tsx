@@ -1,12 +1,33 @@
 import { inviteUserAction, updateUserRoleAction } from "@/app/(dashboard)/admin/actions";
-import { getAdminUsers, getAuditEvents, getResourcesWithUrls } from "@/lib/data";
+import { getAdminUsers, getAuditEvents, getResourcesWithUrls, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
+import { SchwabDiagnosticPanel } from "@/components/admin/schwab-diagnostic-panel";
+import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
 
 export default async function AdminPage() {
   await requireRole(["developer", "admin"]);
-  const users = await getAdminUsers();
-  const audits = await getAuditEvents();
-  const resources = await getResourcesWithUrls();
+  const [users, audits, resources, schwabDiagnostics, livePortfolio, liveMarket] =
+    await Promise.all([
+      getAdminUsers(),
+      getAuditEvents(),
+      getResourcesWithUrls(),
+      getSchwabDiagnostics(),
+      fetchPortfolioSummary(),
+      fetchMarketOverview(),
+    ]);
+
+  const liveVerification = livePortfolio || liveMarket
+    ? {
+        accountNumber: livePortfolio?.accountNumber ?? null,
+        liquidationValue: livePortfolio?.liquidationValue ?? null,
+        cashAvailable: livePortfolio?.cashAvailable ?? null,
+        positionCount: livePortfolio?.positionCount ?? null,
+        spyPrice: liveMarket?.indices.find((i) => i.symbol === "SPY")?.lastPrice ?? null,
+        spyChange: liveMarket?.indices.find((i) => i.symbol === "SPY")?.pctChange ?? null,
+        marketIsOpen: liveMarket?.isOpen ?? null,
+        verifiedAt: livePortfolio?.verifiedAt ?? liveMarket?.fetchedAt ?? null,
+      }
+    : null;
 
   return (
     <div className="space-y-3 pt-2">
@@ -58,6 +79,8 @@ export default async function AdminPage() {
           </tbody>
         </table>
       </section>
+
+      <SchwabDiagnosticPanel data={schwabDiagnostics} liveVerification={liveVerification} />
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <article className="panel p-4">
