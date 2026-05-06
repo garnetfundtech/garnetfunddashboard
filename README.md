@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Garnet Fund Dashboard
 
-## Getting Started
+Private portfolio and research dashboard for the University of South Carolina Garnet Fund.
 
-First, run the development server:
+### Current Scope
+
+- Premium dark UI shell with garnet accent (`#8e0604`)
+- Home dashboard with placeholder AUM, beta, chart, and holdings table
+- Invite-only auth flow (university email login) and role-aware access (`developer`, `admin`, `analyst`)
+- Research and Resources workflows with PDF upload, in-app viewing, and per-file download toggles
+- Admin control center for invites, role updates, file permission review, and audit trail
+- Feature-flagged Schwab OAuth/token/sync routes
+- Supabase schema + RLS + linter hardening applied to connected Garnet project
+
+### Tech Stack
+
+- Next.js App Router + TypeScript
+- Tailwind CSS v4
+- Supabase (`@supabase/ssr`, `@supabase/supabase-js`)
+- Recharts + Lucide icons
+- shadcn/ui (base-nova)
+
+### Run Locally
+
+1. Copy environment template:
+```bash
+cp .env.example .env.local
+```
+
+2. Fill in values in `.env.local`:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_APP_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ENABLE_SCHWAB_SYNC`
+- `SCHWAB_CLIENT_ID`
+- `SCHWAB_CLIENT_SECRET`
+- `SCHWAB_REDIRECT_URI`
+
+3. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Routes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/home` Dashboard
+- `/research` Research archive
+- `/resources` Resources library
+- `/admin` Admin workspace
+- `/login` Login page
+- `/api/health` Health check
+- `/api/schwab/auth-url` Feature-flagged Schwab auth URL
+- `/api/schwab/callback` Schwab OAuth callback exchange
+- `/api/schwab/refresh` Schwab refresh-token flow
+- `/api/schwab/sync` Background sync orchestration endpoint
 
-## Learn More
+### Database Baseline
 
-To learn more about Next.js, take a look at the following resources:
+SQL migrations are in:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`supabase/migrations/0001_initial.sql`  
+`supabase/migrations/0002_governance_and_schwab.sql`  
+`supabase/migrations/0003_policy_and_index_hardening.sql`  
+`supabase/migrations/0004_rls_initplan_tuning.sql`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Deployment
 
-## Deploy on Vercel
+- Production URL: [https://garnetfunddashboard.vercel.app](https://garnetfunddashboard.vercel.app)
+- Health check: [https://garnetfunddashboard.vercel.app/api/health](https://garnetfunddashboard.vercel.app/api/health)
+- `.vercelignore` is configured to avoid uploading local `.env` files.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Remaining External Inputs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel envs.
+- Add Schwab credentials and set `ENABLE_SCHWAB_SYNC=true` when ready.
+- Seed first `developer` account via invite so admin controls are available immediately.
