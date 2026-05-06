@@ -12,7 +12,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background p-3">
       <SidebarNav
         role={profile.role}
         fullName={
@@ -21,7 +21,7 @@ export default async function DashboardLayout({
           "Fund Member"
         }
       />
-      <main className="flex-1 px-4 py-4 lg:px-6">
+      <main className="h-full flex-1 overflow-y-auto px-4 py-4 lg:px-6">
         <PresenceHeartbeat />
         {children}
       </main>

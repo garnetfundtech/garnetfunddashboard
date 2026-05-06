@@ -51,7 +51,7 @@ export function SidebarNav({
   );
 
   return (
-    <aside className="flex h-screen w-[248px] flex-col bg-[#08090a] px-3 py-4">
+    <aside className="panel flex h-full w-[248px] flex-col bg-[#08090a] px-3 py-4">
       <LogoMark />
       <div className="mt-6 px-1">
         <p className="caps-label">Navigation</p>
@@ -82,7 +82,7 @@ export function SidebarNav({
             {role === "developer" || role === "admin" ? (
               <Link
                 href="/admin"
-                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
               >
                 <Shield className="h-3.5 w-3.5" />
                 Account Admin
@@ -90,7 +90,7 @@ export function SidebarNav({
             ) : (
               <Link
                 href="/onboarding"
-                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
               >
                 <Settings className="h-3.5 w-3.5" />
                 Account

@@ -132,18 +132,31 @@ body {
   left: 10px;
   right: 10px;
   bottom: 0;
-  height: 3px;
+  height: 5px;
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
-  opacity: 0.8;
+  opacity: 0.95;
+  filter: blur(0.2px);
 }
 
 .glass-stat-positive::after {
-  background: linear-gradient(90deg, rgba(34, 197, 94, 0.05), rgba(34, 197, 94, 0.55), rgba(34, 197, 94, 0.05));
+  background: linear-gradient(
+    90deg,
+    rgba(34, 197, 94, 0.08),
+    rgba(34, 197, 94, 0.85),
+    rgba(34, 197, 94, 0.08)
+  );
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.35);
 }
 
 .glass-stat-negative::after {
-  background: linear-gradient(90deg, rgba(142, 6, 4, 0.08), rgba(142, 6, 4, 0.6), rgba(142, 6, 4, 0.08));
+  background: linear-gradient(
+    90deg,
+    rgba(142, 6, 4, 0.1),
+    rgba(142, 6, 4, 0.95),
+    rgba(142, 6, 4, 0.1)
+  );
+  box-shadow: 0 0 14px rgba(142, 6, 4, 0.4);
 }
 
 .page-title {
