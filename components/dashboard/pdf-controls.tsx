@@ -15,25 +15,29 @@ export function PdfControls({
 }) {
   const [open, setOpen] = useState(false);
 
+  const buttonClass =
+    "glass-input inline-flex h-[30px] items-center justify-center rounded-[8px] px-3 text-xs font-medium text-white transition-colors hover:bg-white/10";
+  const disabledClass = "opacity-30 cursor-not-allowed hover:bg-transparent";
+
   return (
     <>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           onClick={() => viewUrl && setOpen(true)}
           disabled={!viewUrl}
-          className="text-sm text-white transition-colors hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-30"
+          className={`${buttonClass} ${!viewUrl ? disabledClass : ""}`}
         >
           View
         </button>
         {downloadUrl ? (
           <Link
             href={downloadUrl}
-            className="text-sm text-white transition-colors hover:text-zinc-300"
+            className={buttonClass}
           >
             Download
           </Link>
         ) : (
-          <span className="text-sm text-white opacity-30 cursor-not-allowed">Download</span>
+          <span className={`${buttonClass} ${disabledClass}`}>Download</span>
         )}
       </div>
 
