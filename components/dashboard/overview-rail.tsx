@@ -31,7 +31,7 @@ function sessionBadge(session: string, isOpen: boolean) {
 
 export function OverviewRail({ market }: { market: MarketOverview | null }) {
   return (
-    <aside className="space-y-3">
+    <aside className="flex flex-col gap-2.5">
       {/* Market status */}
       <section className="panel p-3">
         <p className="caps-label">Market Status</p>
@@ -54,13 +54,13 @@ export function OverviewRail({ market }: { market: MarketOverview | null }) {
         )}
       </section>
 
-      {/* Index cards */}
+      {/* Index cards — flex-grow so they fill remaining rail height */}
       {market?.indices?.map((idx) => {
         const positive = idx.change >= 0;
         return (
           <section
             key={idx.symbol}
-            className={`panel p-3 ${positive ? "glass-stat-positive" : "glass-stat-negative"}`}
+            className={`panel flex flex-1 flex-col justify-center p-3 ${positive ? "glass-stat-positive" : "glass-stat-negative"}`}
           >
             <div className="flex items-start justify-between">
               <div>
@@ -93,7 +93,7 @@ export function OverviewRail({ market }: { market: MarketOverview | null }) {
             { label: "Nasdaq 100", symbol: "QQQ" },
             { label: "Russell 2000", symbol: "IWM" },
           ].map(({ label, symbol }) => (
-            <section key={symbol} className="panel p-3 opacity-50">
+            <section key={symbol} className="panel flex flex-1 flex-col justify-center p-3 opacity-50">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="caps-label">{label}</p>

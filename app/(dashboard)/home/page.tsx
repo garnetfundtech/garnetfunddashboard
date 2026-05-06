@@ -13,14 +13,15 @@ export default async function HomePage() {
     <div className="space-y-3">
       <TopBar />
 
-      <MetricGrid
-        portfolio={portfolio}
-        session={market?.session ?? "closed"}
-        isOpen={market?.isOpen ?? false}
-      />
+      {/* Main grid: left (4 tiles + chart) · right (market status + indices) */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
+        {/* Left column */}
+        <div className="flex flex-col gap-3">
+          <MetricGrid portfolio={portfolio} />
+          <PerformanceChartClient initialBenchmark={benchmarkYtd} />
+        </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,3fr)_320px]">
-        <PerformanceChartClient initialBenchmark={benchmarkYtd} />
+        {/* Right column — full height */}
         <OverviewRail market={market} />
       </div>
 

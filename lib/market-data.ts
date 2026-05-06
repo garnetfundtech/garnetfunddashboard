@@ -267,19 +267,28 @@ export async function fetchMarketOverview(): Promise<MarketOverview | null> {
   if (!token) return null;
 
   try {
-    const [quotesRaw, hoursRaw, moversUpRaw, moversDownRaw] = await Promise.allSettled([
-      getQuotes(token, INDEX_SYMBOLS.map((i) => i.symbol)),
-      getMarketHours(token),
-      getMarketMovers(token, "$SPX", "PERCENT_CHANGE_UP"),
-      getMarketMovers(token, "$SPX", "PERCENT_CHANGE_DOWN"),
-    ]);
+    const [quotesRaw, hoursRaw, nyseUpRaw, nasdaqUpRaw, nyseDownRaw, nasdaqDownRaw] =
+      await Promise.allSettled([
+        getQuotes(token, INDEX_SYMBOLS.map((i) => i.symbol)),
+        getMarketHours(token),
+        getMarketMovers(token, "NYSE",   "PERCENT_CHANGE_UP"),
+        getMarketMovers(token, "NASDAQ", "PERCENT_CHANGE_UP"),
+        getMarketMovers(token, "NYSE",   "PERCENT_CHANGE_DOWN"),
+        getMarketMovers(token, "NASDAQ", "PERCENT_CHANGE_DOWN"),
+      ]);
 
     const quotes = quotesRaw.status === "fulfilled" ? quotesRaw.value : {};
     const hours = hoursRaw.status === "fulfilled" ? hoursRaw.value : {};
 
-    // Combine both mover lists, normalize, deduplicate by symbol
-    const rawUp = moversUpRaw.status === "fulfilled" ? moversUpRaw.value : [];
-    const rawDown = moversDownRaw.status === "fulfilled" ? moversDownRaw.value : [];
+    // Combine NYSE + NASDAQ mover lists, normalize, deduplicate by symbol
+    const rawUp = [
+      ...(nyseUpRaw.status === "fulfilled"    ? nyseUpRaw.value    : []),
+      ...(nasdaqUpRaw.status === "fulfilled"  ? nasdaqUpRaw.value  : []),
+    ];
+    const rawDown = [
+      ...(nyseDownRaw.status === "fulfilled"  ? nyseDownRaw.value  : []),
+      ...(nasdaqDownRaw.status === "fulfilled" ? nasdaqDownRaw.value : []),
+    ];
     const seen = new Set<string>();
     const allMovers: Mover[] = [];
     for (const raw of [...rawUp, ...rawDown]) {
@@ -328,24 +337,40 @@ export async function fetchMarketOverview(): Promise<MarketOverview | null> {
 
 // ── Price history for benchmark chart ────────────────────────────────────────
 
-type PeriodKey = "1M" | "3M" | "6M" | "1Y" | "YTD";
+type PeriodKey = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
 
 const PERIOD_PARAMS: Record<PeriodKey, {
   periodType: "day" | "month" | "year" | "ytd";
   period: number;
+  frequencyType: "minute" | "daily" | "weekly" | "monthly";
+  frequency: number;
 }> = {
-  "1M": { periodType: "month", period: 1 },
-  "3M": { periodType: "month", period: 3 },
-  "6M": { periodType: "month", period: 6 },
-  "1Y": { periodType: "year", period: 1 },
-  "YTD": { periodType: "ytd", period: 1 },
+  "1D":  { periodType: "day",   period: 1,  frequencyType: "minute", frequency: 15 },
+  "1W":  { periodType: "day",   period: 5,  frequencyType: "minute", frequency: 30 },
+  "2W":  { periodType: "day",   period: 10, frequencyType: "minute", frequency: 30 },
+  "1M":  { periodType: "month", period: 1,  frequencyType: "daily",  frequency: 1 },
+  "3M":  { periodType: "month", period: 3,  frequencyType: "daily",  frequency: 1 },
+  "6M":  { periodType: "month", period: 6,  frequencyType: "daily",  frequency: 1 },
+  "1Y":  { periodType: "year",  period: 1,  frequencyType: "daily",  frequency: 1 },
+  "YTD": { periodType: "ytd",   period: 1,  frequencyType: "daily",  frequency: 1 },
 };
 
-function normalizeToPctReturn(candles: PriceCandle[]): BenchmarkCandle[] {
+function formatCandleDate(datetime: number, period: PeriodKey): string {
+  const d = new Date(datetime);
+  if (period === "1D") {
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  }
+  if (period === "1W" || period === "2W") {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function normalizeToPctReturn(candles: PriceCandle[], period: PeriodKey): BenchmarkCandle[] {
   if (!candles.length) return [];
   const base = candles[0].close;
   return candles.map((c) => ({
-    date: new Date(c.datetime).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    date: formatCandleDate(c.datetime, period),
     value: base > 0 ? parseFloat((((c.close - base) / base) * 100).toFixed(2)) : 0,
   }));
 }
@@ -355,14 +380,14 @@ export async function fetchBenchmarkHistory(period: PeriodKey = "YTD"): Promise<
   if (!token) return null;
 
   try {
-    const { periodType, period: p } = PERIOD_PARAMS[period];
-    const history = await getPriceHistory(token, "SPY", periodType, p, "daily", 1);
+    const { periodType, period: p, frequencyType, frequency } = PERIOD_PARAMS[period];
+    const history = await getPriceHistory(token, "SPY", periodType, p, frequencyType, frequency);
     if (history.empty || !history.candles?.length) return null;
 
     return {
       symbol: "SPY",
       label: "S&P 500 (SPY)",
-      candles: normalizeToPctReturn(history.candles),
+      candles: normalizeToPctReturn(history.candles, period),
     };
   } catch {
     return null;

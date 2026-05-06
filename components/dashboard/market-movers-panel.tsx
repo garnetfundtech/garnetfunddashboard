@@ -70,7 +70,7 @@ export function MarketMoversPanel({
       <div className="flex items-center justify-between">
         <div>
           <p className="caps-label">Market Movers</p>
-          <h2 className="text-sm font-semibold text-white">S&P 500 — Top Gainers &amp; Losers</h2>
+          <h2 className="text-sm font-semibold text-white">NYSE &amp; NASDAQ — Top Gainers &amp; Losers</h2>
         </div>
         {!hasData && (
           <span className="text-xs text-zinc-500">Live data unavailable</span>

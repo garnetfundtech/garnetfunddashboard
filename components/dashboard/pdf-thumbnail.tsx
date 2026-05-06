@@ -5,19 +5,32 @@ import { Loader2 } from "lucide-react";
 
 type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
+function fileExtLabel(url?: string): string {
+  if (!url) return "";
+  const m = url.split("?")[0].match(/\.([a-zA-Z0-9]+)$/);
+  if (!m) return "FILE";
+  const ext = m[1].toUpperCase();
+  // Normalise common variants
+  if (ext === "PPTX" || ext === "PPT") return "PPT";
+  if (ext === "DOCX" || ext === "DOC") return "DOC";
+  return ext;
+}
+
 export function PdfThumbnail({
   url,
   title,
+  /** If true, renders zoom-to-fill mode for card grid view */
+  fill = false,
 }: {
   url?: string;
   title: string;
+  fill?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   const stableUrl = useMemo(() => url, [url]);
+  const ext = fileExtLabel(url);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,11 +44,7 @@ export function PdfThumbnail({
       setStatus("loading");
 
       try {
-        const pdfjs = (await import(
-          "pdfjs-dist/legacy/build/pdf.mjs"
-        )) as PdfJsModule;
-
-        // Turbopack-friendly worker wiring
+        const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (pdfjs as any).GlobalWorkerOptions.workerSrc = new URL(
           "pdfjs-dist/legacy/build/pdf.worker.mjs",
@@ -50,9 +59,9 @@ export function PdfThumbnail({
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Render a crisp thumbnail and then let CSS fit it into 16:9 container.
+        // Render at full width so we have crisp pixels, then CSS handles display
         const viewport = page.getViewport({ scale: 1 });
-        const targetWidth = 520; // plenty for a small table thumbnail
+        const targetWidth = fill ? 480 : 520;
         const scale = targetWidth / viewport.width;
         const scaled = page.getViewport({ scale });
 
@@ -68,33 +77,60 @@ export function PdfThumbnail({
     }
 
     void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [stableUrl]);
+    return () => { cancelled = true; };
+  }, [stableUrl, fill]);
 
+  if (fill) {
+    // Card-grid mode: full-width container, PDF zoomed to fill, clipped at top
+    return (
+      <div className="relative w-full overflow-hidden rounded-t-[12px] bg-[#0d0f10]" style={{ aspectRatio: "4/3" }}>
+        {status === "loading" && (
+          <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        )}
+        {(!url || status === "error") && (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-600">
+            No preview
+          </div>
+        )}
+        {/* Canvas fills width, overflows bottom — giving a "zoomed in from top" look */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-x-0 top-0 w-full"
+          aria-label={`${title} thumbnail`}
+        />
+        {/* File type badge */}
+        {ext && (
+          <div className="absolute bottom-2 right-2 rounded-[5px] bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 backdrop-blur-sm">
+            {ext}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Table mode (legacy)
   return (
     <div className="glass-input relative aspect-video w-[132px] overflow-hidden rounded-[10px]">
-      {status === "loading" ? (
+      {status === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
-      ) : null}
-
-      {!url || status === "error" ? (
+      )}
+      {(!url || status === "error") && (
         <div className="absolute inset-0 flex items-center justify-center text-[11px] text-zinc-500">
           No preview
         </div>
-      ) : null}
-
+      )}
       <div className="absolute inset-0 flex items-center justify-center">
-        <canvas
-          ref={canvasRef}
-          className="max-h-full max-w-full"
-          aria-label={`${title} thumbnail`}
-        />
+        <canvas ref={canvasRef} className="max-h-full max-w-full" aria-label={`${title} thumbnail`} />
       </div>
+      {ext && (
+        <div className="absolute bottom-1 right-1 rounded-[4px] bg-black/50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
+          {ext}
+        </div>
+      )}
     </div>
   );
 }
-

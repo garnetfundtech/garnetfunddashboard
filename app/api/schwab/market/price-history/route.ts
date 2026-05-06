@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getValidTraderToken, fetchBenchmarkHistory, type PeriodKey } from "@/lib/market-data";
 
-const VALID_PERIODS: PeriodKey[] = ["1M", "3M", "6M", "1Y", "YTD"];
+const VALID_PERIODS: PeriodKey[] = ["1D", "1W", "2W", "1M", "3M", "6M", "1Y", "YTD"];
 
 export async function GET(request: NextRequest) {
   const periodParam = request.nextUrl.searchParams.get("period") ?? "YTD";

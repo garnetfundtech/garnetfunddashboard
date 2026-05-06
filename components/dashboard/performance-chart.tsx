@@ -12,8 +12,25 @@ import {
 } from "recharts";
 import type { BenchmarkCandle } from "@/lib/types";
 
-const RANGES = ["1M", "3M", "6M", "1Y", "YTD"] as const;
+const RANGES = ["1D", "1W", "2W", "1M", "3M", "6M", "1Y", "YTD"] as const;
 type Range = (typeof RANGES)[number];
+
+// How many ticks to show per range (approximate)
+const TICK_DENSITY: Record<Range, number> = {
+  "1D":  6,   // ~hourly ticks across a trading day
+  "1W":  5,   // one tick per day
+  "2W":  5,   // every 2 days
+  "1M":  6,
+  "3M":  6,
+  "6M":  6,
+  "1Y":  8,
+  "YTD": 6,
+};
+
+function tickInterval(totalPoints: number, range: Range): number {
+  const density = TICK_DENSITY[range];
+  return Math.max(1, Math.floor(totalPoints / density));
+}
 
 function CustomTooltip({
   active,
@@ -29,7 +46,7 @@ function CustomTooltip({
     <div className="glass-input px-3 py-2 text-xs">
       <p className="mb-1.5 text-zinc-400">{label}</p>
       {payload.map((entry) => (
-        <p key={entry.dataKey} style={{ color: entry.color }} className="font-medium">
+        <p key={entry.dataKey} style={{ color: entry.color }} className="font-medium tabular-nums">
           {entry.dataKey === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"}:{" "}
           {entry.value >= 0 ? "+" : ""}
           {entry.value.toFixed(2)}%
@@ -67,7 +84,6 @@ export function PerformanceChart({
     }
   }, []);
 
-  // On range change, fetch new data (skip initial YTD since we get it from props)
   useEffect(() => {
     if (range === "YTD" && initialBenchmark.length > 0) {
       setBenchmarkData(initialBenchmark);
@@ -76,25 +92,24 @@ export function PerformanceChart({
     fetchRange(range);
   }, [range, initialBenchmark, fetchRange]);
 
-  // Add a flat portfolio: 0 key to every data point so Recharts renders the portfolio line.
-  // The fund currently holds only cash (no equity positions), so portfolio return is 0%.
-  // This will be replaced with real performance data once positions are held.
+  // Add flat portfolio: 0 key — accurate for cash-only account (no positions = 0% return)
   const data = benchmarkData.map((c) => ({ ...c, portfolio: 0 }));
+  const interval = tickInterval(data.length, range);
 
   return (
-    <section className="panel flex flex-col p-4" style={{ height: 300 }}>
+    <section className="panel flex flex-col p-4" style={{ minHeight: 300 }}>
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="caps-label">Performance</p>
-          <h2 className="text-sm font-semibold text-white">Portfolio vs S&P 500 (SPY)</h2>
+          <h2 className="text-sm font-semibold text-white">Portfolio vs S&amp;P 500 (SPY)</h2>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {RANGES.map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
               disabled={loading}
-              className={`rounded-[7px] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+              className={`rounded-[7px] px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                 r === range
                   ? "bg-white/10 text-white"
                   : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
@@ -113,24 +128,20 @@ export function PerformanceChart({
         </span>
         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
           <span className="h-0.5 w-3.5 rounded-full bg-zinc-500" />
-          S&P 500 (SPY)
+          S&amp;P 500 (SPY)
         </span>
-        {loading && (
-          <span className="text-[10px] text-zinc-600 animate-pulse">Loading…</span>
-        )}
-        {error && !loading && (
-          <span className="text-[10px] text-rose-500">Live data unavailable</span>
-        )}
+        {loading && <span className="text-[10px] text-zinc-600 animate-pulse">Loading…</span>}
+        {error && !loading && <span className="text-[10px] text-rose-500">X — data unavailable</span>}
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1" style={{ height: 240 }}>
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-zinc-600">
             {loading ? "Fetching market data…" : "No benchmark data available"}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 2, right: 2, bottom: 0, left: -10 }}>
+            <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
               <defs>
                 <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#8e0604" stopOpacity={0.18} />
@@ -144,20 +155,19 @@ export function PerformanceChart({
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2329" vertical={false} />
               <XAxis
                 dataKey="date"
-                tick={{ fill: "#52525b", fontSize: 11 }}
+                tick={{ fill: "#52525b", fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
-                interval="preserveStartEnd"
+                interval={interval}
               />
               <YAxis
-                tick={{ fill: "#52525b", fontSize: 11 }}
+                tick={{ fill: "#52525b", fontSize: 10 }}
                 tickFormatter={(v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}
                 axisLine={false}
                 tickLine={false}
-                width={42}
+                width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#2a2f37", strokeWidth: 1 }} />
-              {/* Portfolio line — flat at 0 until we have real portfolio performance data */}
               <Area
                 type="monotone"
                 dataKey="portfolio"
