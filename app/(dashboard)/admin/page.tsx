@@ -38,7 +38,7 @@ export default async function AdminPage() {
             </div>
             <input
               name="email"
-              placeholder="name@email.sc.edu"
+              placeholder="name@example.com"
               className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none"
               required
             />

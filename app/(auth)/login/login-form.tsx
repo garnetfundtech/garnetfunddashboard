@@ -13,12 +13,12 @@ export function LoginForm() {
   return (
     <form className="space-y-3" action={formAction}>
       <div className="space-y-1">
-        <label className="text-sm text-zinc-400">University Email</label>
+        <label className="text-sm text-zinc-400">Email</label>
         <input
           name="email"
           type="email"
           className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
-          placeholder="name@email.sc.edu"
+          placeholder="name@example.com"
           required
         />
       </div>

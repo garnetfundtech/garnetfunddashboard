@@ -14,7 +14,7 @@ import { performanceSeries } from "@/lib/mock-data";
 
 export function PerformanceChart() {
   return (
-    <section className="panel h-[310px] p-4">
+    <section className="panel h-[360px] p-3">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="caps-label">Performance</p>
@@ -31,7 +31,7 @@ export function PerformanceChart() {
           ))}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height="86%">
+      <ResponsiveContainer width="100%" height="88%">
         <LineChart data={performanceSeries}>
           <CartesianGrid strokeDasharray="3 3" stroke="#252a31" />
           <XAxis dataKey="date" stroke="#8e95a3" />

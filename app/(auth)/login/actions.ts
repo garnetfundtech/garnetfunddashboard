@@ -11,8 +11,8 @@ export async function loginAction(_: LoginState, formData: FormData): Promise<Lo
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
-  if (!email.endsWith("email.sc.edu")) {
-    return { error: "Use your university email address." };
+  if (!email.includes("@")) {
+    return { error: "Enter a valid email address." };
   }
 
   const supabase = await createClient();

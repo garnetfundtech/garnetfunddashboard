@@ -12,10 +12,17 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1600px] gap-3 p-3">
-      <SidebarNav role={profile.role} />
-      <main className="flex-1 space-y-3">
-        <TopBar email={profile.email} role={profile.role} />
+    <div className="flex min-h-screen bg-background">
+      <SidebarNav
+        role={profile.role}
+        fullName={
+          profile.full_name ||
+          `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
+          "Fund Member"
+        }
+      />
+      <main className="flex-1 px-4 py-4 lg:px-6">
+        <TopBar />
         {children}
       </main>
     </div>

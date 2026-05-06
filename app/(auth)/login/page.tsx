@@ -10,7 +10,7 @@ export default function LoginPage() {
           <p className="caps-label">Private Access</p>
           <h1 className="text-xl font-semibold text-white">Sign in to Garnet Fund Dashboard</h1>
           <p className="text-sm text-zinc-400">
-            Invite-only. Use your university email address and password.
+            Invite-only. Use the same email address that was invited to the platform.
           </p>
         </div>
 

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { HoldingsTable } from "@/components/dashboard/holdings-table";
 import { MetricGrid } from "@/components/dashboard/metric-grid";
+import { OverviewRail } from "@/components/dashboard/overview-rail";
 import { holdings } from "@/lib/mock-data";
 
 const PerformanceChart = dynamic(
@@ -15,9 +16,14 @@ const PerformanceChart = dynamic(
 
 export default function HomePage() {
   return (
-    <div className="space-y-3">
-      <MetricGrid />
-      <PerformanceChart />
+    <div className="space-y-3 pt-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,3fr)_320px]">
+        <div className="space-y-3">
+          <MetricGrid />
+          <PerformanceChart />
+        </div>
+        <OverviewRail />
+      </div>
       <HoldingsTable rows={holdings} />
     </div>
   );

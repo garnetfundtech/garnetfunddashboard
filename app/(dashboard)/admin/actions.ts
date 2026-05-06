@@ -14,7 +14,7 @@ export async function inviteUserAction(formData: FormData) {
   const lastName = String(formData.get("lastName") ?? "").trim();
   const role = String(formData.get("role") ?? "analyst") as UserRole;
 
-  if (!email || !email.endsWith("email.sc.edu") || !firstName || !lastName) return;
+  if (!email || !email.includes("@") || !firstName || !lastName) return;
 
   const admin = createAdminClient();
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login`;
