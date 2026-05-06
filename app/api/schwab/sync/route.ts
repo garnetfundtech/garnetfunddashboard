@@ -2,6 +2,30 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountPositions } from "@/lib/schwab";
 
+type SchwabPosition = {
+  marketValue?: number;
+  longQuantity?: number;
+  shortQuantity?: number;
+  instrument?: {
+    symbol?: string;
+    description?: string;
+    assetType?: string;
+  };
+};
+
+type SchwabAccount = {
+  securitiesAccount?: {
+    accountNumber?: string;
+    positions?: SchwabPosition[];
+  };
+};
+
+function normalizeSchwabAccounts(payload: unknown): SchwabAccount[] {
+  if (Array.isArray(payload)) return payload as SchwabAccount[];
+  if (payload && typeof payload === "object") return [payload as SchwabAccount];
+  return [];
+}
+
 export async function POST() {
   if (process.env.ENABLE_SCHWAB_SYNC !== "true") {
     return NextResponse.json(
@@ -31,12 +55,59 @@ export async function POST() {
     }
 
     const accounts = await getAccountPositions(tokenRow.access_token);
+    const capturedAt = new Date().toISOString();
+    const normalized = normalizeSchwabAccounts(accounts);
+    const positions: SchwabPosition[] = normalized.flatMap(
+      (acct) => acct?.securitiesAccount?.positions ?? [],
+    );
+
+    const totalMarketValue = positions.reduce((sum, p) => sum + Number(p.marketValue ?? 0), 0);
+    const rows = positions
+      .map((p) => {
+        const tickerRaw = p.instrument?.symbol?.trim();
+        const ticker = tickerRaw && tickerRaw.length > 0 ? tickerRaw : null;
+        const marketValue = Number(p.marketValue ?? 0);
+        const weight = totalMarketValue > 0 ? marketValue / totalMarketValue : 0;
+
+        // Schwab Trader positions payload doesn't reliably include sector. Keep a stable placeholder.
+        return ticker
+          ? {
+              captured_at: capturedAt,
+              ticker,
+              company_name: p.instrument?.description?.trim() || ticker,
+              sector: "Unknown",
+              market_value: marketValue,
+              weight,
+            }
+          : null;
+      })
+      .filter(Boolean) as {
+      captured_at: string;
+      ticker: string;
+      company_name: string;
+      sector: string;
+      market_value: number;
+      weight: number;
+    }[];
+
+    if (rows.length > 0) {
+      const { error: insertError } = await admin.from("holdings_snapshots").insert(rows);
+      if (insertError) {
+        throw new Error(`Failed inserting holdings snapshot: ${insertError.message}`);
+      }
+    }
 
     await admin.from("sync_logs").insert({
       sync_job_id: job?.id ?? null,
       level: "info",
       message: "Fetched account positions payload",
-      payload: { accountCount: Array.isArray(accounts) ? accounts.length : 1 },
+      payload: {
+        accountCount: normalized.length,
+        positionCount: positions.length,
+        insertedHoldingsRows: rows.length,
+        totalMarketValue,
+        capturedAt,
+      },
     });
 
     await admin

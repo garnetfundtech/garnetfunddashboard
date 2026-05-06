@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Missing code parameter." }, { status: 400 });
   }
 
-  const tokenData = await exchangeCodeForTokens(code);
+  const providerParam = request.nextUrl.searchParams.get("provider");
+  const provider = providerParam === "market" ? "market" : "trader";
+
+  const tokenData = await exchangeCodeForTokens(code, provider);
   const admin = createAdminClient();
 
   const expiresAt = new Date(Date.now() + Number(tokenData.expires_in ?? 1800) * 1000).toISOString();
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
   ).toISOString();
 
   await admin.from("schwab_tokens").upsert({
-    id: "master",
+    id: provider,
     access_token: tokenData.access_token,
     refresh_token: tokenData.refresh_token,
     token_type: tokenData.token_type ?? "Bearer",
@@ -34,5 +37,10 @@ export async function GET(request: NextRequest) {
     needs_reauth: false,
   });
 
-  return NextResponse.json({ ok: true, message: "Schwab tokens stored." });
+  return NextResponse.json({
+    ok: true,
+    provider,
+    message: "Schwab tokens stored.",
+    scope: tokenData.scope ?? "",
+  });
 }

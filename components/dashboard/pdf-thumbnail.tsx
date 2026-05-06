@@ -59,7 +59,7 @@ export function PdfThumbnail({
         canvas.width = Math.floor(scaled.width);
         canvas.height = Math.floor(scaled.height);
 
-        await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+        await page.render({ canvasContext: ctx, viewport: scaled, canvas }).promise;
 
         if (!cancelled) setStatus("ready");
       } catch {
