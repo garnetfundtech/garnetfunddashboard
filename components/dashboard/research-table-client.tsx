@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Search } from "lucide-react";
 import { Highlight } from "@/components/dashboard/highlight";
 import { PdfControls } from "@/components/dashboard/pdf-controls";
+import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
 import type { ResearchItem } from "@/lib/types";
 import type { UserRole } from "@/lib/types";
@@ -12,15 +13,12 @@ import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/re
 
 export function ResearchTableClient({
   items,
-  tickers,
   actor,
 }: {
   items: ResearchItem[];
-  tickers: string[];
   actor: { id: string; role: UserRole };
 }) {
   const [query, setQuery] = useState("");
-  const [tickerFilter, setTickerFilter] = useState("");
   const [editing, setEditing] = useState<ResearchItem | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -32,10 +30,9 @@ export function ResearchTableClient({
         item.title.toLowerCase().includes(q) ||
         item.ticker.toLowerCase().includes(q) ||
         item.author.toLowerCase().includes(q);
-      const matchesTicker = !tickerFilter || item.ticker === tickerFilter;
-      return matchesQuery && matchesTicker;
+      return matchesQuery;
     });
-  }, [items, query, tickerFilter]);
+  }, [items, query]);
 
   return (
     <div className="space-y-3">
@@ -50,16 +47,6 @@ export function ResearchTableClient({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <select
-          className="glass-input h-[42px] bg-transparent px-3 text-sm text-zinc-300 outline-none"
-          value={tickerFilter}
-          onChange={(e) => setTickerFilter(e.target.value)}
-        >
-          <option value="">All tickers</option>
-          {tickers.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
         <ResearchUploadModal />
       </div>
 
@@ -68,6 +55,7 @@ export function ResearchTableClient({
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-zinc-400">
             <tr>
+              <th className="px-4 py-2 text-left font-medium">File</th>
               <th className="px-4 py-2 text-left font-medium">Title</th>
               <th className="px-4 py-2 text-left font-medium">Ticker</th>
               <th className="px-4 py-2 text-left font-medium">Uploaded by</th>
@@ -78,7 +66,7 @@ export function ResearchTableClient({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-zinc-500">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-zinc-500">
                   {items.length === 0
                     ? "No research reports yet. Upload the first one above."
                     : "No results match your search."}
@@ -87,6 +75,9 @@ export function ResearchTableClient({
             ) : (
               filtered.map((item) => (
                 <tr key={item.id} className="odd:bg-white/[0.015]">
+                  <td className="px-4 py-3">
+                    <PdfThumbnail url={item.viewUrl} title={item.title} />
+                  </td>
                   <td className="px-4 py-3 text-white">
                     <Highlight text={item.title} query={query} />
                   </td>

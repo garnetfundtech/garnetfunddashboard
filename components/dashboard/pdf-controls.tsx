@@ -37,17 +37,6 @@ export function PdfControls({
         >
           View
         </button>
-        {downloadUrl ? (
-          <Link
-            href={downloadUrl}
-            className={buttonClass}
-          >
-            Download
-          </Link>
-        ) : (
-          <span className={`${buttonClass} ${disabledClass}`}>Download</span>
-        )}
-
         {onEdit ? (
           <button
             type="button"
@@ -58,6 +47,14 @@ export function PdfControls({
             Edit
           </button>
         ) : null}
+
+        {downloadUrl ? (
+          <Link href={downloadUrl} className={buttonClass}>
+            Download
+          </Link>
+        ) : (
+          <span className={`${buttonClass} ${disabledClass}`}>Download</span>
+        )}
 
         {onDelete ? (
           <button
