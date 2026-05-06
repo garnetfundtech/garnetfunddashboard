@@ -134,15 +134,15 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  opacity: 1;
   pointer-events: none;
+  filter: blur(8px);
 }
 
 .glass-stat-positive::after {
   background: linear-gradient(
     to top,
-    rgba(34, 197, 94, 0.3) 0%,
-    rgba(34, 197, 94, 0.1) 22%,
+    rgba(34, 197, 94, 0.13) 0%,
+    rgba(34, 197, 94, 0.04) 40%,
     rgba(34, 197, 94, 0) 100%
   );
 }
@@ -150,8 +150,8 @@ body {
 .glass-stat-negative::after {
   background: linear-gradient(
     to top,
-    rgba(142, 6, 4, 0.42) 0%,
-    rgba(142, 6, 4, 0.14) 22%,
+    rgba(142, 6, 4, 0.2) 0%,
+    rgba(142, 6, 4, 0.05) 40%,
     rgba(142, 6, 4, 0) 100%
   );
 }
