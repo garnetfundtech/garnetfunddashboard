@@ -12,6 +12,10 @@ export async function uploadResourceAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const category = String(formData.get("category") ?? "training");
   const downloadEnabled = formData.get("downloadEnabled") === "on";
+  const uploaderName =
+    (profile as { full_name?: string; first_name?: string; last_name?: string }).full_name ||
+    `${(profile as { first_name?: string }).first_name ?? ""} ${(profile as { last_name?: string }).last_name ?? ""}`.trim() ||
+    "Unknown";
 
   if (!(file instanceof File) || !title) return;
 
@@ -34,6 +38,7 @@ export async function uploadResourceAction(formData: FormData) {
       file_path: fullPath,
       download_enabled: downloadEnabled,
       created_by: profile.id,
+      uploader_name: uploaderName,
     })
     .select("id")
     .single();

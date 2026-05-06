@@ -8,7 +8,6 @@ export default async function ResearchPage() {
 
   return (
     <div className="space-y-3 pt-2">
-      {/* Search + upload */}
       <div className="flex items-center gap-3">
         <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />
@@ -26,7 +25,6 @@ export default async function ResearchPage() {
         <ResearchUploadModal />
       </div>
 
-      {/* Table */}
       <section className="panel overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-zinc-400">
@@ -49,20 +47,20 @@ export default async function ResearchPage() {
               researchItems.map((item) => (
                 <tr key={item.id} className="odd:bg-white/[0.015]">
                   <td className="px-4 py-3 text-white">{item.title}</td>
-                  <td className="px-4 py-3 text-zinc-300">{item.ticker}</td>
-                  <td className="px-4 py-3 text-zinc-400">{item.author}</td>
-                  <td className="px-4 py-3 text-zinc-400">{item.updatedAt}</td>
+                  <td className="px-4 py-3 text-white">{item.ticker}</td>
+                  <td className="px-4 py-3 text-white">{item.author}</td>
+                  <td className="px-4 py-3 text-white">{item.updatedAt}</td>
                   <td className="px-4 py-3">
                     {item.downloadEnabled && item.downloadUrl ? (
                       <Link
                         href={item.downloadUrl}
-                        className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                        className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-white transition-colors hover:bg-white/5"
                         title="Download"
                       >
                         <Download className="h-4 w-4" />
                       </Link>
                     ) : (
-                      <Ban className="h-4 w-4 text-zinc-700" />
+                      <Ban className="h-4 w-4 text-white opacity-30" />
                     )}
                   </td>
                 </tr>

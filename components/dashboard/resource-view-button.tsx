@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 
 export function ResourceViewButton({ url, title }: { url: string; title: string }) {
   const [open, setOpen] = useState(false);
@@ -10,9 +10,10 @@ export function ResourceViewButton({ url, title }: { url: string; title: string 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+        className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-white transition-colors hover:bg-white/5"
+        title="View"
       >
-        View
+        <Eye className="h-4 w-4" />
       </button>
 
       {open && (

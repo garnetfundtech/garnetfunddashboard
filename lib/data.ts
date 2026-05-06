@@ -81,13 +81,14 @@ export type ResourceWithLinks = ResourceItem & {
   file_path?: string;
   viewUrl?: string;
   downloadUrl?: string;
+  uploadedBy: string;
 };
 
 export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resources_files")
-    .select("id,title,category,download_enabled,created_at,file_path")
+    .select("id,title,category,download_enabled,created_at,file_path,uploader_name")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -125,6 +126,7 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
       downloadEnabled: resource.download_enabled,
       updatedAt: new Date(resource.created_at).toLocaleDateString(),
       file_path: resource.file_path,
+      uploadedBy: resource.uploader_name ?? "Unknown",
       viewUrl,
       downloadUrl,
     });
