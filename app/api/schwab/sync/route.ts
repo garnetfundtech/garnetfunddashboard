@@ -47,7 +47,7 @@ export async function POST() {
     const { data: tokenRow } = await admin
       .from("schwab_tokens")
       .select("*")
-      .eq("id", "master")
+      .eq("id", "trader")
       .single();
 
     if (!tokenRow?.access_token) {
