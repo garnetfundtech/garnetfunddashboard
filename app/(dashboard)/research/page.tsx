@@ -26,19 +26,19 @@ export default async function ResearchPage() {
         </form>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="glass-input flex w-full max-w-md items-center gap-2 px-3 py-2.5">
-          <Search className="h-4 w-4 text-zinc-500" />
-          <input className="w-full bg-transparent text-sm outline-none" placeholder="Search research..." />
+      <div className="flex items-center gap-3">
+        <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500" placeholder="Search research..." />
         </div>
-        <select className="glass-input px-3 py-2 text-sm outline-none">
-          <option>All confidence</option>
-          <option>High</option>
-          <option>Medium</option>
-          <option>Low</option>
+        <select className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none">
+          <option value="">All confidence</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
         </select>
-        <select className="glass-input px-3 py-2 text-sm outline-none">
-          <option>All tickers</option>
+        <select className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none">
+          <option value="">All tickers</option>
         </select>
       </div>
 

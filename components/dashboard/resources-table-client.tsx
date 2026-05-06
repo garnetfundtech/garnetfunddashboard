@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import type { ResourceWithLinks } from "@/lib/data";
 
 export function ResourcesTableClient({
@@ -11,26 +12,41 @@ export function ResourcesTableClient({
 }) {
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
 
   const filtered = useMemo(
     () =>
-      resources.filter((item) =>
-        item.title.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [resources, query],
+      resources.filter((item) => {
+        const matchesQuery = item.title.toLowerCase().includes(query.trim().toLowerCase());
+        const matchesCategory = !category || item.category === category;
+        return matchesQuery && matchesCategory;
+      }),
+    [resources, query, category],
   );
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <div className="glass-input flex w-full max-w-md items-center gap-2 px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
           <input
-            className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
             placeholder="Search resources..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <select
+          className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          <option value="">All categories</option>
+          <option value="training">Training</option>
+          <option value="pitch">Pitch</option>
+          <option value="playbook">Playbook</option>
+          <option value="research">Research</option>
+        </select>
       </div>
 
       <section className="panel overflow-hidden">

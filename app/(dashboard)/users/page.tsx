@@ -13,12 +13,25 @@ export default async function UsersPage() {
   return (
     <div className="space-y-3 pt-2">
       <h1 className="page-title">Users</h1>
-      <div className="glass-input flex w-full max-w-md items-center gap-2 px-3 py-2.5">
-        <Search className="h-4 w-4 text-zinc-500" />
-        <input
-          placeholder="Search users..."
-          className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-        />
+      <div className="flex items-center gap-3">
+        <div className="glass-input flex flex-1 items-center gap-2 px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input
+            placeholder="Search users..."
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+          />
+        </div>
+        <select className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none">
+          <option value="">All roles</option>
+          <option value="developer">Developer</option>
+          <option value="admin">Admin</option>
+          <option value="analyst">Analyst</option>
+        </select>
+        <select className="glass-input bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none">
+          <option value="">All statuses</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+        </select>
       </div>
 
       <section className="panel overflow-hidden">
