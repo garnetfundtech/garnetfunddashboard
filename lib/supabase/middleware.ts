@@ -27,7 +27,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isProtected = ["/home", "/research", "/resources", "/admin"].some((path) =>
+  const isProtected = ["/home", "/research", "/resources", "/admin", "/onboarding"].some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
   const isLogin = request.nextUrl.pathname.startsWith("/login");

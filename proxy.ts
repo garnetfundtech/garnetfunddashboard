@@ -11,6 +11,7 @@ export const config = {
     "/research/:path*",
     "/resources/:path*",
     "/admin/:path*",
+    "/onboarding",
     "/login",
   ],
 };

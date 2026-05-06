@@ -1,11 +1,15 @@
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { requireProfile } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const profile = await requireProfile();
+  if (!profile.first_name || !profile.last_name) {
+    redirect("/onboarding");
+  }
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] gap-3 p-3">

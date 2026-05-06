@@ -133,6 +133,7 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
 export type AdminUser = {
   id: string;
   email: string;
+  full_name: string | null;
   role: UserRole;
   created_at: string;
 };
@@ -141,7 +142,7 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("id,email,role,created_at")
+    .select("id,email,full_name,role,created_at")
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];

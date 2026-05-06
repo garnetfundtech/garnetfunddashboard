@@ -6,6 +6,8 @@ export type Profile = {
   id: string;
   email: string;
   full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   role: UserRole;
 };
 
@@ -21,22 +23,32 @@ export async function getCurrentProfile() {
 
   const { data: profile, error } = await supabase
     .from("user_profiles")
-    .select("id,email,full_name,role")
+    .select("id,email,full_name,first_name,last_name,role")
     .eq("id", user.id)
     .maybeSingle();
 
   if (error || !profile) {
+    const firstName = (user.user_metadata?.first_name as string | undefined) ?? null;
+    const lastName = (user.user_metadata?.last_name as string | undefined) ?? null;
+    const fallbackFromParts = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const metadataFullName = (user.user_metadata?.full_name as string | undefined) ?? null;
+    const fallbackFullName = metadataFullName || fallbackFromParts || null;
+
     await supabase.from("user_profiles").upsert({
       id: user.id,
       email: user.email ?? "",
-      full_name: user.user_metadata?.full_name ?? null,
+      full_name: fallbackFullName,
+      first_name: firstName,
+      last_name: lastName,
       role: "analyst",
     });
 
     return {
       id: user.id,
       email: user.email ?? "",
-      full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
+      full_name: fallbackFullName,
+      first_name: firstName,
+      last_name: lastName,
       role: "analyst" as const,
     };
   }

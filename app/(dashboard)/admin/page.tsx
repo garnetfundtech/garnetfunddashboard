@@ -22,6 +22,20 @@ export default async function AdminPage() {
         <article className="panel p-4">
           <p className="caps-label">Invite Member</p>
           <form action={inviteUserAction} className="mt-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                name="firstName"
+                placeholder="First name"
+                className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none"
+                required
+              />
+              <input
+                name="lastName"
+                placeholder="Last name"
+                className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none"
+                required
+              />
+            </div>
             <input
               name="email"
               placeholder="name@email.sc.edu"
@@ -49,7 +63,8 @@ export default async function AdminPage() {
                 key={user.id}
                 className="rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2"
               >
-                <p className="text-xs text-zinc-400">{user.email}</p>
+                <p className="text-xs text-zinc-400">{user.full_name || "No name yet"}</p>
+                <p className="text-xs text-zinc-500">{user.email}</p>
                 <form action={updateUserRoleAction} className="mt-2 flex items-center gap-2">
                   <input type="hidden" name="id" value={user.id} />
                   <select

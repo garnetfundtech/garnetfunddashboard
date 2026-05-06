@@ -10,20 +10,30 @@ export async function inviteUserAction(formData: FormData) {
   await requireRole(["developer", "admin"]);
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
   const role = String(formData.get("role") ?? "analyst") as UserRole;
 
-  if (!email || !email.endsWith("email.sc.edu")) return;
+  if (!email || !email.endsWith("email.sc.edu") || !firstName || !lastName) return;
 
   const admin = createAdminClient();
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login`;
   const { data } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo,
+    data: {
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`.trim(),
+    },
   });
 
   if (data.user) {
     await admin.from("user_profiles").upsert({
       id: data.user.id,
       email,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`.trim(),
       role,
     });
   }
@@ -32,7 +42,7 @@ export async function inviteUserAction(formData: FormData) {
     action: "user.invite",
     entity_type: "user_profile",
     entity_id: data.user?.id ?? null,
-    metadata: { email, role },
+    metadata: { email, role, firstName, lastName },
   });
 
   revalidatePath("/admin");
