@@ -141,8 +141,8 @@ body {
 .glass-stat-positive::after {
   background: linear-gradient(
     to top,
-    rgba(34, 197, 94, 0.13) 0%,
-    rgba(34, 197, 94, 0.04) 40%,
+    rgba(34, 197, 94, 0.06) 0%,
+    rgba(34, 197, 94, 0.02) 50%,
     rgba(34, 197, 94, 0) 100%
   );
 }
@@ -150,8 +150,8 @@ body {
 .glass-stat-negative::after {
   background: linear-gradient(
     to top,
-    rgba(142, 6, 4, 0.2) 0%,
-    rgba(142, 6, 4, 0.05) 40%,
+    rgba(142, 6, 4, 0.1) 0%,
+    rgba(142, 6, 4, 0.03) 50%,
     rgba(142, 6, 4, 0) 100%
   );
 }
