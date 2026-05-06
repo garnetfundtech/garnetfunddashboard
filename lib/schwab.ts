@@ -11,8 +11,9 @@ function getSchwabEnv(connection: SchwabConnection) {
       process.env.SCHWAB_MARKET_CLIENT_SECRET ?? process.env.SCHWAB_CLIENT_SECRET ?? "";
     const redirectUri =
       process.env.SCHWAB_MARKET_REDIRECT_URI ??
-      process.env.SCHWAB_REDIRECT_URL ??
+      process.env.SCHWAB_MARKET_REDIRECT_URL ??
       process.env.SCHWAB_REDIRECT_URI ??
+      process.env.SCHWAB_REDIRECT_URL ??
       "https://127.0.0.1";
     return { clientId, clientSecret, redirectUri };
   }
@@ -21,8 +22,9 @@ function getSchwabEnv(connection: SchwabConnection) {
   const clientSecret = process.env.SCHWAB_CLIENT_SECRET ?? "";
   const redirectUri =
     process.env.SCHWAB_TRADER_REDIRECT_URI ??
-    process.env.SCHWAB_REDIRECT_URL ??
+    process.env.SCHWAB_TRADER_REDIRECT_URL ??
     process.env.SCHWAB_REDIRECT_URI ??
+    process.env.SCHWAB_REDIRECT_URL ??
     "https://127.0.0.1";
   return { clientId, clientSecret, redirectUri };
 }

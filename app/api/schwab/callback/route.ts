@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { exchangeCodeForTokens } from "@/lib/schwab";
 
+function providerFromState(state: string | null) {
+  if (!state) return null;
+  const [maybeProvider] = state.split(":", 1);
+  if (maybeProvider === "market" || maybeProvider === "trader") return maybeProvider;
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   if (process.env.ENABLE_SCHWAB_SYNC !== "true") {
     return NextResponse.json(
@@ -15,8 +22,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Missing code parameter." }, { status: 400 });
   }
 
+  // Callback URL in Schwab app registration must not include query params.
+  // We infer provider from OAuth state (preferred), but keep query param support for manual testing.
   const providerParam = request.nextUrl.searchParams.get("provider");
-  const provider = providerParam === "market" ? "market" : "trader";
+  const state = request.nextUrl.searchParams.get("state");
+  const provider =
+    providerParam === "market"
+      ? "market"
+      : providerParam === "trader"
+        ? "trader"
+        : providerFromState(state) ?? "trader";
 
   const tokenData = await exchangeCodeForTokens(code, provider);
   const admin = createAdminClient();
