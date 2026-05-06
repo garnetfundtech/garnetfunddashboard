@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { Ban, Download, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Highlight } from "@/components/dashboard/highlight";
-import { ResourceViewButton } from "@/components/dashboard/resource-view-button";
+import { PdfControls } from "@/components/dashboard/pdf-controls";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
 import type { ResourceWithLinks } from "@/lib/data";
 
@@ -61,7 +60,7 @@ export function ResourcesTableClient({ resources }: { resources: ResourceWithLin
               <th className="px-4 py-2 text-left font-medium">Category</th>
               <th className="px-4 py-2 text-left font-medium">Uploaded by</th>
               <th className="px-4 py-2 text-left font-medium">Date</th>
-              <th className="px-4 py-2 text-left font-medium">File</th>
+              <th className="px-4 py-2 text-left font-medium">Controls</th>
             </tr>
           </thead>
           <tbody>
@@ -87,22 +86,11 @@ export function ResourcesTableClient({ resources }: { resources: ResourceWithLin
                   </td>
                   <td className="px-4 py-3 text-white">{item.updatedAt}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {item.viewUrl && (
-                        <ResourceViewButton url={item.viewUrl} title={item.title} />
-                      )}
-                      {item.downloadEnabled && item.downloadUrl ? (
-                        <Link
-                          href={item.downloadUrl}
-                          className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-white transition-colors hover:bg-white/5"
-                          title="Download"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Link>
-                      ) : (
-                        <Ban className="h-4 w-4 text-white opacity-30" />
-                      )}
-                    </div>
+                    <PdfControls
+                      title={item.title}
+                      viewUrl={item.viewUrl}
+                      downloadUrl={item.downloadEnabled ? item.downloadUrl : undefined}
+                    />
                   </td>
                 </tr>
               ))
