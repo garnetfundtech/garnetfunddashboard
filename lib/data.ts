@@ -35,7 +35,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker, confidence, created_at, file_path, user_profiles(full_name,email)")
+    .select("id, title, ticker, confidence, created_at, file_path, author_override, download_enabled, user_profiles(full_name,email)")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -47,12 +47,17 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   for (const row of data) {
     const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
     let viewUrl: string | undefined;
+    let downloadUrl: string | undefined;
+
     if (row.file_path) {
       const { bucket, objectPath } = parseFilePath(row.file_path);
       if (bucket && objectPath) {
         const view = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10);
-        if (view.data?.signedUrl) {
-          viewUrl = view.data.signedUrl;
+        if (view.data?.signedUrl) viewUrl = view.data.signedUrl;
+
+        if (row.download_enabled) {
+          const dl = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10, { download: true });
+          if (dl.data?.signedUrl) downloadUrl = dl.data.signedUrl;
         }
       }
     }
@@ -60,12 +65,14 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
     mapped.push({
       id: row.id,
       title: row.title,
-      author: profile?.full_name || profile?.email || "Unknown Analyst",
-      ticker: row.ticker ?? "N/A",
+      author: row.author_override || profile?.full_name || profile?.email || "Unknown",
+      ticker: row.ticker ?? "—",
       updatedAt: new Date(row.created_at).toLocaleDateString(),
       confidence: (row.confidence as "high" | "medium" | "low") ?? "medium",
       filePath: row.file_path ?? undefined,
       viewUrl,
+      downloadEnabled: row.download_enabled ?? false,
+      downloadUrl,
     });
   }
 

@@ -36,6 +36,8 @@ export type ResearchItem = {
   confidence: "high" | "medium" | "low";
   filePath?: string;
   viewUrl?: string;
+  downloadEnabled: boolean;
+  downloadUrl?: string;
 };
 
 export type ResourceItem = {
