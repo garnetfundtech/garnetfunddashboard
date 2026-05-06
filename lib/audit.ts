@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type AuditPayload = {
   action: string;
@@ -15,11 +16,16 @@ export async function logAuditEvent(payload: AuditPayload) {
 
   if (!user) return;
 
-  await supabase.from("audit_events").insert({
-    actor_id: user.id,
-    action: payload.action,
-    entity_type: payload.entity_type,
-    entity_id: payload.entity_id ?? null,
-    metadata: payload.metadata ?? {},
-  });
+  try {
+    const admin = createAdminClient();
+    await admin.from("audit_events").insert({
+      actor_id: user.id,
+      action: payload.action,
+      entity_type: payload.entity_type,
+      entity_id: payload.entity_id ?? null,
+      metadata: payload.metadata ?? {},
+    });
+  } catch {
+    // Non-fatal: never block the main action if audit logging fails
+  }
 }

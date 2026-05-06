@@ -35,7 +35,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker, confidence, created_at, file_path, author_override, download_enabled, user_profiles(full_name,email)")
+    .select("id, title, ticker, confidence, created_at, file_path, author_override, download_enabled")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -45,7 +45,6 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const mapped: ResearchItem[] = [];
 
   for (const row of data) {
-    const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
     let viewUrl: string | undefined;
     let downloadUrl: string | undefined;
 
@@ -65,7 +64,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
     mapped.push({
       id: row.id,
       title: row.title,
-      author: row.author_override || profile?.full_name || profile?.email || "Unknown",
+      author: row.author_override ?? "Unknown",
       ticker: row.ticker ?? "—",
       updatedAt: new Date(row.created_at).toLocaleDateString(),
       confidence: (row.confidence as "high" | "medium" | "low") ?? "medium",
