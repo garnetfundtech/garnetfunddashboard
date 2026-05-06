@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Ban } from "lucide-react";
+import { Ban, Download } from "lucide-react";
 import { Search } from "lucide-react";
 import { getResearchItems } from "@/lib/data";
 import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
@@ -65,7 +65,7 @@ export default async function ResearchPage() {
               researchItems.map((item) => (
                 <tr key={item.id} className="odd:bg-white/[0.015]">
                   <td className="px-4 py-3 text-white">{item.title}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.ticker}</td>
+                  <td className="px-4 py-3 text-sm text-zinc-300">{item.ticker}</td>
                   <td className="px-4 py-3 text-zinc-300">{item.author}</td>
                   <td className={`px-4 py-3 capitalize font-medium ${confidenceColor[item.confidence] ?? "text-zinc-400"}`}>
                     {item.confidence}
@@ -75,12 +75,13 @@ export default async function ResearchPage() {
                     {item.downloadEnabled && item.downloadUrl ? (
                       <Link
                         href={item.downloadUrl}
-                        className="text-xs text-[#d88f8d] hover:underline"
+                        className="inline-flex items-center justify-center rounded-[7px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                        title="Download"
                       >
-                        Download
+                        <Download className="h-4 w-4" />
                       </Link>
                     ) : (
-                      <Ban className="h-4 w-4 text-zinc-600" />
+                      <Ban className="h-4 w-4 text-zinc-700" />
                     )}
                   </td>
                 </tr>
