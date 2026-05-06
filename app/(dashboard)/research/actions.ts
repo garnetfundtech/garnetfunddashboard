@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureStorageBuckets, buildStorageObjectPath } from "@/lib/storage";
+import { ensureStorageBuckets, buildStorageObjectPath, parseFilePath } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
+import { isRoleHigher } from "@/lib/roles";
 
 export async function uploadResearchAction(formData: FormData) {
   const profile = await requireProfile();
@@ -38,12 +39,89 @@ export async function uploadResearchAction(formData: FormData) {
     created_by: profile.id,
     author_override: authorName,
     download_enabled: downloadEnabled,
+    uploader_role: profile.role,
   });
 
   await logAuditEvent({
     action: "research.upload",
     entity_type: "research_post",
     metadata: { title, ticker, downloadEnabled },
+  });
+
+  revalidatePath("/research");
+}
+
+export async function updateResearchAction(formData: FormData) {
+  const actor = await requireProfile();
+  const id = String(formData.get("id") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const ticker = String(formData.get("ticker") ?? "").trim().toUpperCase();
+  const downloadEnabled = formData.get("downloadEnabled") === "true";
+  if (!id || !title) return;
+
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("research_posts")
+    .select("id,created_by,uploader_role,download_enabled")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!row) return;
+  const uploaderRole = (row.uploader_role as typeof actor.role) ?? "analyst";
+  const canManage =
+    row.created_by === actor.id || isRoleHigher(actor.role, uploaderRole);
+  if (!canManage) return;
+
+  await admin
+    .from("research_posts")
+    .update({
+      title,
+      ticker: ticker || null,
+      download_enabled: downloadEnabled,
+    })
+    .eq("id", id);
+
+  await logAuditEvent({
+    action: "research.update",
+    entity_type: "research_post",
+    entity_id: id,
+    metadata: { title, ticker, downloadEnabled },
+  });
+
+  revalidatePath("/research");
+}
+
+export async function deleteResearchAction(formData: FormData) {
+  const actor = await requireProfile();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("research_posts")
+    .select("id,created_by,uploader_role,file_path")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!row) return;
+  const uploaderRole = (row.uploader_role as typeof actor.role) ?? "analyst";
+  const canManage =
+    row.created_by === actor.id || isRoleHigher(actor.role, uploaderRole);
+  if (!canManage) return;
+
+  if (row.file_path) {
+    const { bucket, objectPath } = parseFilePath(row.file_path);
+    if (bucket && objectPath) {
+      await admin.storage.from(bucket).remove([objectPath]);
+    }
+  }
+
+  await admin.from("research_posts").delete().eq("id", id);
+
+  await logAuditEvent({
+    action: "research.delete",
+    entity_type: "research_post",
+    entity_id: id,
   });
 
   revalidatePath("/research");

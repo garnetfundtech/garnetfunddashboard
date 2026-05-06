@@ -8,10 +8,18 @@ export function PdfControls({
   title,
   viewUrl,
   downloadUrl,
+  canEdit,
+  canDelete,
+  onEdit,
+  onDelete,
 }: {
   title: string;
   viewUrl?: string;
   downloadUrl?: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -39,6 +47,28 @@ export function PdfControls({
         ) : (
           <span className={`${buttonClass} ${disabledClass}`}>Download</span>
         )}
+
+        {onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={!canEdit}
+            className={`${buttonClass} ${!canEdit ? disabledClass : ""}`}
+          >
+            Edit
+          </button>
+        ) : null}
+
+        {onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={!canDelete}
+            className={`${buttonClass} ${!canDelete ? disabledClass : ""}`}
+          >
+            Delete
+          </button>
+        ) : null}
       </div>
 
       {open && viewUrl && (

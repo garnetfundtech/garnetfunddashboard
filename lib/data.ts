@@ -35,7 +35,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker, created_at, file_path, author_override, download_enabled")
+    .select("id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -67,6 +67,8 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       author: row.author_override ?? "Unknown",
       ticker: row.ticker ?? "—",
       updatedAt: new Date(row.created_at).toLocaleDateString(),
+      createdBy: row.created_by ?? null,
+      uploaderRole: (row.uploader_role as UserRole) ?? "analyst",
       filePath: row.file_path ?? undefined,
       viewUrl,
       downloadEnabled: row.download_enabled ?? false,
@@ -82,13 +84,15 @@ export type ResourceWithLinks = ResourceItem & {
   viewUrl?: string;
   downloadUrl?: string;
   uploadedBy: string;
+  createdBy: string | null;
+  uploaderRole: UserRole;
 };
 
 export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resources_files")
-    .select("id,title,category,download_enabled,created_at,file_path,uploader_name")
+    .select("id,title,category,download_enabled,created_at,file_path,uploader_name,created_by,uploader_role")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -127,6 +131,8 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
       updatedAt: new Date(resource.created_at).toLocaleDateString(),
       file_path: resource.file_path,
       uploadedBy: resource.uploader_name ?? "Unknown",
+      createdBy: resource.created_by ?? null,
+      uploaderRole: (resource.uploader_role as UserRole) ?? "analyst",
       viewUrl,
       downloadUrl,
     });

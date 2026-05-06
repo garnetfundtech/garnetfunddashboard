@@ -33,6 +33,8 @@ export type ResearchItem = {
   author: string;
   ticker: string;
   updatedAt: string;
+  createdBy: string | null;
+  uploaderRole: UserRole;
   filePath?: string;
   viewUrl?: string;
   downloadEnabled: boolean;
