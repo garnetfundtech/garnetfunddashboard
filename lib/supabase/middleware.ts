@@ -34,12 +34,9 @@ export async function updateSession(request: NextRequest) {
     "/resources",
     "/admin",
     "/onboarding",
-    "/analytics",
-    "/risk",
     "/orders",
     "/pipeline",
     "/watchlist",
-    "/macro",
     "/earnings",
   ].some((path) => request.nextUrl.pathname.startsWith(path));
   const isLogin = request.nextUrl.pathname.startsWith("/login");

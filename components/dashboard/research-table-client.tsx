@@ -2,13 +2,24 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Download, Minus, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
-import type { ResearchItem, UserRole } from "@/lib/types";
+import type { ResearchItem, StoredAnalysis, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/research/actions";
 import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
+
+function roleColor(role: UserRole) {
+  const map: Record<UserRole, string> = {
+    developer: "text-violet-400",
+    admin: "text-amber-400",
+    pm: "text-rose-300",
+    analyst: "text-sky-400",
+  };
+  return map[role];
+}
 
 function roleBadge(role: UserRole) {
   const map: Record<UserRole, string> = {
@@ -18,19 +29,13 @@ function roleBadge(role: UserRole) {
     analyst: "bg-sky-500/15 text-sky-400",
   };
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${map[role]}`}>
+    <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize ${map[role]}`}>
       {role}
     </span>
   );
 }
 
-type Analysis = {
-  bullThesis: string;
-  bearThesis: string;
-  keyRisks: string[];
-  comparables: string[];
-  positionSizeRange: string;
-};
+type Analysis = StoredAnalysis;
 
 const ACTION_BTN =
   "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
@@ -92,6 +97,7 @@ export function ResearchTableClient({
     startTransition(() => {
       setSelected(item.id);
       setOpened(item);
+      setAnalysis(item.aiAnalysis ?? null);
       if (initialMode === "edit" && canManage(item)) {
         setEditing(item);
       }
@@ -100,11 +106,7 @@ export function ResearchTableClient({
   }, [initialMode, initialOpenId, items]);
 
   function handleCardClick(item: ResearchItem) {
-    setSelected(item.id);
-  }
-
-  function handleCardDoubleClick(item: ResearchItem) {
-    setAnalysis(null);
+    setAnalysis(item.aiAnalysis ?? null);
     setAnalysisErr(null);
     setCurrentPage(1);
     setTotalPages(null);
@@ -131,7 +133,7 @@ export function ResearchTableClient({
       const res = await fetch("/api/gemini/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdfUrl: opened.viewUrl }),
+        body: JSON.stringify({ pdfUrl: opened.viewUrl, researchId: opened.id }),
       });
       const json = (await res.json()) as { ok?: boolean; analysis?: Analysis; message?: string };
       if (!res.ok || !json.ok) throw new Error(json.message ?? "Analysis failed");
@@ -156,6 +158,7 @@ export function ResearchTableClient({
           />
         </div>
         <ResearchUploadModal />
+        <AiChatTrigger />
       </div>
 
       {filtered.length === 0 ? (
@@ -176,14 +179,15 @@ export function ResearchTableClient({
                 key={item.id}
                 type="button"
                 onClick={() => handleCardClick(item)}
-                onDoubleClick={() => handleCardDoubleClick(item)}
                 className={`panel overflow-hidden rounded-[14px] text-left transition-all focus:outline-none ${
                   isSelected
-                    ? "ring-2 ring-white/20 bg-white/[0.08]"
+                    ? "ring-2 ring-white/40 bg-white/[0.10]"
                     : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.04]"
                 }`}
               >
-                <PdfThumbnail url={item.viewUrl} title={item.title} fill />
+                <div className="p-3 pb-0">
+                  <PdfThumbnail url={item.viewUrl} title={item.title} fill />
+                </div>
                 <div className="space-y-1 px-3 pt-2 pb-2.5">
                   <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">
                     {item.title}{" "}
@@ -232,12 +236,9 @@ export function ResearchTableClient({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="caps-label">Research</p>
-                      {opened.ticker && opened.ticker !== "—" && (
-                        <p className="caps-label text-zinc-300">{opened.ticker.toUpperCase()}</p>
-                      )}
-                    </div>
+                    {opened.ticker && opened.ticker !== "—" && (
+                      <p className="caps-label text-zinc-300">{opened.ticker.toUpperCase()}</p>
+                    )}
                     <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">{opened.title}</h2>
                   </div>
                   <button
@@ -248,7 +249,58 @@ export function ResearchTableClient({
                   </button>
                 </div>
 
-                {/* Zoom controls — full width, equal thirds */}
+                {/* Metadata */}
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Analyst</dt>
+                    <dd className="font-medium text-white">{opened.analystName ?? opened.author}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-zinc-500">Role</dt>
+                    <dd className={`font-medium capitalize ${roleColor(opened.uploaderRole)}`}>{opened.uploaderRole}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Date</dt>
+                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
+                  </div>
+                  {totalPages !== null && (
+                    <div className="flex justify-between">
+                      <dt className="text-zinc-500">Pages</dt>
+                      <dd className="tabular-nums text-zinc-300">{currentPage} of {totalPages}</dd>
+                    </div>
+                  )}
+                </dl>
+
+                {/* AI analysis output */}
+                {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
+                {analysis ? (
+                  <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs">
+                    <p className="caps-label mb-2">AI snapshot</p>
+                    <dl className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-emerald-400">Bull</dt>
+                        <dd className="text-zinc-300">{analysis.bull}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-rose-400">Bear</dt>
+                        <dd className="text-zinc-300">{analysis.bear}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Comps</dt>
+                        <dd className="text-zinc-300">{analysis.comps.join(", ")}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Size</dt>
+                        <dd className="text-zinc-300">{analysis.sizeRange}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Fixed action buttons — always at bottom */}
+              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
+                {/* Zoom controls */}
                 <div className="flex w-full gap-1">
                   <button
                     type="button"
@@ -269,102 +321,50 @@ export function ResearchTableClient({
                   </button>
                 </div>
 
-                {/* Page indicator */}
-                {totalPages !== null && (
-                  <p className="text-center text-xs tabular-nums text-zinc-500">
-                    Page {currentPage} of {totalPages}
-                  </p>
+                {/* Analyze + Edit details side by side */}
+                {(opened.viewUrl || canManage(opened)) && (
+                  <div className="flex gap-1">
+                    {opened.viewUrl && (
+                      <button
+                        type="button"
+                        disabled={analysisLoading}
+                        onClick={() => void runAnalysis()}
+                        className={`${ACTION_BTN} flex-1 disabled:opacity-50`}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {analysisLoading ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze with AI"}
+                      </button>
+                    )}
+                    {canManage(opened) && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(opened)}
+                        className={`${ACTION_BTN} flex-1`}
+                      >
+                        Edit details
+                      </button>
+                    )}
+                  </div>
                 )}
 
-                {/* Metadata */}
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">Analyst</dt>
-                    <dd className="font-medium text-white">{opened.analystName ?? opened.author}</dd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="text-zinc-500">Role</dt>
-                    <dd>{roleBadge(opened.uploaderRole)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">Date</dt>
-                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
-                  </div>
-                </dl>
-
-                {/* AI analysis output */}
-                {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
-                {analysis ? (
-                  <div className="space-y-2 rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs text-zinc-200">
-                    <p className="caps-label">AI output</p>
-                    <div>
-                      <p className="font-semibold text-emerald-300/90">Bull</p>
-                      <p className="mt-0.5 text-zinc-300">{analysis.bullThesis}</p>
+                {/* Download + Print side by side */}
+                <div className="flex gap-1">
+                  {opened.downloadEnabled && opened.downloadUrl ? (
+                    <Link href={opened.downloadUrl} className={`${ACTION_BTN} flex-1`}>
+                      <Download className="h-4 w-4" />
+                      Download
+                    </Link>
+                  ) : (
+                    <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600">
+                      <Download className="h-4 w-4" />
+                      Download
                     </div>
-                    <div>
-                      <p className="font-semibold text-rose-300/90">Bear</p>
-                      <p className="mt-0.5 text-zinc-300">{analysis.bearThesis}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-zinc-400">Risks</p>
-                      <ul className="mt-0.5 list-disc pl-4 text-zinc-400">
-                        {analysis.keyRisks.map((r, i) => (
-                          <li key={i}>{r}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-zinc-400">Comps</p>
-                      <p className="mt-0.5 text-zinc-300">{analysis.comparables.join(", ")}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-zinc-400">Size range</p>
-                      <p className="mt-0.5 text-zinc-300">{analysis.positionSizeRange}</p>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Fixed action buttons — always at bottom */}
-              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
-                {opened.viewUrl ? (
-                  <button
-                    type="button"
-                    disabled={analysisLoading}
-                    onClick={() => void runAnalysis()}
-                    className={`${ACTION_BTN} disabled:opacity-50`}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {analysisLoading ? "Analyzing…" : "Analyze with AI"}
+                  )}
+                  <button type="button" onClick={() => doPrint()} className={`${ACTION_BTN} flex-1`}>
+                    <Printer className="h-4 w-4" />
+                    Print
                   </button>
-                ) : null}
-
-                {opened.downloadEnabled && opened.downloadUrl ? (
-                  <Link href={opened.downloadUrl} className={ACTION_BTN}>
-                    <Download className="h-4 w-4" />
-                    Download
-                  </Link>
-                ) : (
-                  <div className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600">
-                    <Download className="h-4 w-4" />
-                    Download disabled
-                  </div>
-                )}
-
-                <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
-                  <Printer className="h-4 w-4" />
-                  Print
-                </button>
-
-                {canManage(opened) && (
-                  <button
-                    type="button"
-                    onClick={() => setEditing(opened)}
-                    className={ACTION_BTN}
-                  >
-                    Edit details
-                  </button>
-                )}
+                </div>
 
                 {canManage(opened) && (
                   <button
@@ -384,7 +384,7 @@ export function ResearchTableClient({
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>

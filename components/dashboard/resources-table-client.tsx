@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
@@ -19,6 +20,16 @@ function titleCase(value: string) {
     .join(" ");
 }
 
+function roleColor(role: UserRole) {
+  const map: Record<UserRole, string> = {
+    developer: "text-violet-400",
+    admin: "text-amber-400",
+    pm: "text-rose-300",
+    analyst: "text-sky-400",
+  };
+  return map[role];
+}
+
 function roleBadge(role: UserRole) {
   const map: Record<UserRole, string> = {
     developer: "bg-violet-500/15 text-violet-400",
@@ -27,7 +38,7 @@ function roleBadge(role: UserRole) {
     analyst: "bg-sky-500/15 text-sky-400",
   };
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${map[role]}`}>
+    <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize ${map[role]}`}>
       {role}
     </span>
   );
@@ -92,10 +103,6 @@ export function ResourcesTableClient({
   }, [initialMode, initialOpenId, resources]);
 
   function handleCardClick(item: ResourceWithLinks) {
-    setSelected(item.id);
-  }
-
-  function handleCardDoubleClick(item: ResourceWithLinks) {
     setCurrentPage(1);
     setTotalPages(null);
     setZoom(1);
@@ -127,6 +134,7 @@ export function ResourcesTableClient({
           />
         </div>
         <ResourcesUploadModal />
+        <AiChatTrigger />
       </div>
 
       {/* Grid */}
@@ -145,14 +153,15 @@ export function ResourcesTableClient({
                 key={item.id}
                 type="button"
                 onClick={() => handleCardClick(item)}
-                onDoubleClick={() => handleCardDoubleClick(item)}
                 className={`panel overflow-hidden rounded-[14px] text-left transition-all focus:outline-none ${
                   isSelected
-                    ? "ring-2 ring-white/20 bg-white/[0.08]"
+                    ? "ring-2 ring-white/40 bg-white/[0.10]"
                     : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.04]"
                 }`}
               >
-                <PdfThumbnail url={item.viewUrl} title={item.title} fill />
+                <div className="p-3 pb-0">
+                  <PdfThumbnail url={item.viewUrl} title={item.title} fill />
+                </div>
                 <div className="px-3 pt-2 pb-2.5 space-y-1">
                   <p className="text-sm font-semibold text-white leading-snug line-clamp-2">
                     {item.title}{" "}
@@ -195,12 +204,9 @@ export function ResourcesTableClient({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="caps-label">Resources</p>
-                      {opened.category && (
-                        <p className="caps-label text-zinc-300">{titleCase(opened.category)}</p>
-                      )}
-                    </div>
+                    {opened.category && (
+                      <p className="caps-label text-zinc-300">{titleCase(opened.category)}</p>
+                    )}
                     <h2 className="mt-0.5 text-base font-semibold text-white leading-snug">
                       {opened.title}
                     </h2>
@@ -213,7 +219,32 @@ export function ResourcesTableClient({
                   </button>
                 </div>
 
-                {/* Zoom controls — full width, equal thirds */}
+                {/* Metadata */}
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Uploaded by</dt>
+                    <dd className="font-medium text-white">{opened.uploadedBy}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-zinc-500">Role</dt>
+                    <dd className={`font-medium capitalize ${roleColor(opened.uploaderRole)}`}>{opened.uploaderRole}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Date</dt>
+                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
+                  </div>
+                  {totalPages !== null && (
+                    <div className="flex justify-between">
+                      <dt className="text-zinc-500">Pages</dt>
+                      <dd className="tabular-nums text-zinc-300">{currentPage} of {totalPages}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+
+              {/* Fixed action buttons — always at bottom */}
+              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
+                {/* Zoom controls */}
                 <div className="flex w-full gap-1">
                   <button
                     type="button"
@@ -234,48 +265,24 @@ export function ResourcesTableClient({
                   </button>
                 </div>
 
-                {/* Page indicator */}
-                {totalPages !== null && (
-                  <p className="text-center text-xs tabular-nums text-zinc-500">
-                    Page {currentPage} of {totalPages}
-                  </p>
-                )}
-
-                {/* Metadata */}
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">Uploaded by</dt>
-                    <dd className="font-medium text-white">{opened.uploadedBy}</dd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="text-zinc-500">Role</dt>
-                    <dd>{roleBadge(opened.uploaderRole)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">Date</dt>
-                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* Fixed action buttons — always at bottom */}
-              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
-                {opened.downloadEnabled && opened.downloadUrl ? (
-                  <Link href={opened.downloadUrl} className={ACTION_BTN}>
-                    <Download className="h-4 w-4" />
-                    Download
-                  </Link>
-                ) : (
-                  <div className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600 cursor-not-allowed">
-                    <Download className="h-4 w-4" />
-                    Download disabled
-                  </div>
-                )}
-
-                <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
-                  <Printer className="h-4 w-4" />
-                  Print
-                </button>
+                {/* Download + Print side by side */}
+                <div className="flex gap-1">
+                  {opened.downloadEnabled && opened.downloadUrl ? (
+                    <Link href={opened.downloadUrl} className={`${ACTION_BTN} flex-1`}>
+                      <Download className="h-4 w-4" />
+                      Download
+                    </Link>
+                  ) : (
+                    <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600">
+                      <Download className="h-4 w-4" />
+                      Download
+                    </div>
+                  )}
+                  <button type="button" onClick={() => doPrint()} className={`${ACTION_BTN} flex-1`}>
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </button>
+                </div>
 
                 {canManage(opened) && (
                   <button
@@ -306,7 +313,7 @@ export function ResourcesTableClient({
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>

@@ -78,7 +78,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const { data, error } = await supabase
     .from("research_posts")
     .select(
-      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name",
+      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
     )
     .order("created_at", { ascending: false })
     .limit(40);
@@ -126,6 +126,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       sector: (row as { sector?: string | null }).sector ?? null,
       thesisStatus: validThesis,
       analystName: (row as { analyst_name?: string | null }).analyst_name ?? null,
+      aiAnalysis: (row as { ai_analysis?: unknown }).ai_analysis as import("@/lib/types").StoredAnalysis | null ?? null,
     });
   }
 

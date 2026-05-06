@@ -2,6 +2,13 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const MODEL_ID = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const FALLBACK_MODEL_IDS = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-flash-8b-latest"];
+// Fastest models first — for short structured extraction tasks like PDF analysis
+const ANALYSIS_MODEL_IDS = [
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-8b-latest",
+  "gemini-1.5-flash-latest",
+];
 const MAX_RETRIES_PER_MODEL = 2;
 
 function getClient() {
@@ -62,20 +69,27 @@ async function sleep(ms: number): Promise<void> {
 
 async function withModelFallback<T>({
   systemInstruction,
+  modelList,
+  generationConfig,
   run,
 }: {
   systemInstruction?: string;
+  modelList?: string[];
+  generationConfig?: Record<string, unknown>;
   run: (model: GenerativeModel) => Promise<T>;
 }): Promise<T> {
   const client = getClient();
   let lastError: unknown;
 
-  for (const modelId of modelCandidates()) {
+  const candidates = modelList ?? modelCandidates();
+
+  for (const modelId of candidates) {
     for (let attempt = 0; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
       try {
         const model = client.getGenerativeModel({
           model: modelId,
           ...(systemInstruction ? { systemInstruction } : {}),
+          ...(generationConfig ? { generationConfig } : {}),
         });
         return await run(model);
       } catch (error) {
@@ -97,27 +111,27 @@ async function withModelFallback<T>({
 }
 
 export type PitchAnalysisResult = {
-  bullThesis: string;
-  bearThesis: string;
-  keyRisks: string[];
-  comparables: string[];
-  positionSizeRange: string;
+  bull: string;
+  bear: string;
+  comps: string[];
+  sizeRange: string;
 };
 
 export async function analyzePitchPdf(buffer: ArrayBuffer): Promise<PitchAnalysisResult> {
   const base64 = Buffer.from(buffer).toString("base64");
 
-  const prompt = `You are a buy-side equity analyst. Analyze the attached research PDF and respond ONLY with valid JSON matching this schema (no markdown):
+  const prompt = `You are a buy-side equity analyst. Analyze the attached research PDF and respond ONLY with valid JSON (no markdown, no explanation):
 {
-  "bullThesis": string,
-  "bearThesis": string,
-  "keyRisks": string[],
-  "comparables": string[],
-  "positionSizeRange": string (e.g. "0.5%–2% of portfolio for a starter position")
+  "bull": string (≤15 words, key upside catalyst),
+  "bear": string (≤15 words, key downside risk),
+  "comps": string[] (2-4 ticker symbols only, e.g. ["AAPL","MSFT"]),
+  "sizeRange": string (e.g. "0.5–1.5%")
 }
-Be concise and institutional in tone.`;
+Be terse. No sentences — fragments only.`;
 
   const result = await withModelFallback({
+    modelList: ANALYSIS_MODEL_IDS,
+    generationConfig: { maxOutputTokens: 256, temperature: 0, responseMimeType: "application/json" },
     run: async (gen) =>
       gen.generateContent([
         { text: prompt },
@@ -134,11 +148,10 @@ Be concise and institutional in tone.`;
   const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
   const parsed = JSON.parse(cleaned) as PitchAnalysisResult;
   return {
-    bullThesis: String(parsed.bullThesis ?? ""),
-    bearThesis: String(parsed.bearThesis ?? ""),
-    keyRisks: Array.isArray(parsed.keyRisks) ? parsed.keyRisks.map(String) : [],
-    comparables: Array.isArray(parsed.comparables) ? parsed.comparables.map(String) : [],
-    positionSizeRange: String(parsed.positionSizeRange ?? ""),
+    bull: String(parsed.bull ?? ""),
+    bear: String(parsed.bear ?? ""),
+    comps: Array.isArray(parsed.comps) ? parsed.comps.map(String) : [],
+    sizeRange: String(parsed.sizeRange ?? ""),
   };
 }
 

@@ -14,12 +14,9 @@ export const config = {
     "/admin/:path*",
     "/onboarding",
     "/login",
-    "/analytics/:path*",
-    "/risk/:path*",
     "/orders/:path*",
     "/pipeline/:path*",
     "/watchlist/:path*",
-    "/macro/:path*",
     "/earnings/:path*",
   ],
 };

@@ -1,6 +1,6 @@
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { PresenceHeartbeat } from "@/components/dashboard/presence-heartbeat";
-import { FloatingChat } from "@/components/dashboard/floating-chat";
+import { AiChatProvider, AiChatPanel } from "@/components/dashboard/ai-chat-panel";
 import { requireProfile } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -13,20 +13,22 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen gap-3 overflow-hidden bg-background p-3">
-      <SidebarNav
-        role={profile.role}
-        fullName={
-          profile.full_name ||
-          `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
-          "Fund Member"
-        }
-      />
-      <main className="h-full flex-1 overflow-y-auto">
-        <PresenceHeartbeat />
-        {children}
-        <FloatingChat />
-      </main>
-    </div>
+    <AiChatProvider>
+      <div className="flex h-screen gap-3 overflow-hidden bg-background p-3">
+        <SidebarNav
+          role={profile.role}
+          fullName={
+            profile.full_name ||
+            `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
+            "Fund Member"
+          }
+        />
+        <main className="h-full flex-1 overflow-y-auto">
+          <PresenceHeartbeat />
+          {children}
+        </main>
+        <AiChatPanel />
+      </div>
+    </AiChatProvider>
   );
 }

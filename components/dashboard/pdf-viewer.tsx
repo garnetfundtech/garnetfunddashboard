@@ -5,7 +5,10 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+/** Avoid range/stream requests; they often break on signed Supabase/S3 URLs. */
+const PDF_LOAD_OPTIONS = { disableRange: true as const, disableStream: true as const };
 
 export function PdfViewer({
   url,
@@ -68,9 +71,10 @@ export function PdfViewer({
   return (
     <div className="panel flex h-full flex-col overflow-hidden rounded-[16px] p-0">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-black/20 p-3">
-        <div className="mx-auto w-fit space-y-2">
+        <div className="mx-auto w-fit">
           <Document
             file={url}
+            options={PDF_LOAD_OPTIONS}
             loading={<div className="text-xs text-zinc-500">Loading…</div>}
             error={<div className="text-xs text-rose-400">Could not load PDF</div>}
             onLoadSuccess={({ numPages: n }) => {
@@ -91,6 +95,15 @@ export function PdfViewer({
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                   />
+                  {i < numPages - 1 && (
+                    <div className="flex items-center gap-3 py-3">
+                      <div className="h-px flex-1 bg-white/10" />
+                      <span className="text-[10px] tabular-nums text-zinc-600">
+                        {i + 1} / {numPages}
+                      </span>
+                      <div className="h-px flex-1 bg-white/10" />
+                    </div>
+                  )}
                 </div>
               ))}
           </Document>

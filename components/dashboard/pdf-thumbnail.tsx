@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -25,7 +25,11 @@ export function PdfThumbnail({
   title: string;
   fill?: boolean;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** Callback ref so the render effect runs after the canvas node exists (avoids a first-paint race). */
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    setCanvasEl(node);
+  }, []);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   const stableUrl = useMemo(() => url, [url]);
@@ -35,26 +39,35 @@ export function PdfThumbnail({
     let cancelled = false;
 
     async function run() {
-      if (!stableUrl || !canvasRef.current) {
+      if (!stableUrl) {
         setStatus("idle");
         return;
       }
+      if (!canvasEl) return;
 
       setStatus("loading");
 
       try {
         const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (pdfjs as any).GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/legacy/build/pdf.worker.mjs",
-          import.meta.url,
-        ).toString();
+        (pdfjs as any).GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-        const doc = await pdfjs.getDocument({ url: stableUrl }).promise;
+        // Load the file in the main thread. PDF.js range/stream requests often fail against
+        // signed URLs (CORS or per-request auth), while a single fetch() works reliably.
+        const res = await fetch(stableUrl, { mode: "cors", credentials: "omit" });
+        if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
+
+        const data = new Uint8Array(await res.arrayBuffer());
+        const doc = await pdfjs
+          .getDocument({
+            data,
+            disableRange: true,
+            disableStream: true,
+          })
+          .promise;
         const page = await doc.getPage(1);
 
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+        const canvas = canvasEl;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
@@ -77,14 +90,14 @@ export function PdfThumbnail({
 
     void run();
     return () => { cancelled = true; };
-  }, [stableUrl, fill]);
+  }, [stableUrl, fill, canvasEl]);
 
   if (fill) {
     // Card-grid mode: canvas fills full width, aligned to top, overflows at bottom (clipped).
     // This naturally shows the document from the top — portrait pages show ~top half,
     // landscape/slide pages show ~top three-quarters depending on aspect ratio.
     return (
-      <div className="relative w-full overflow-hidden rounded-t-[12px]" style={{ aspectRatio: "16/9" }}>
+      <div className="relative w-full overflow-hidden rounded-[10px]" style={{ aspectRatio: "16/9" }}>
         {status === "loading" && (
           <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
             <Loader2 className="h-5 w-5 animate-spin" />

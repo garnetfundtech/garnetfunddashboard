@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import type { PitchRow, PitchStage, UserRole } from "@/lib/types";
 import {
   createPitchAction,
@@ -88,7 +89,7 @@ export function PipelineBoardClient({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="glass-input flex h-[42px] min-w-[240px] flex-1 items-center gap-2 px-3">
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />
           <input
@@ -106,6 +107,7 @@ export function PipelineBoardClient({
           <Plus className="h-3.5 w-3.5" />
           New Pitch
         </button>
+        <AiChatTrigger />
       </div>
 
       <div className="flex items-stretch gap-2 overflow-x-auto pb-1">

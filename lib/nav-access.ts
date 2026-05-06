@@ -7,12 +7,9 @@ export const ROUTES = {
   research: "/research",
   resources: "/resources",
   admin: "/admin",
-  analytics: "/analytics",
-  risk: "/risk",
   orders: "/orders",
   pipeline: "/pipeline",
   watchlist: "/watchlist",
-  macro: "/macro",
   earnings: "/earnings",
 } as const;
 
@@ -27,10 +24,7 @@ const ANALYST_PATHS = new Set<string>([
 
 const PM_EXTRA = new Set<string>([
   ROUTES.users,
-  ROUTES.analytics,
-  ROUTES.risk,
   ROUTES.orders,
-  ROUTES.macro,
 ]);
 
 export function getSidebarNavItems(role: UserRole): { href: string; label: string }[] {
@@ -39,12 +33,9 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
     { href: ROUTES.users, label: "Users" },
     { href: ROUTES.research, label: "Research" },
     { href: ROUTES.resources, label: "Resources" },
-    { href: ROUTES.analytics, label: "Analytics" },
-    { href: ROUTES.risk, label: "Risk" },
     { href: ROUTES.orders, label: "Trade History" },
     { href: ROUTES.pipeline, label: "Pipeline" },
     { href: ROUTES.watchlist, label: "Watchlist" },
-    { href: ROUTES.macro, label: "Macro" },
     { href: ROUTES.earnings, label: "Earnings" },
   ];
 

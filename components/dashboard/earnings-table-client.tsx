@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { FmpEarningRow } from "@/lib/fmp";
 import { Search } from "lucide-react";
+import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import { Highlight } from "@/components/dashboard/highlight";
 
 type Filter = "all" | "held" | "watch";
@@ -58,7 +59,7 @@ export function EarningsTableClient({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="glass-input flex h-[42px] min-w-[240px] flex-1 items-center gap-2 px-3">
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />
           <input
@@ -89,6 +90,7 @@ export function EarningsTableClient({
             </button>
           ))}
         </div>
+        <AiChatTrigger />
       </div>
 
       <section className="panel overflow-hidden">

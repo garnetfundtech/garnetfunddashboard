@@ -128,6 +128,13 @@ export type HoldingRow = {
   annualized: string;
 };
 
+export type StoredAnalysis = {
+  bull: string;
+  bear: string;
+  comps: string[];
+  sizeRange: string;
+};
+
 export type ResearchItem = {
   id: string;
   title: string;
@@ -143,6 +150,7 @@ export type ResearchItem = {
   sector: string | null;
   thesisStatus: ThesisStatus;
   analystName: string | null;
+  aiAnalysis: StoredAnalysis | null;
 };
 
 export type ResourceItem = {

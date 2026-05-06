@@ -1,6 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser } from "@/lib/require-session";
 
+/** Registrar roots whose articles are usually keyword noise for ticker searches (package indexes, etc.). */
+const BLOCKED_NEWS_DOMAIN_ROOTS = [
+  "pypi.org",
+  "pythonhosted.org",
+  "npmjs.com",
+  "npmjs.org",
+  "crates.io",
+  "rubygems.org",
+  "packagist.org",
+  "nuget.org",
+  "anaconda.org",
+  "conda-forge.org",
+];
+
+function hostnameBlocked(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  for (const root of BLOCKED_NEWS_DOMAIN_ROOTS) {
+    if (h === root || h.endsWith(`.${root}`)) return true;
+  }
+  return false;
+}
+
+function filterArticlesByDomain(raw: unknown[]): unknown[] {
+  return raw.filter((item) => {
+    const url = typeof item === "object" && item !== null && "url" in item ? String((item as { url?: unknown }).url ?? "") : "";
+    if (!url) return true;
+    try {
+      const host = new URL(url).hostname;
+      return !hostnameBlocked(host);
+    } catch {
+      return false;
+    }
+  });
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireSessionUser();
   if (session.response) return session.response;
@@ -17,11 +52,12 @@ export async function GET(request: NextRequest) {
   }
 
   const q = tickers.map((t) => `"${t}"`).join(" OR ");
+  const targetCount = 20;
   const params = new URLSearchParams({
     q,
     language: "en",
     sortBy: "publishedAt",
-    pageSize: "20",
+    pageSize: "60",
     apiKey: key,
   });
 
@@ -34,7 +70,9 @@ export async function GET(request: NextRequest) {
         { status: 502 },
       );
     }
-    return NextResponse.json({ ok: true, articles: json.articles ?? [] });
+    const raw = Array.isArray(json.articles) ? json.articles : [];
+    const filtered = filterArticlesByDomain(raw).slice(0, targetCount);
+    return NextResponse.json({ ok: true, articles: filtered });
   } catch (e) {
     return NextResponse.json(
       { ok: false, message: e instanceof Error ? e.message : "News fetch failed" },

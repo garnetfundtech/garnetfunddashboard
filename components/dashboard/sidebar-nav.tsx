@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   Bookmark,
   BookOpen,
   CalendarDays,
@@ -16,8 +15,6 @@ import {
   LogOut,
   Settings,
   Shield,
-  ShieldAlert,
-  TrendingUp,
   UserCircle2,
   Users,
 } from "lucide-react";
@@ -32,12 +29,9 @@ const ICONS = {
   "/users": Users,
   "/research": BookOpen,
   "/resources": FolderKanban,
-  "/analytics": BarChart3,
-  "/risk": ShieldAlert,
   "/orders": ClipboardList,
   "/pipeline": Kanban,
   "/watchlist": Bookmark,
-  "/macro": TrendingUp,
   "/earnings": CalendarDays,
 } as const;
 
