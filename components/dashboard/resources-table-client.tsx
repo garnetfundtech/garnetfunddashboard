@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { Download, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
@@ -9,36 +9,53 @@ import type { ResourceWithLinks } from "@/lib/data";
 import type { UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResourceAction, updateResourceAction } from "@/app/(dashboard)/resources/actions";
+import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  training:  "bg-sky-500/15 text-sky-400",
-  pitch:     "bg-violet-500/15 text-violet-400",
-  playbook:  "bg-amber-500/15 text-amber-400",
-  research:  "bg-emerald-500/15 text-emerald-400",
-};
+function titleCase(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
 
-function CategoryBadge({ category }: { category: string }) {
-  const cls = CATEGORY_COLORS[category] ?? "bg-zinc-500/15 text-zinc-400";
+function roleBadge(role: UserRole) {
+  const map: Record<UserRole, string> = {
+    developer: "bg-violet-500/15 text-violet-400",
+    admin: "bg-amber-500/15 text-amber-400",
+    pm: "bg-rose-500/15 text-rose-300",
+    analyst: "bg-sky-500/15 text-sky-400",
+  };
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${cls}`}>
-      {category}
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${map[role]}`}>
+      {role}
     </span>
   );
 }
 
+const ACTION_BTN =
+  "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
+
 export function ResourcesTableClient({
   resources,
   actor,
+  initialOpenId = "",
+  initialMode = "view",
 }: {
   resources: ResourceWithLinks[];
   actor: { id: string; role: UserRole };
+  initialOpenId?: string;
+  initialMode?: "view" | "edit";
 }) {
   const [query, setQuery]             = useState("");
   const [selected, setSelected]       = useState<string | null>(null);
   const [opened, setOpened]           = useState<ResourceWithLinks | null>(null);
   const [editing, setEditing]         = useState<ResourceWithLinks | null>(null);
   const [isPending, startTransition]  = useTransition();
-  const clickTimer                    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages]   = useState<number | null>(null);
+  const [zoom, setZoom]               = useState(1);
+  const doPrint                       = usePdfPrint(opened?.viewUrl);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -51,18 +68,27 @@ export function ResourcesTableClient({
     );
   }, [resources, query]);
 
-  function handleCardClick(item: ResourceWithLinks) {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-      setOpened(item);
-      setSelected(item.id);
-    } else {
-      clickTimer.current = setTimeout(() => {
-        setSelected((prev) => (prev === item.id ? null : item.id));
-        clickTimer.current = null;
-      }, 220);
+  useEffect(() => {
+    if (!initialOpenId) return;
+    const item = resources.find((r) => r.id === initialOpenId);
+    if (!item) return;
+    setSelected(item.id);
+    setOpened(item);
+    if (initialMode === "edit" && canManage(item)) {
+      setEditing(item);
     }
+  }, [initialMode, initialOpenId, resources]);
+
+  function handleCardClick(item: ResourceWithLinks) {
+    setSelected(item.id);
+  }
+
+  function handleCardDoubleClick(item: ResourceWithLinks) {
+    setCurrentPage(1);
+    setTotalPages(null);
+    setZoom(1);
+    setOpened(item);
+    setSelected(item.id);
   }
 
   function handleDelete(item: ResourceWithLinks) {
@@ -107,7 +133,7 @@ export function ResourcesTableClient({
             : "No results match your search."}
         </section>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
             const isSelected = selected === item.id;
             return (
@@ -115,22 +141,24 @@ export function ResourcesTableClient({
                 key={item.id}
                 type="button"
                 onClick={() => handleCardClick(item)}
-                className={`panel text-left overflow-hidden rounded-[14px] transition-all focus:outline-none ${
+                onDoubleClick={() => handleCardDoubleClick(item)}
+                className={`panel overflow-hidden rounded-[14px] text-left transition-all focus:outline-none ${
                   isSelected
-                    ? "ring-2 ring-white/20 bg-white/[0.04]"
-                    : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.025]"
+                    ? "ring-2 ring-white/20 bg-white/[0.08]"
+                    : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.04]"
                 }`}
               >
                 <PdfThumbnail url={item.viewUrl} title={item.title} fill />
-                <div className="px-3 pt-2.5 pb-3 space-y-1">
+                <div className="px-3 pt-2 pb-2.5 space-y-1">
                   <p className="text-sm font-semibold text-white leading-snug line-clamp-2">
-                    {item.title}
+                    {item.title}{" "}
+                    {item.category ? (
+                      <span className="font-normal text-zinc-400">({titleCase(item.category)})</span>
+                    ) : null}
                   </p>
-                  <div className="flex items-center gap-2">
-                    <CategoryBadge category={item.category} />
-                  </div>
                   <div className="flex items-center gap-2 pt-0.5">
                     <span className="text-xs text-zinc-500 truncate">{item.uploadedBy}</span>
+                    {roleBadge(item.uploaderRole)}
                   </div>
                   <p className="text-[11px] text-zinc-600">{item.updatedAt}</p>
                 </div>
@@ -142,62 +170,94 @@ export function ResourcesTableClient({
 
       {/* Detail panel — opens on double-click */}
       {opened && (
-        <div className="fixed inset-0 z-50 flex bg-black/70 backdrop-blur-sm">
-          {/* File viewer — 2/3 width */}
+        <div className="fixed inset-0 z-50 flex bg-black/85 backdrop-blur-md">
+          {/* PDF viewer — left */}
           <div className="flex min-w-0 flex-1 flex-col p-4">
-            <div className="panel flex h-full flex-col overflow-hidden rounded-[16px] p-0">
-              <iframe
-                src={opened.viewUrl}
-                className="min-h-0 flex-1 rounded-[16px]"
-                title={opened.title}
-              />
-            </div>
+            <PdfViewer
+              url={opened.viewUrl}
+              scale={zoom}
+              onLoadTotalPages={(n) => setTotalPages(n)}
+              onPageChange={setCurrentPage}
+            />
           </div>
 
-          {/* Controls — 1/3 width */}
-          <div className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto p-4 pl-0">
-            <div className="panel flex flex-col gap-4 rounded-[16px] p-5">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="caps-label">Resources</p>
-                  <h2 className="mt-0.5 text-base font-semibold text-white leading-snug">
-                    {opened.title}
-                  </h2>
+          {/* Side rail — right, always full height */}
+          <div className="flex w-[min(380px,100vw)] shrink-0 flex-col p-4 pl-0">
+            <div className="panel flex flex-1 flex-col rounded-[16px] overflow-hidden min-h-0">
+
+              {/* Scrollable content area */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="caps-label">Resources</p>
+                      {opened.category && (
+                        <p className="caps-label text-zinc-300">{titleCase(opened.category)}</p>
+                      )}
+                    </div>
+                    <h2 className="mt-0.5 text-base font-semibold text-white leading-snug">
+                      {opened.title}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setOpened(null)}
+                    className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setOpened(null)}
-                  className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+
+                {/* Zoom controls — full width, equal thirds */}
+                <div className="flex w-full gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+                    className={ACTION_BTN}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="flex flex-1 items-center justify-center rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm tabular-nums text-zinc-300">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))}
+                    className={ACTION_BTN}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Page indicator */}
+                {totalPages !== null && (
+                  <p className="text-center text-xs tabular-nums text-zinc-500">
+                    Page {currentPage} of {totalPages}
+                  </p>
+                )}
+
+                {/* Metadata */}
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Uploaded by</dt>
+                    <dd className="font-medium text-white">{opened.uploadedBy}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-zinc-500">Role</dt>
+                    <dd>{roleBadge(opened.uploaderRole)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Date</dt>
+                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
+                  </div>
+                </dl>
               </div>
 
-              {/* Metadata */}
-              <dl className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <dt className="text-zinc-500">Category</dt>
-                  <dd><CategoryBadge category={opened.category} /></dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Uploaded by</dt>
-                  <dd className="font-medium text-white">{opened.uploadedBy}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Date</dt>
-                  <dd className="text-zinc-300">{opened.updatedAt}</dd>
-                </div>
-              </dl>
-
-              <div className="border-t border-white/[0.06]" />
-
-              {/* Actions */}
-              <div className="space-y-2">
+              {/* Fixed action buttons — always at bottom */}
+              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
                 {opened.downloadEnabled && opened.downloadUrl ? (
-                  <Link
-                    href={opened.downloadUrl}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-                  >
+                  <Link href={opened.downloadUrl} className={ACTION_BTN}>
                     <Download className="h-4 w-4" />
                     Download
                   </Link>
@@ -208,11 +268,16 @@ export function ResourcesTableClient({
                   </div>
                 )}
 
+                <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
+                  <Printer className="h-4 w-4" />
+                  Print
+                </button>
+
                 {canManage(opened) && (
                   <button
                     type="button"
                     onClick={() => setEditing(opened)}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                    className={ACTION_BTN}
                   >
                     Edit details
                   </button>
@@ -237,7 +302,7 @@ export function ResourcesTableClient({
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { Download, Search, Sparkles, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Download, Minus, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
-import type { ResearchItem, ThesisStatus, UserRole } from "@/lib/types";
+import type { ResearchItem, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/research/actions";
+import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
 
 function roleBadge(role: UserRole) {
   const map: Record<UserRole, string> = {
@@ -23,16 +24,6 @@ function roleBadge(role: UserRole) {
   );
 }
 
-function thesisLabel(s: ThesisStatus) {
-  const m: Record<ThesisStatus, string> = {
-    active: "Active",
-    under_review: "Under Review",
-    became_position: "Became Position",
-    rejected: "Rejected",
-  };
-  return m[s] ?? s;
-}
-
 type Analysis = {
   bullThesis: string;
   bearThesis: string;
@@ -41,15 +32,22 @@ type Analysis = {
   positionSizeRange: string;
 };
 
+const ACTION_BTN =
+  "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
+
 export function ResearchTableClient({
   items,
   actor,
   initialQuery = "",
+  initialOpenId = "",
+  initialMode = "view",
   holdTickers,
 }: {
   items: ResearchItem[];
   actor: { id: string; role: UserRole };
   initialQuery?: string;
+  initialOpenId?: string;
+  initialMode?: "view" | "edit";
   holdTickers: Set<string>;
 }) {
   const [query, setQuery] = useState(() => initialQuery);
@@ -60,7 +58,10 @@ export function ResearchTableClient({
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisErr, setAnalysisErr] = useState<string | null>(null);
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const doPrint = usePdfPrint(opened?.viewUrl);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -75,20 +76,29 @@ export function ResearchTableClient({
     );
   }, [items, query]);
 
-  function handleCardClick(item: ResearchItem) {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-      setAnalysis(null);
-      setAnalysisErr(null);
-      setOpened(item);
-      setSelected(item.id);
-    } else {
-      clickTimer.current = setTimeout(() => {
-        setSelected((prev) => (prev === item.id ? null : item.id));
-        clickTimer.current = null;
-      }, 220);
+  useEffect(() => {
+    if (!initialOpenId) return;
+    const item = items.find((i) => i.id === initialOpenId);
+    if (!item) return;
+    setSelected(item.id);
+    setOpened(item);
+    if (initialMode === "edit" && canManage(item)) {
+      setEditing(item);
     }
+  }, [initialMode, initialOpenId, items]);
+
+  function handleCardClick(item: ResearchItem) {
+    setSelected(item.id);
+  }
+
+  function handleCardDoubleClick(item: ResearchItem) {
+    setAnalysis(null);
+    setAnalysisErr(null);
+    setCurrentPage(1);
+    setTotalPages(null);
+    setZoom(1);
+    setOpened(item);
+    setSelected(item.id);
   }
 
   function handleDelete(item: ResearchItem) {
@@ -151,7 +161,7 @@ export function ResearchTableClient({
             : "No results match your search."}
         </section>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
             const isSelected = selected === item.id;
             const sym = item.ticker.replace(/—/g, "").trim().toUpperCase();
@@ -162,33 +172,30 @@ export function ResearchTableClient({
                 key={item.id}
                 type="button"
                 onClick={() => handleCardClick(item)}
-                className={`panel text-left overflow-hidden rounded-[14px] transition-all focus:outline-none ${
+                onDoubleClick={() => handleCardDoubleClick(item)}
+                className={`panel overflow-hidden rounded-[14px] text-left transition-all focus:outline-none ${
                   isSelected
-                    ? "ring-2 ring-white/20 bg-white/[0.04]"
-                    : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.025]"
+                    ? "ring-2 ring-white/20 bg-white/[0.08]"
+                    : "ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.04]"
                 }`}
               >
                 <PdfThumbnail url={item.viewUrl} title={item.title} fill />
-                <div className="space-y-1 px-3 pt-2.5 pb-3">
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">{item.title}</p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-xs font-medium text-zinc-400">{item.ticker}</p>
-                    {item.sector ? (
-                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-zinc-300">
-                        {item.sector}
-                      </span>
+                <div className="space-y-1 px-3 pt-2 pb-2.5">
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">
+                    {item.title}{" "}
+                    {item.ticker && item.ticker !== "—" ? (
+                      <span className="font-normal text-zinc-400">({item.ticker.toUpperCase()})</span>
                     ) : null}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {live ? (
                       <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
                         Live position
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-[10px] text-zinc-500">{thesisLabel(item.thesisStatus)}</p>
                   <div className="flex items-center gap-2 pt-0.5">
-                    <span className="truncate text-xs text-zinc-500">
-                      {item.analystName ?? item.author}
-                    </span>
+                    <span className="truncate text-xs text-zinc-500">{item.analystName ?? item.author}</span>
                     {roleBadge(item.uploaderRole)}
                   </div>
                   <p className="text-[11px] text-zinc-600">{item.updatedAt}</p>
@@ -200,107 +207,136 @@ export function ResearchTableClient({
       )}
 
       {opened && (
-        <div className="fixed inset-0 z-50 flex bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex bg-black/85 backdrop-blur-md">
+          {/* PDF viewer — left */}
           <div className="flex min-w-0 flex-1 flex-col p-4">
-            <div className="panel flex h-full flex-col overflow-hidden rounded-[16px] p-0">
-              <iframe src={opened.viewUrl} className="min-h-0 flex-1 rounded-[16px]" title={opened.title} />
-            </div>
+            <PdfViewer
+              url={opened.viewUrl}
+              scale={zoom}
+              onLoadTotalPages={(n) => setTotalPages(n)}
+              onPageChange={setCurrentPage}
+            />
           </div>
 
-          <div className="flex w-[min(380px,100vw)] shrink-0 flex-col gap-3 overflow-y-auto p-4 pl-0">
-            <div className="panel flex flex-col gap-4 rounded-[16px] p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="caps-label">Research</p>
-                  <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">{opened.title}</h2>
+          {/* Side rail — right, always full height */}
+          <div className="flex w-[min(380px,100vw)] shrink-0 flex-col p-4 pl-0">
+            <div className="panel flex flex-1 flex-col rounded-[16px] overflow-hidden min-h-0">
+
+              {/* Scrollable content area */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="caps-label">Research</p>
+                      {opened.ticker && opened.ticker !== "—" && (
+                        <p className="caps-label text-zinc-300">{opened.ticker.toUpperCase()}</p>
+                      )}
+                    </div>
+                    <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">{opened.title}</h2>
+                  </div>
+                  <button
+                    onClick={() => setOpened(null)}
+                    className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setOpened(null)}
-                  className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+
+                {/* Zoom controls — full width, equal thirds */}
+                <div className="flex w-full gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+                    className={ACTION_BTN}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="flex flex-1 items-center justify-center rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm tabular-nums text-zinc-300">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))}
+                    className={ACTION_BTN}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Page indicator */}
+                {totalPages !== null && (
+                  <p className="text-center text-xs tabular-nums text-zinc-500">
+                    Page {currentPage} of {totalPages}
+                  </p>
+                )}
+
+                {/* Metadata */}
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Analyst</dt>
+                    <dd className="font-medium text-white">{opened.analystName ?? opened.author}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-zinc-500">Role</dt>
+                    <dd>{roleBadge(opened.uploaderRole)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">Date</dt>
+                    <dd className="text-zinc-300">{opened.updatedAt}</dd>
+                  </div>
+                </dl>
+
+                {/* AI analysis output */}
+                {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
+                {analysis ? (
+                  <div className="space-y-2 rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs text-zinc-200">
+                    <p className="caps-label">AI output</p>
+                    <div>
+                      <p className="font-semibold text-emerald-300/90">Bull</p>
+                      <p className="mt-0.5 text-zinc-300">{analysis.bullThesis}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-rose-300/90">Bear</p>
+                      <p className="mt-0.5 text-zinc-300">{analysis.bearThesis}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-zinc-400">Risks</p>
+                      <ul className="mt-0.5 list-disc pl-4 text-zinc-400">
+                        {analysis.keyRisks.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-zinc-400">Comps</p>
+                      <p className="mt-0.5 text-zinc-300">{analysis.comparables.join(", ")}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-zinc-400">Size range</p>
+                      <p className="mt-0.5 text-zinc-300">{analysis.positionSizeRange}</p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Ticker</dt>
-                  <dd className="font-medium text-white">{opened.ticker}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Sector</dt>
-                  <dd className="text-zinc-200">{opened.sector ?? "—"}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Thesis status</dt>
-                  <dd className="text-zinc-200">{thesisLabel(opened.thesisStatus)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Analyst</dt>
-                  <dd className="font-medium text-white">{opened.analystName ?? opened.author}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-zinc-500">Role</dt>
-                  <dd>{roleBadge(opened.uploaderRole)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Date</dt>
-                  <dd className="text-zinc-300">{opened.updatedAt}</dd>
-                </div>
-              </dl>
-
-              <div className="border-t border-white/[0.06]" />
-
-              {opened.viewUrl ? (
-                <div className="space-y-2">
+              {/* Fixed action buttons — always at bottom */}
+              <div className="shrink-0 border-t border-white/[0.06] p-5 pt-4 space-y-2">
+                {opened.viewUrl ? (
                   <button
                     type="button"
                     disabled={analysisLoading}
                     onClick={() => void runAnalysis()}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#8e0604] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#a80705] disabled:opacity-50"
+                    className={`${ACTION_BTN} disabled:opacity-50`}
                   >
                     <Sparkles className="h-4 w-4" />
                     {analysisLoading ? "Analyzing…" : "Analyze with AI"}
                   </button>
-                  {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
-                  {analysis ? (
-                    <div className="space-y-2 rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs text-zinc-200">
-                      <p className="caps-label">AI output</p>
-                      <div>
-                        <p className="font-semibold text-emerald-300/90">Bull</p>
-                        <p className="mt-0.5 text-zinc-300">{analysis.bullThesis}</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-rose-300/90">Bear</p>
-                        <p className="mt-0.5 text-zinc-300">{analysis.bearThesis}</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-zinc-400">Risks</p>
-                        <ul className="mt-0.5 list-disc pl-4 text-zinc-400">
-                          {analysis.keyRisks.map((r, i) => (
-                            <li key={i}>{r}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-zinc-400">Comps</p>
-                        <p className="mt-0.5 text-zinc-300">{analysis.comparables.join(", ")}</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-zinc-400">Size range</p>
-                        <p className="mt-0.5 text-zinc-300">{analysis.positionSizeRange}</p>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+                ) : null}
 
-              <div className="space-y-2">
                 {opened.downloadEnabled && opened.downloadUrl ? (
-                  <Link
-                    href={opened.downloadUrl}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-                  >
+                  <Link href={opened.downloadUrl} className={ACTION_BTN}>
                     <Download className="h-4 w-4" />
                     Download
                   </Link>
@@ -311,13 +347,16 @@ export function ResearchTableClient({
                   </div>
                 )}
 
+                <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
+                  <Printer className="h-4 w-4" />
+                  Print
+                </button>
+
                 {canManage(opened) && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditing(opened);
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                    onClick={() => setEditing(opened)}
+                    className={ACTION_BTN}
                   >
                     Edit details
                   </button>
@@ -341,7 +380,7 @@ export function ResearchTableClient({
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>

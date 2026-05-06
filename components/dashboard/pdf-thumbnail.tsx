@@ -10,7 +10,6 @@ function fileExtLabel(url?: string): string {
   const m = url.split("?")[0].match(/\.([a-zA-Z0-9]+)$/);
   if (!m) return "FILE";
   const ext = m[1].toUpperCase();
-  // Normalise common variants
   if (ext === "PPTX" || ext === "PPT") return "PPT";
   if (ext === "DOCX" || ext === "DOC") return "DOC";
   return ext;
@@ -59,9 +58,9 @@ export function PdfThumbnail({
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Render at full width so we have crisp pixels, then CSS handles display
+        // Render at a high enough resolution to look crisp when scaled to fill the card
         const viewport = page.getViewport({ scale: 1 });
-        const targetWidth = fill ? 480 : 520;
+        const targetWidth = fill ? 640 : 520;
         const scale = targetWidth / viewport.width;
         const scaled = page.getViewport({ scale });
 
@@ -81,9 +80,11 @@ export function PdfThumbnail({
   }, [stableUrl, fill]);
 
   if (fill) {
-    // Card-grid mode: full-width container, PDF zoomed to fill, clipped at top
+    // Card-grid mode: canvas fills full width, aligned to top, overflows at bottom (clipped).
+    // This naturally shows the document from the top — portrait pages show ~top half,
+    // landscape/slide pages show ~top three-quarters depending on aspect ratio.
     return (
-      <div className="relative w-full overflow-hidden rounded-t-[12px] bg-[#0d0f10]" style={{ aspectRatio: "4/3" }}>
+      <div className="relative w-full overflow-hidden rounded-t-[12px]" style={{ aspectRatio: "16/9" }}>
         {status === "loading" && (
           <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -94,15 +95,14 @@ export function PdfThumbnail({
             No preview
           </div>
         )}
-        {/* Canvas fills width, overflows bottom — giving a "zoomed in from top" look */}
+        {/* Canvas fills width, overflows bottom — cropped to top of document */}
         <canvas
           ref={canvasRef}
           className="absolute inset-x-0 top-0 w-full"
           aria-label={`${title} thumbnail`}
         />
-        {/* File type badge */}
         {ext && (
-          <div className="absolute bottom-2 right-2 rounded-[5px] bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 backdrop-blur-sm">
+          <div className="absolute bottom-3 right-3 rounded-[5px] bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 backdrop-blur-sm">
             {ext}
           </div>
         )}
