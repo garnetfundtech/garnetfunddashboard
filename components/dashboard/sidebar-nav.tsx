@@ -3,7 +3,17 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronUp, LogOut, Settings, UserCircle2, BookOpen, ChartLine, FolderKanban, Shield } from "lucide-react";
+import {
+  ChevronUp,
+  LogOut,
+  Settings,
+  UserCircle2,
+  Users,
+  BookOpen,
+  ChartLine,
+  FolderKanban,
+  Shield,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/dashboard/logo-mark";
 import type { UserRole } from "@/lib/types";
@@ -11,6 +21,7 @@ import { logoutAction } from "@/app/(auth)/login/actions";
 
 const items = [
   { href: "/home", label: "Home", icon: ChartLine },
+  { href: "/users", label: "Users", icon: Users },
   { href: "/research", label: "Research", icon: BookOpen },
   { href: "/resources", label: "Resources", icon: FolderKanban },
   { href: "/admin", label: "Admin", icon: Shield },

@@ -45,3 +45,11 @@ export type ResourceItem = {
   downloadEnabled: boolean;
   updatedAt: string;
 };
+
+export type FundUser = {
+  id: string;
+  fullName: string;
+  role: UserRole;
+  isOnline: boolean;
+  lastSeenAt: string | null;
+};
