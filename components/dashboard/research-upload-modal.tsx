@@ -82,6 +82,26 @@ export function ResearchUploadModal() {
               />
 
               {/* Ticker + Download toggle */}
+              <input
+                name="sector"
+                placeholder="Sector tag (optional)"
+                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              />
+              <input
+                name="analystName"
+                placeholder="Analyst name (optional)"
+                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              />
+              <select
+                name="thesisStatus"
+                defaultValue="active"
+                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none"
+              >
+                <option value="active">Thesis: Active</option>
+                <option value="under_review">Under Review</option>
+                <option value="became_position">Became Position</option>
+                <option value="rejected">Rejected</option>
+              </select>
               <div className="flex gap-3">
                 <input
                   name="ticker"

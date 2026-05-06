@@ -10,9 +10,13 @@ import {
 import type {
   FundUser,
   HoldingRow,
+  PitchRow,
+  PitchStage,
   ResearchItem,
   ResourceItem,
+  ThesisStatus,
   UserRole,
+  WatchlistRow,
   PortfolioSummary,
   MarketOverview,
   BenchmarkCandle,
@@ -73,7 +77,9 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role")
+    .select(
+      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name",
+    )
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -99,6 +105,12 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       }
     }
 
+    const ts = (row as { thesis_status?: string }).thesis_status;
+    const validThesis: ThesisStatus =
+      ts === "under_review" || ts === "became_position" || ts === "rejected" || ts === "active"
+        ? ts
+        : "active";
+
     mapped.push({
       id: row.id,
       title: row.title,
@@ -111,6 +123,9 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       viewUrl,
       downloadEnabled: row.download_enabled ?? false,
       downloadUrl,
+      sector: (row as { sector?: string | null }).sector ?? null,
+      thesisStatus: validThesis,
+      analystName: (row as { analyst_name?: string | null }).analyst_name ?? null,
     });
   }
 
@@ -222,6 +237,8 @@ export type SchwabTokenStatus = {
   present: boolean;
   needsReauth: boolean;
   expiresAt: string | null;
+  /** Schwab refresh token expiry when provided by broker */
+  refreshExpiresAt: string | null;
   updatedAt: string | null;
 };
 
@@ -256,7 +273,7 @@ export async function getSchwabDiagnostics(): Promise<SchwabDiagnostics> {
 
   const { data: tokenRow } = await admin
     .from("schwab_tokens")
-    .select("needs_reauth, expires_at, updated_at")
+    .select("needs_reauth, expires_at, refresh_expires_at, updated_at")
     .eq("id", "trader")
     .single();
 
@@ -302,6 +319,7 @@ export async function getSchwabDiagnostics(): Promise<SchwabDiagnostics> {
       present: !!tokenRow,
       needsReauth: tokenRow?.needs_reauth ?? false,
       expiresAt: tokenRow?.expires_at ?? null,
+      refreshExpiresAt: (tokenRow as { refresh_expires_at?: string | null })?.refresh_expires_at ?? null,
       updatedAt: tokenRow?.updated_at ?? null,
     },
     lastSync,
@@ -334,4 +352,103 @@ export async function getFundUsers(): Promise<FundUser[]> {
       lastSeenAt,
     };
   });
+}
+
+function displayName(p: {
+  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+}) {
+  return (
+    p.full_name?.trim() ||
+    `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() ||
+    "Unknown"
+  );
+}
+
+export async function getPitches(): Promise<PitchRow[]> {
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from("pitches")
+    .select("id, ticker, analyst_id, thesis, stage, research_id, position_symbol, notes, created_at, updated_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !rows?.length) return [];
+
+  const ids = [...new Set(rows.map((r) => r.analyst_id as string))];
+  const { data: profs } = await supabase
+    .from("user_profiles")
+    .select("id, full_name, first_name, last_name")
+    .in("id", ids);
+
+  const nameById = new Map<string, string>();
+  for (const p of profs ?? []) {
+    nameById.set(p.id, displayName(p));
+  }
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    ticker: String(r.ticker),
+    analystId: r.analyst_id as string,
+    analystName: nameById.get(r.analyst_id as string) ?? "Unknown",
+    thesis: String(r.thesis ?? ""),
+    stage: r.stage as PitchStage,
+    researchId: (r.research_id as string | null) ?? null,
+    positionSymbol: (r.position_symbol as string | null) ?? null,
+    notes: (r.notes as string | null) ?? null,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  }));
+}
+
+export async function getWatchlistRows(): Promise<WatchlistRow[]> {
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from("watchlist_items")
+    .select("id, ticker, added_by, pitch_id, analyst_target, notes, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !rows?.length) return [];
+
+  const ids = [...new Set(rows.map((r) => r.added_by as string))];
+  const { data: profs } = await supabase
+    .from("user_profiles")
+    .select("id, full_name, first_name, last_name")
+    .in("id", ids);
+
+  const nameById = new Map<string, string>();
+  for (const p of profs ?? []) {
+    nameById.set(p.id, displayName(p));
+  }
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    ticker: String(r.ticker).toUpperCase(),
+    addedBy: r.added_by as string,
+    adderName: nameById.get(r.added_by as string) ?? "Unknown",
+    pitchId: (r.pitch_id as string | null) ?? null,
+    analystTarget: (r.analyst_target as string | null) ?? null,
+    notes: (r.notes as string | null) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
+
+export async function getWatchlistTickers(): Promise<string[]> {
+  const rows = await getWatchlistRows();
+  return rows.map((r) => r.ticker);
+}
+
+export async function getResearchOptionsForPipeline(): Promise<{ id: string; title: string; ticker: string | null }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("research_posts")
+    .select("id, title, ticker")
+    .order("created_at", { ascending: false })
+    .limit(80);
+  if (error || !data) return [];
+  return data.map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    ticker: (r.ticker as string | null) ?? null,
+  }));
 }

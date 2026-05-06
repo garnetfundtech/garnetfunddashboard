@@ -2,8 +2,9 @@ import type { UserRole } from "@/lib/types";
 
 const ROLE_RANK: Record<UserRole, number> = {
   analyst: 0,
-  admin: 1,
-  developer: 2,
+  pm: 1,
+  admin: 2,
+  developer: 3,
 };
 
 export function isRoleHigher(actor: UserRole, target: UserRole) {

@@ -1,4 +1,39 @@
-export type UserRole = "developer" | "admin" | "analyst";
+export type UserRole = "developer" | "admin" | "pm" | "analyst";
+
+export type PitchStage =
+  | "idea"
+  | "in_research"
+  | "pitched"
+  | "voted"
+  | "position"
+  | "rejected";
+
+export type ThesisStatus = "active" | "under_review" | "became_position" | "rejected";
+
+export type PitchRow = {
+  id: string;
+  ticker: string;
+  analystId: string;
+  analystName: string;
+  thesis: string;
+  stage: PitchStage;
+  researchId: string | null;
+  positionSymbol: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WatchlistRow = {
+  id: string;
+  ticker: string;
+  addedBy: string;
+  adderName: string;
+  pitchId: string | null;
+  analystTarget: string | null;
+  notes: string | null;
+  createdAt: string;
+};
 
 // ── Market / Portfolio types ──────────────────────────────────────────────────
 
@@ -48,6 +83,8 @@ export type LivePosition = {
   dayPnl: number;
   dayPnlPct: number;
   weight: number;
+  /** Populated when sector data is available (e.g. from FMP) */
+  sector?: string;
 };
 
 export type PortfolioSummary = {
@@ -103,6 +140,9 @@ export type ResearchItem = {
   viewUrl?: string;
   downloadEnabled: boolean;
   downloadUrl?: string;
+  sector: string | null;
+  thesisStatus: ThesisStatus;
+  analystName: string | null;
 };
 
 export type ResourceItem = {

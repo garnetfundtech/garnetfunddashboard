@@ -2,17 +2,24 @@ import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
 import { SchwabDiagnosticPanel } from "@/components/admin/schwab-diagnostic-panel";
+import { SchwabTokenControls } from "@/components/admin/schwab-token-controls";
+import { SchwabNextSyncLabel } from "@/components/admin/schwab-next-sync";
+import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
 import { RoleSelect } from "@/components/admin/role-select";
 import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
+import { getExternalApiStatus } from "@/lib/external-api-status";
 
 export default async function AdminPage() {
   await requireRole(["developer", "admin"]);
 
-  const [users, schwabDiagnostics, livePortfolio, liveMarket] = await Promise.all([
+  const syncIntervalMin = Math.max(5, Number(process.env.SCHWAB_SYNC_INTERVAL_MINUTES ?? "60"));
+
+  const [users, schwabDiagnostics, livePortfolio, liveMarket, apiStatus] = await Promise.all([
     getAdminUsers(),
     getSchwabDiagnostics(),
     fetchPortfolioSummary(),
     fetchMarketOverview(),
+    getExternalApiStatus(),
   ]);
 
   const liveVerification = livePortfolio || liveMarket
@@ -89,6 +96,7 @@ export default async function AdminPage() {
                       className="glass-input bg-transparent px-2.5 py-1.5 text-xs outline-none text-zinc-300"
                     >
                       <option value="analyst">Analyst</option>
+                      <option value="pm">PM</option>
                       <option value="admin">Admin</option>
                       <option value="developer">Developer</option>
                     </select>
@@ -105,6 +113,19 @@ export default async function AdminPage() {
           </tbody>
         </table>
       </section>
+
+      <div className="space-y-2">
+        <SchwabTokenControls
+          accessExpiresAt={schwabDiagnostics.token.expiresAt}
+          refreshExpiresAt={schwabDiagnostics.token.refreshExpiresAt}
+        />
+        <SchwabNextSyncLabel
+          lastFinishedAt={schwabDiagnostics.lastSync?.finishedAt ?? null}
+          intervalMinutes={syncIntervalMin}
+        />
+      </div>
+
+      <ExternalApiStatusPanel rows={apiStatus} />
 
       <SchwabDiagnosticPanel data={schwabDiagnostics} liveVerification={liveVerification} />
     </div>

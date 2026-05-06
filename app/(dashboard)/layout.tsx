@@ -1,5 +1,6 @@
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { PresenceHeartbeat } from "@/components/dashboard/presence-heartbeat";
+import { FloatingChat } from "@/components/dashboard/floating-chat";
 import { requireProfile } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -24,6 +25,7 @@ export default async function DashboardLayout({
       <main className="h-full flex-1 overflow-y-auto">
         <PresenceHeartbeat />
         {children}
+        <FloatingChat />
       </main>
     </div>
   );

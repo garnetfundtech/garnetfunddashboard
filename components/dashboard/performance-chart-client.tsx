@@ -13,8 +13,12 @@ const PerformanceChart = dynamic(
 
 export function PerformanceChartClient({
   initialBenchmark = [],
+  cashOnlyMode = false,
 }: {
   initialBenchmark?: BenchmarkCandle[];
+  cashOnlyMode?: boolean;
 }) {
-  return <PerformanceChart initialBenchmark={initialBenchmark} />;
+  return (
+    <PerformanceChart initialBenchmark={initialBenchmark} cashOnlyMode={cashOnlyMode} />
+  );
 }

@@ -12,6 +12,11 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Garnet Fund Dashboard",
   description: "Private portfolio and research dashboard for USC Garnet Fund",
+  icons: {
+    icon: [{ url: "/Garnet%20Fund%20Icon.png" }],
+    apple: [{ url: "/Garnet%20Fund%20Icon.png" }],
+    shortcut: [{ url: "/Garnet%20Fund%20Icon.png" }],
+  },
 };
 
 export default function RootLayout({

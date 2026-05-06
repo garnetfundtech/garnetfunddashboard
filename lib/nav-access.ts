@@ -1,0 +1,70 @@
+import type { UserRole } from "@/lib/types";
+
+/** Routes shown in sidebar + used for page guards */
+export const ROUTES = {
+  home: "/home",
+  users: "/users",
+  research: "/research",
+  resources: "/resources",
+  admin: "/admin",
+  analytics: "/analytics",
+  risk: "/risk",
+  orders: "/orders",
+  pipeline: "/pipeline",
+  watchlist: "/watchlist",
+  macro: "/macro",
+  earnings: "/earnings",
+} as const;
+
+const ANALYST_PATHS = new Set<string>([
+  ROUTES.home,
+  ROUTES.research,
+  ROUTES.resources,
+  ROUTES.watchlist,
+  ROUTES.earnings,
+  ROUTES.pipeline,
+]);
+
+const PM_EXTRA = new Set<string>([
+  ROUTES.users,
+  ROUTES.analytics,
+  ROUTES.risk,
+  ROUTES.orders,
+  ROUTES.macro,
+]);
+
+export function getSidebarNavItems(role: UserRole): { href: string; label: string }[] {
+  const all: { href: string; label: string }[] = [
+    { href: ROUTES.home, label: "Home" },
+    { href: ROUTES.users, label: "Users" },
+    { href: ROUTES.research, label: "Research" },
+    { href: ROUTES.resources, label: "Resources" },
+    { href: ROUTES.analytics, label: "Analytics" },
+    { href: ROUTES.risk, label: "Risk" },
+    { href: ROUTES.orders, label: "Orders" },
+    { href: ROUTES.pipeline, label: "Pipeline" },
+    { href: ROUTES.watchlist, label: "Watchlist" },
+    { href: ROUTES.macro, label: "Macro" },
+    { href: ROUTES.earnings, label: "Earnings" },
+  ];
+
+  return all.filter((item) => {
+    if (ANALYST_PATHS.has(item.href)) return true;
+    if (PM_EXTRA.has(item.href)) {
+      return role === "pm" || role === "admin" || role === "developer";
+    }
+    return false;
+  });
+}
+
+export function canAccessDashboardPath(role: UserRole, pathname: string): boolean {
+  const base = pathname.split("?")[0] ?? pathname;
+  if (base === ROUTES.admin) {
+    return role === "admin" || role === "developer";
+  }
+  if (ANALYST_PATHS.has(base)) return true;
+  if (PM_EXTRA.has(base)) {
+    return role === "pm" || role === "admin" || role === "developer";
+  }
+  return false;
+}

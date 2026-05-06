@@ -4,27 +4,42 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
+  Bookmark,
+  BookOpen,
+  CalendarDays,
+  ChartLine,
   ChevronUp,
+  ClipboardList,
+  FolderKanban,
+  Kanban,
   LogOut,
   Settings,
+  Shield,
+  ShieldAlert,
+  TrendingUp,
   UserCircle2,
   Users,
-  BookOpen,
-  ChartLine,
-  FolderKanban,
-  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/dashboard/logo-mark";
 import type { UserRole } from "@/lib/types";
 import { logoutAction } from "@/app/(auth)/login/actions";
+import { getSidebarNavItems } from "@/lib/nav-access";
 
-const items = [
-  { href: "/home", label: "Home", icon: ChartLine },
-  { href: "/users", label: "Users", icon: Users },
-  { href: "/research", label: "Research", icon: BookOpen },
-  { href: "/resources", label: "Resources", icon: FolderKanban },
-];
+const ICONS = {
+  "/home": ChartLine,
+  "/users": Users,
+  "/research": BookOpen,
+  "/resources": FolderKanban,
+  "/analytics": BarChart3,
+  "/risk": ShieldAlert,
+  "/orders": ClipboardList,
+  "/pipeline": Kanban,
+  "/watchlist": Bookmark,
+  "/macro": TrendingUp,
+  "/earnings": CalendarDays,
+} as const;
 
 function toLabelCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -50,6 +65,8 @@ export function SidebarNav({
     [fullName],
   );
 
+  const items = getSidebarNavItems(role);
+
   return (
     <aside className="panel flex h-full w-[248px] flex-col bg-[#08090a] px-3 py-3">
       <LogoMark />
@@ -59,6 +76,7 @@ export function SidebarNav({
       <nav className="mt-2 flex flex-col gap-1">
         {items.map((item) => {
           const active = pathname === item.href;
+          const Icon = ICONS[item.href as keyof typeof ICONS] ?? ChartLine;
 
           return (
             <Link
@@ -69,7 +87,7 @@ export function SidebarNav({
                 active && "bg-zinc-900/80 text-white",
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" />
               <span>{item.label}</span>
             </Link>
           );

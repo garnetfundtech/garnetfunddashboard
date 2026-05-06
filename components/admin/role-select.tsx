@@ -5,10 +5,11 @@ import { ChevronDown } from "lucide-react";
 import type { UserRole } from "@/lib/types";
 import { updateUserRoleAction } from "@/app/(dashboard)/admin/actions";
 
-const ROLES: UserRole[] = ["analyst", "admin", "developer"];
+const ROLES: UserRole[] = ["analyst", "pm", "admin", "developer"];
 
 const ROLE_STYLES: Record<UserRole, string> = {
   analyst:   "text-sky-400",
+  pm:        "text-rose-300",
   admin:     "text-amber-400",
   developer: "text-violet-400",
 };

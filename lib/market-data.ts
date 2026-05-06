@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   refreshAccessToken,
   getAccountPositions,
+  getAccountNumbers,
+  getAccountOrders,
   getQuotes,
   getPriceHistory,
   getMarketMovers,
@@ -77,6 +79,8 @@ export type LivePosition = {
   dayPnl: number;
   dayPnlPct: number;
   weight: number;
+  /** Optional sector label when enriched (e.g. FMP) */
+  sector?: string;
 };
 
 export type PortfolioSummary = {
@@ -123,6 +127,30 @@ export type BenchmarkHistory = {
 };
 
 // ── Portfolio data ────────────────────────────────────────────────────────────
+
+export async function getTraderAccountHash(): Promise<string | null> {
+  const token = await getValidTraderToken();
+  if (!token) return null;
+  try {
+    const nums = await getAccountNumbers(token);
+    return nums[0]?.hashValue ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAccountOrders(days = 60) {
+  const token = await getValidTraderToken();
+  if (!token) return null;
+  try {
+    const nums = await getAccountNumbers(token);
+    const hash = nums[0]?.hashValue;
+    if (!hash) return null;
+    return await getAccountOrders(token, hash, days);
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await getValidTraderToken();

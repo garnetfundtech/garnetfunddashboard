@@ -12,7 +12,9 @@ export async function inviteUserAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
-  const role = String(formData.get("role") ?? "analyst") as UserRole;
+  const roleRaw = String(formData.get("role") ?? "analyst");
+  const allowed: UserRole[] = ["analyst", "pm", "admin", "developer"];
+  const role = (allowed.includes(roleRaw as UserRole) ? roleRaw : "analyst") as UserRole;
 
   if (!email || !email.includes("@") || !firstName || !lastName) return;
 
@@ -52,7 +54,9 @@ export async function updateUserRoleAction(formData: FormData) {
   await requireRole(["developer", "admin"]);
 
   const id = String(formData.get("id") ?? "");
-  const role = String(formData.get("role") ?? "analyst") as UserRole;
+  const roleRaw = String(formData.get("role") ?? "analyst");
+  const allowed: UserRole[] = ["analyst", "pm", "admin", "developer"];
+  const role = (allowed.includes(roleRaw as UserRole) ? roleRaw : "analyst") as UserRole;
   if (!id) return;
 
   const admin = createAdminClient();

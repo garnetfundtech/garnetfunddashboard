@@ -48,8 +48,7 @@ function CustomTooltip({
       {payload.map((entry) => (
         <p key={entry.dataKey} style={{ color: entry.color }} className="font-medium tabular-nums">
           {entry.dataKey === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"}:{" "}
-          {entry.value >= 0 ? "+" : ""}
-          {entry.value.toFixed(2)}%
+          {entry.value == null ? "—" : `${entry.value >= 0 ? "+" : ""}${Number(entry.value).toFixed(2)}%`}
         </p>
       ))}
     </div>
@@ -58,8 +57,11 @@ function CustomTooltip({
 
 export function PerformanceChart({
   initialBenchmark = [],
+  cashOnlyMode = false,
 }: {
   initialBenchmark?: BenchmarkCandle[];
+  /** Cash-only book: show SPY benchmark prominently; portfolio line hidden */
+  cashOnlyMode?: boolean;
 }) {
   const [range, setRange] = useState<Range>("YTD");
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkCandle[]>(initialBenchmark);
@@ -86,14 +88,18 @@ export function PerformanceChart({
 
   useEffect(() => {
     if (range === "YTD" && initialBenchmark.length > 0) {
-      setBenchmarkData(initialBenchmark);
+      queueMicrotask(() => setBenchmarkData(initialBenchmark));
       return;
     }
-    fetchRange(range);
+    queueMicrotask(() => {
+      void fetchRange(range);
+    });
   }, [range, initialBenchmark, fetchRange]);
 
-  // Add flat portfolio: 0 key — accurate for cash-only account (no positions = 0% return)
-  const data = benchmarkData.map((c) => ({ ...c, portfolio: 0 }));
+  const data = benchmarkData.map((c) => ({
+    ...c,
+    portfolio: cashOnlyMode ? null : 0,
+  }));
   const interval = tickInterval(data.length, range);
 
   return (
@@ -101,7 +107,9 @@ export function PerformanceChart({
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="caps-label">Performance</p>
-          <h2 className="text-sm font-semibold text-white">Portfolio vs S&amp;P 500 (SPY)</h2>
+          <h2 className="text-sm font-semibold text-white">
+            {cashOnlyMode ? "Benchmark — S&P 500 (SPY)" : "Portfolio vs S&P 500 (SPY)"}
+          </h2>
         </div>
         <div className="flex items-center gap-0.5">
           {RANGES.map((r) => (
@@ -121,15 +129,22 @@ export function PerformanceChart({
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-4">
-        <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-          <span className="h-0.5 w-3.5 rounded-full bg-[#8e0604]" />
-          Portfolio
-        </span>
+      <div className="mb-3 flex flex-wrap items-center gap-4">
+        {!cashOnlyMode ? (
+          <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+            <span className="h-0.5 w-3.5 rounded-full bg-[#8e0604]" />
+            Portfolio
+          </span>
+        ) : null}
         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
           <span className="h-0.5 w-3.5 rounded-full bg-zinc-500" />
           S&amp;P 500 (SPY)
         </span>
+        {cashOnlyMode ? (
+          <span className="text-[11px] text-amber-400/90">
+            Cash-only — SPY shown for reference (no equity positions).
+          </span>
+        ) : null}
         {loading && <span className="text-[10px] text-zinc-600 animate-pulse">Loading…</span>}
         {error && !loading && <span className="text-[10px] text-rose-500">X — data unavailable</span>}
       </div>
@@ -168,22 +183,24 @@ export function PerformanceChart({
                 width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#2a2f37", strokeWidth: 1 }} />
-              <Area
-                type="monotone"
-                dataKey="portfolio"
-                stroke="#8e0604"
-                strokeWidth={2}
-                fill="url(#portfolioGrad)"
-                dot={false}
-                activeDot={{ r: 3, fill: "#8e0604", strokeWidth: 0 }}
-                connectNulls
-              />
+              {!cashOnlyMode ? (
+                <Area
+                  type="monotone"
+                  dataKey="portfolio"
+                  stroke="#8e0604"
+                  strokeWidth={2}
+                  fill="url(#portfolioGrad)"
+                  dot={false}
+                  activeDot={{ r: 3, fill: "#8e0604", strokeWidth: 0 }}
+                  connectNulls
+                />
+              ) : null}
               <Area
                 type="monotone"
                 dataKey="value"
                 name="benchmark"
-                stroke="#52525b"
-                strokeWidth={1.5}
+                stroke={cashOnlyMode ? "#a1a1aa" : "#52525b"}
+                strokeWidth={cashOnlyMode ? 2 : 1.5}
                 fill="url(#benchmarkGrad)"
                 dot={false}
                 activeDot={{ r: 3, fill: "#71717a", strokeWidth: 0 }}

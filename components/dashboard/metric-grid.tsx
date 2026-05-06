@@ -20,7 +20,10 @@ type Tile = {
   unavailable?: boolean;
 };
 
-function buildTiles(portfolio: PortfolioSummary | null): Tile[] {
+function buildTiles(
+  portfolio: PortfolioSummary | null,
+  risk?: { betaVsSpy: number | null; sectorCount: number | null } | null,
+): Tile[] {
   if (!portfolio) {
     const x: Tile = { label: "", value: "X", delta: "Data unavailable", positive: false, unavailable: true };
     return [
@@ -28,6 +31,8 @@ function buildTiles(portfolio: PortfolioSummary | null): Tile[] {
       { ...x, label: "Cash Position" },
       { ...x, label: "Unrealized P&L" },
       { ...x, label: "Day P&L" },
+      { ...x, label: "Portfolio Beta" },
+      { ...x, label: "Sectors" },
     ];
   }
 
@@ -39,7 +44,7 @@ function buildTiles(portfolio: PortfolioSummary | null): Tile[] {
   const dayPnl = portfolio.dayPnl;
   const positions = portfolio.positionCount;
 
-  return [
+  const base: Tile[] = [
     {
       label: "Total AUM",
       value: fmt(aum),
@@ -65,13 +70,43 @@ function buildTiles(portfolio: PortfolioSummary | null): Tile[] {
       positive: dayPnl >= 0,
     },
   ];
+
+  const beta = risk?.betaVsSpy;
+  const sectors = risk?.sectorCount;
+
+  base.push({
+    label: "Portfolio Beta (vs SPY)",
+    value: beta != null && Number.isFinite(beta) ? beta.toFixed(2) : "—",
+    delta:
+      positions === 0
+        ? "Cash-only — no equity beta"
+        : beta == null
+          ? "Est. from ~4M daily returns"
+          : "Weighted multifactor est.",
+    positive: beta == null || beta <= 1.25,
+  });
+
+  base.push({
+    label: "Sector count",
+    value: sectors != null ? String(sectors) : "—",
+    delta: positions ? "Distinct sectors (FMP)" : "No equity book",
+    positive: true,
+  });
+
+  return base;
 }
 
-export function MetricGrid({ portfolio }: { portfolio: PortfolioSummary | null }) {
-  const tiles = buildTiles(portfolio);
+export function MetricGrid({
+  portfolio,
+  riskStats,
+}: {
+  portfolio: PortfolioSummary | null;
+  riskStats?: { betaVsSpy: number | null; sectorCount: number | null } | null;
+}) {
+  const tiles = buildTiles(portfolio, riskStats ?? null);
 
   return (
-    <section className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+    <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       {tiles.map((tile) => (
         <article
           key={tile.label}

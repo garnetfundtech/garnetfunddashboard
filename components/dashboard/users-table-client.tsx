@@ -51,6 +51,7 @@ export function UsersTableClient({ users }: { users: FundUser[] }) {
           <option value="">All roles</option>
           <option value="developer">Developer</option>
           <option value="admin">Admin</option>
+          <option value="pm">PM</option>
           <option value="analyst">Analyst</option>
         </select>
         <select
