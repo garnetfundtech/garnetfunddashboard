@@ -92,6 +92,15 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Hide scrollbars everywhere while keeping scroll functional */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/WebKit */
+}
+
 * {
   border-color: var(--border);
 }
