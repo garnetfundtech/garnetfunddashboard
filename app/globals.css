@@ -39,6 +39,8 @@
   --sidebar-accent-foreground: #e4e7ec;
   --sidebar-border: #262a2f;
   --sidebar-ring: #8e0604;
+  --glass-bg: rgba(255, 255, 255, 0.045);
+  --glass-bg-soft: rgba(255, 255, 255, 0.03);
 }
 
 @theme inline {
@@ -102,9 +104,53 @@ body {
 }
 
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border-radius: var(--radius);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.glass-input {
+  background: var(--glass-bg-soft);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: none;
+  border-radius: 10px;
+}
+
+.glass-stat {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-stat::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  opacity: 0.8;
+}
+
+.glass-stat-positive::after {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.05), rgba(34, 197, 94, 0.55), rgba(34, 197, 94, 0.05));
+}
+
+.glass-stat-negative::after {
+  background: linear-gradient(90deg, rgba(142, 6, 4, 0.08), rgba(142, 6, 4, 0.6), rgba(142, 6, 4, 0.08));
+}
+
+.page-title {
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.02em;
 }
 
 @layer base {

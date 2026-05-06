@@ -1,5 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import { getFundUsers } from "@/lib/data";
+import { Search } from "lucide-react";
 
 function formatRole(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -11,17 +12,18 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-3 pt-2">
-      <section className="panel p-4">
-        <p className="caps-label">Garnet Fund Members</p>
-        <h1 className="text-lg font-semibold text-white">Users</h1>
-        <p className="text-sm text-zinc-400">
-          Green dot means currently active on the platform. Garnet dot means offline.
-        </p>
-      </section>
+      <h1 className="page-title">Users</h1>
+      <div className="glass-input flex w-full max-w-md items-center gap-2 px-3 py-2.5">
+        <Search className="h-4 w-4 text-zinc-500" />
+        <input
+          placeholder="Search users..."
+          className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+        />
+      </div>
 
       <section className="panel overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--panel-soft)] text-zinc-400">
+          <thead className="bg-white/5 text-zinc-400">
             <tr>
               <th className="px-4 py-2 text-left font-medium">Member</th>
               <th className="px-4 py-2 text-left font-medium">Role</th>
@@ -31,7 +33,7 @@ export default async function UsersPage() {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-t border-[var(--border)]">
+              <tr key={user.id} className="odd:bg-white/[0.015]">
                 <td className="px-4 py-3 text-white">{user.fullName}</td>
                 <td className="px-4 py-3 text-zinc-300">{formatRole(user.role)}</td>
                 <td className="px-4 py-3">

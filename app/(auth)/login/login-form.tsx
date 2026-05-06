@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loginAction, type LoginState } from "@/app/(auth)/login/actions";
@@ -17,7 +18,7 @@ export function LoginForm() {
         <input
           name="email"
           type="email"
-          className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
+          className="glass-input w-full px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
           placeholder="name@example.com"
           required
         />
@@ -28,7 +29,7 @@ export function LoginForm() {
         <input
           name="password"
           type="password"
-          className="w-full rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
+          className="glass-input w-full px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
           placeholder="Enter password"
           required
         />
@@ -44,6 +45,10 @@ export function LoginForm() {
         <Lock className="h-4 w-4" />
         {pending ? "Signing In..." : "Sign In"}
       </Button>
+
+      <Link href="/signup" className="block text-center text-xs text-zinc-400 hover:text-zinc-200">
+        Need an account? Sign up
+      </Link>
     </form>
   );
 }

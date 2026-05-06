@@ -24,7 +24,7 @@ export function PerformanceChart() {
           {["1M", "3M", "6M", "1Y", "YTD"].map((range) => (
             <button
               key={range}
-              className="rounded-md border border-[var(--border)] px-2 py-1 hover:bg-zinc-800"
+              className="glass-input px-2 py-1 hover:bg-white/10"
             >
               {range}
             </button>

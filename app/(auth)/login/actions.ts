@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type LoginState = {
   error?: string;
+  success?: string;
 };
 
 export async function loginAction(_: LoginState, formData: FormData): Promise<LoginState> {
@@ -29,4 +30,57 @@ export async function logoutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+export async function signupAction(_: LoginState, formData: FormData): Promise<LoginState> {
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+
+  if (!firstName || !lastName) {
+    return { error: "Enter first and last name." };
+  }
+  if (!email.includes("@")) {
+    return { error: "Enter a valid email address." };
+  }
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+
+  const supabase = await createClient();
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+      },
+    },
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  if (data.user?.id) {
+    await supabase.from("user_profiles").upsert({
+      id: data.user.id,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      role: "analyst",
+    });
+  }
+
+  if (data.session) {
+    redirect("/home");
+  }
+
+  return { success: "Account created. Check your email to confirm sign up." };
 }
