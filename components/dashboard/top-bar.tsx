@@ -7,7 +7,7 @@ export function TopBar() {
         <Search className="h-4 w-4 text-zinc-500" />
         <input
           className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-          placeholder="Search ticker, research, or resource..."
+          placeholder="Search by ticker, title, or user..."
         />
       </div>
       <div className="flex items-center gap-2">
