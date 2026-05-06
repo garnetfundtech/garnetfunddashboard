@@ -1,10 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/dm-sans";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-dm-sans: "DM Sans Variable", "DM Sans", sans-serif;
   --background: #090a0b;
   --foreground: #f3f4f6;
   --card: #111214;
