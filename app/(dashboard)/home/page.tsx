@@ -17,7 +17,7 @@ const PerformanceChart = dynamic(
 
 export default function HomePage() {
   return (
-    <div className="space-y-3 pt-2">
+    <div className="space-y-3">
       <TopBar />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,3fr)_320px]">
         <div className="space-y-3">
