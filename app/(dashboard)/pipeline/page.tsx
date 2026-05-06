@@ -9,8 +9,7 @@ export default async function PipelinePage() {
   const [pitches, researchOptions] = await Promise.all([getPitches(), getResearchOptionsForPipeline()]);
 
   return (
-    <div className="space-y-3 pt-2">
-      <h1 className="page-title">Pitch pipeline</h1>
+    <div className="space-y-3">
       <PipelineBoardClient
         pitches={pitches}
         actor={{ id: profile.id, role: profile.role }}

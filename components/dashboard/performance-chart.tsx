@@ -43,11 +43,16 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="glass-input px-3 py-2 text-xs">
+    <div className="rounded-[10px] bg-white/10 backdrop-blur-2xl border border-white/[0.12] px-3 py-2 text-xs shadow-2xl">
       <p className="mb-1.5 text-zinc-400">{label}</p>
       {payload.map((entry) => (
-        <p key={entry.dataKey} style={{ color: entry.color }} className="font-medium tabular-nums">
-          {entry.dataKey === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"}:{" "}
+        <p
+          key={entry.dataKey}
+          className={`font-medium tabular-nums ${
+            entry.value == null ? "text-zinc-300" : entry.value >= 0 ? "text-emerald-400" : "text-rose-400"
+          }`}
+        >
+          {entry.dataKey === "portfolio" ? "Garnet" : "S&P 500"}:{" "}
           {entry.value == null ? "—" : `${entry.value >= 0 ? "+" : ""}${Number(entry.value).toFixed(2)}%`}
         </p>
       ))}
@@ -98,7 +103,7 @@ export function PerformanceChart({
 
   const data = benchmarkData.map((c) => ({
     ...c,
-    portfolio: cashOnlyMode ? null : 0,
+    portfolio: 0,
   }));
   const interval = tickInterval(data.length, range);
 
@@ -108,7 +113,7 @@ export function PerformanceChart({
         <div>
           <p className="caps-label">Performance</p>
           <h2 className="text-sm font-semibold text-white">
-            {cashOnlyMode ? "Benchmark — S&P 500 (SPY)" : "Portfolio vs S&P 500 (SPY)"}
+            Portfolio vs S&amp;P 500
           </h2>
         </div>
         <div className="flex items-center gap-0.5">
@@ -130,21 +135,14 @@ export function PerformanceChart({
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-4">
-        {!cashOnlyMode ? (
-          <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-            <span className="h-0.5 w-3.5 rounded-full bg-[#8e0604]" />
-            Portfolio
-          </span>
-        ) : null}
+        <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+          <span className="h-0.5 w-3.5 rounded-full bg-[#8e0604]" />
+          Garnet
+        </span>
         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
           <span className="h-0.5 w-3.5 rounded-full bg-zinc-500" />
-          S&amp;P 500 (SPY)
+          S&amp;P 500
         </span>
-        {cashOnlyMode ? (
-          <span className="text-[11px] text-amber-400/90">
-            Cash-only — SPY shown for reference (no equity positions).
-          </span>
-        ) : null}
         {loading && <span className="text-[10px] text-zinc-600 animate-pulse">Loading…</span>}
         {error && !loading && <span className="text-[10px] text-rose-500">X — data unavailable</span>}
       </div>
@@ -183,24 +181,22 @@ export function PerformanceChart({
                 width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#2a2f37", strokeWidth: 1 }} />
-              {!cashOnlyMode ? (
-                <Area
-                  type="monotone"
-                  dataKey="portfolio"
-                  stroke="#8e0604"
-                  strokeWidth={2}
-                  fill="url(#portfolioGrad)"
-                  dot={false}
-                  activeDot={{ r: 3, fill: "#8e0604", strokeWidth: 0 }}
-                  connectNulls
-                />
-              ) : null}
+              <Area
+                type="monotone"
+                dataKey="portfolio"
+                stroke="#8e0604"
+                strokeWidth={2}
+                fill="url(#portfolioGrad)"
+                dot={false}
+                activeDot={{ r: 3, fill: "#8e0604", strokeWidth: 0 }}
+                connectNulls
+              />
               <Area
                 type="monotone"
                 dataKey="value"
                 name="benchmark"
-                stroke={cashOnlyMode ? "#a1a1aa" : "#52525b"}
-                strokeWidth={cashOnlyMode ? 2 : 1.5}
+                stroke="#52525b"
+                strokeWidth={1.5}
                 fill="url(#benchmarkGrad)"
                 dot={false}
                 activeDot={{ r: 3, fill: "#71717a", strokeWidth: 0 }}

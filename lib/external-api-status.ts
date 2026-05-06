@@ -56,7 +56,7 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
         "schwab",
         "Schwab (Trader + Market Data)",
         schwabUsed,
-        "Multiple",
+        "25",
         "No valid Schwab token (or needs re-auth)",
       ),
     );
@@ -69,27 +69,27 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
             "schwab",
             "Schwab (Trader + Market Data)",
             schwabUsed,
-            "Multiple",
+            "25",
             "Connected (live fetch verified)",
           )
-        : badRow("schwab", "Schwab (Trader + Market Data)", schwabUsed, "Multiple", "Live fetch failed"),
+        : badRow("schwab", "Schwab (Trader + Market Data)", schwabUsed, "25", "Live fetch failed"),
     );
   }
 
   // FRED
   const fredUsed = ["fred/series/observations (T10Y2Y,CPIAUCSL,PCEPILFE,DFF,UNRATE)"];
   if (!process.env.FRED_API_KEY) {
-    out.push(badRow("fred", "FRED", fredUsed, "Many", "Missing FRED_API_KEY"));
+    out.push(badRow("fred", "FRED", fredUsed, "20", "Missing FRED_API_KEY"));
   } else {
     try {
       const obs = await fetchFredSeries("T10Y2Y", { observationStart: "2024-01-01" });
       out.push(
         obs.length
-          ? okRow("fred", "FRED", fredUsed, "Many", "Connected")
-          : badRow("fred", "FRED", fredUsed, "Many", "No observations returned"),
+          ? okRow("fred", "FRED", fredUsed, "20", "Connected")
+          : badRow("fred", "FRED", fredUsed, "20", "No observations returned"),
       );
     } catch (e) {
-      out.push(badRow("fred", "FRED", fredUsed, "Many", e instanceof Error ? e.message : "FRED error"));
+      out.push(badRow("fred", "FRED", fredUsed, "20", e instanceof Error ? e.message : "FRED error"));
     }
   }
 
@@ -117,7 +117,7 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
   // NewsAPI
   const newsUsed = ["newsapi.org/v2/everything (holdings/watchlist headlines)"];
   if (!process.env.NEWS_API_KEY) {
-    out.push(badRow("newsapi", "NewsAPI", newsUsed, "Many", "Missing NEWS_API_KEY"));
+    out.push(badRow("newsapi", "NewsAPI", newsUsed, "3", "Missing NEWS_API_KEY"));
   } else {
     try {
       const params = new URLSearchParams({
@@ -129,12 +129,12 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
       });
       const res = await fetch(`https://newsapi.org/v2/everything?${params}`, { cache: "no-store" });
       if (!res.ok) {
-        out.push(badRow("newsapi", "NewsAPI", newsUsed, "Many", `HTTP ${res.status}`));
+        out.push(badRow("newsapi", "NewsAPI", newsUsed, "3", `HTTP ${res.status}`));
       } else {
-        out.push(okRow("newsapi", "NewsAPI", newsUsed, "Many", "Connected"));
+        out.push(okRow("newsapi", "NewsAPI", newsUsed, "3", "Connected"));
       }
     } catch (e) {
-      out.push(badRow("newsapi", "NewsAPI", newsUsed, "Many", e instanceof Error ? e.message : "NewsAPI error"));
+      out.push(badRow("newsapi", "NewsAPI", newsUsed, "3", e instanceof Error ? e.message : "NewsAPI error"));
     }
   }
 
@@ -145,15 +145,15 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
     const portfolio = await fetchPortfolioSummary();
     const sym = portfolio?.positions?.[0]?.ticker ?? "AAPL";
     await fetchRecentForm4ForTicker(sym, 1);
-    out.push(okRow("sec", "SEC EDGAR", secUsed, "Many", "Connected"));
+    out.push(okRow("sec", "SEC EDGAR", secUsed, "10", "Connected"));
   } catch (e) {
-    out.push(badRow("sec", "SEC EDGAR", secUsed, "Many", e instanceof Error ? e.message : "SEC error"));
+    out.push(badRow("sec", "SEC EDGAR", secUsed, "10", e instanceof Error ? e.message : "SEC error"));
   }
 
   // Gemini
   const geminiUsed = ["Gemini 1.5 Flash: analyze (PDF)", "Gemini 1.5 Flash: chat", "Gemini 1.5 Flash: macro briefing"];
   if (!process.env.GEMINI_API_KEY) {
-    out.push(badRow("gemini", "Google Gemini", geminiUsed, "Many", "Missing GEMINI_API_KEY"));
+    out.push(badRow("gemini", "Google Gemini", geminiUsed, "8", "Missing GEMINI_API_KEY"));
   } else {
     try {
       const gen = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -162,11 +162,11 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
       const text = r.response.text().trim();
       out.push(
         text.toUpperCase().includes("OK")
-          ? okRow("gemini", "Google Gemini", geminiUsed, "Many", "Connected")
-          : okRow("gemini", "Google Gemini", geminiUsed, "Many", "Connected (non-OK response)"),
+          ? okRow("gemini", "Google Gemini", geminiUsed, "8", "Connected")
+          : okRow("gemini", "Google Gemini", geminiUsed, "8", "Connected (non-OK response)"),
       );
     } catch (e) {
-      out.push(badRow("gemini", "Google Gemini", geminiUsed, "Many", e instanceof Error ? e.message : "Gemini error"));
+      out.push(badRow("gemini", "Google Gemini", geminiUsed, "8", e instanceof Error ? e.message : "Gemini error"));
     }
   }
 

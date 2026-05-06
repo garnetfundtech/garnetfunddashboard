@@ -70,10 +70,7 @@ export function SidebarNav({
   return (
     <aside className="panel flex h-full w-[248px] flex-col bg-[#08090a] px-3 py-3">
       <LogoMark />
-      <div className="mt-6 px-1">
-        <p className="caps-label">Navigation</p>
-      </div>
-      <nav className="mt-2 flex flex-col gap-1">
+      <nav className="mt-6 flex flex-col gap-1">
         {items.map((item) => {
           const active = pathname === item.href;
           const Icon = ICONS[item.href as keyof typeof ICONS] ?? ChartLine;
@@ -84,7 +81,7 @@ export function SidebarNav({
               href={item.href}
               className={cn(
                 "flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900/70 hover:text-white",
-                active && "bg-zinc-900/80 text-white",
+                active && "bg-white/[0.045] text-white",
               )}
             >
               <Icon className="h-4 w-4" />

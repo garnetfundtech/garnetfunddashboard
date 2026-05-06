@@ -9,6 +9,14 @@ function formatRole(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+function fmtLastSeen(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+  });
+}
+
 export function UsersTableClient({ users }: { users: FundUser[] }) {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -106,7 +114,7 @@ export function UsersTableClient({ users }: { users: FundUser[] }) {
                   </td>
                   <td className="px-4 py-3 text-white">
                     {user.lastSeenAt
-                      ? new Date(user.lastSeenAt).toLocaleString()
+                      ? fmtLastSeen(user.lastSeenAt)
                       : "Never"}
                   </td>
                 </tr>

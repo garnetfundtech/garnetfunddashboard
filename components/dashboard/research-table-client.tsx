@@ -76,15 +76,27 @@ export function ResearchTableClient({
     );
   }, [items, query]);
 
+  function canManage(item: ResearchItem) {
+    return canManageContent({
+      actorId: actor.id,
+      actorRole: actor.role,
+      ownerId: item.createdBy,
+      ownerRole: item.uploaderRole,
+    });
+  }
+
   useEffect(() => {
     if (!initialOpenId) return;
     const item = items.find((i) => i.id === initialOpenId);
     if (!item) return;
-    setSelected(item.id);
-    setOpened(item);
-    if (initialMode === "edit" && canManage(item)) {
-      setEditing(item);
-    }
+    startTransition(() => {
+      setSelected(item.id);
+      setOpened(item);
+      if (initialMode === "edit" && canManage(item)) {
+        setEditing(item);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMode, initialOpenId, items]);
 
   function handleCardClick(item: ResearchItem) {
@@ -110,14 +122,6 @@ export function ResearchTableClient({
       setSelected(null);
     });
   }
-
-  const canManage = (item: ResearchItem) =>
-    canManageContent({
-      actorId: actor.id,
-      actorRole: actor.role,
-      ownerId: item.createdBy,
-      ownerRole: item.uploaderRole,
-    });
 
   async function runAnalysis() {
     if (!opened?.viewUrl) return;

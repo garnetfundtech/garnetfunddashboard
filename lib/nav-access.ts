@@ -41,7 +41,7 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
     { href: ROUTES.resources, label: "Resources" },
     { href: ROUTES.analytics, label: "Analytics" },
     { href: ROUTES.risk, label: "Risk" },
-    { href: ROUTES.orders, label: "Orders" },
+    { href: ROUTES.orders, label: "Trade History" },
     { href: ROUTES.pipeline, label: "Pipeline" },
     { href: ROUTES.watchlist, label: "Watchlist" },
     { href: ROUTES.macro, label: "Macro" },

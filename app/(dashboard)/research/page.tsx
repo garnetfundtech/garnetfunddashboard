@@ -6,7 +6,7 @@ import { fetchPortfolioSummary } from "@/lib/market-data";
 export default async function ResearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; open?: string; mode?: "view" | "edit" }>;
 }) {
   const sp = await searchParams;
   const profile = await requireProfile();
@@ -18,6 +18,8 @@ export default async function ResearchPage({
       items={items}
       actor={{ id: profile.id, role: profile.role }}
       initialQuery={sp.q ?? ""}
+      initialOpenId={sp.open ?? ""}
+      initialMode={sp.mode === "edit" ? "edit" : "view"}
       holdTickers={holdTickers}
     />
   );

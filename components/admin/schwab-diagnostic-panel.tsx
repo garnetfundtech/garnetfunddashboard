@@ -166,11 +166,6 @@ export function SchwabDiagnosticPanel({
               <Row label="Accounts"  value={lastSync.accountCount} />
               <Row label="Positions" value={lastSync.positionCount} />
               <Row label="Market value" value={usd(lastSync.totalMarketValue)} />
-              {lastSync.positionCount === 0 && syncOk && (
-                <p className="pt-1.5 text-xs text-amber-400">
-                  Sync completed — account is cash only. Holdings populate once securities are purchased.
-                </p>
-              )}
             </>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   CartesianGrid,
   Line,
@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { FredObservation } from "@/lib/fred";
+import { cn } from "@/lib/utils";
 
 export type MacroSeriesMap = Record<string, FredObservation[]>;
 
@@ -27,16 +28,53 @@ function ChartBlock({
   color: string;
   valueFmt: (v: number) => string;
 }) {
+  const RANGES = ["1Y", "5Y", "10Y", "20Y", "MAX"] as const;
+  type Range = (typeof RANGES)[number];
+  const [range, setRange] = useState<Range>("10Y");
+
+  const sliced = useMemo(() => {
+    if (range === "MAX") return data;
+    const years = Number(range.replace("Y", ""));
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - years);
+    return data.filter((d) => new Date(`${d.date}-01`).getTime() >= cutoff.getTime());
+  }, [data, range]);
+
   return (
     <section className="panel p-4">
-      <p className="caps-label">{subtitle}</p>
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="caps-label">{subtitle}</p>
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+        </div>
+        <div className="flex items-center gap-0.5">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={cn(
+                "rounded-[7px] px-2 py-1 text-xs font-medium transition-colors",
+                r === range ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300",
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mt-2 h-[220px]">
-        {data.length ? (
+        {sliced.length ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+            <LineChart data={sliced} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2329" vertical={false} />
-              <XAxis dataKey="date" tick={{ fill: "#52525b", fontSize: 9 }} axisLine={false} tickLine={false} interval={Math.floor(data.length / 6)} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "#52525b", fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                interval={Math.floor(sliced.length / 6)}
+              />
               <YAxis tick={{ fill: "#52525b", fontSize: 9 }} axisLine={false} tickLine={false} width={40} tickFormatter={valueFmt} />
               <Tooltip
                 contentStyle={{ background: "#0c0d0f", border: "1px solid #27272a", borderRadius: 8 }}

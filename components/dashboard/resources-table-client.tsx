@@ -68,15 +68,27 @@ export function ResourcesTableClient({
     );
   }, [resources, query]);
 
+  function canManage(item: ResourceWithLinks) {
+    return canManageContent({
+      actorId: actor.id,
+      actorRole: actor.role,
+      ownerId: item.createdBy,
+      ownerRole: item.uploaderRole,
+    });
+  }
+
   useEffect(() => {
     if (!initialOpenId) return;
     const item = resources.find((r) => r.id === initialOpenId);
     if (!item) return;
-    setSelected(item.id);
-    setOpened(item);
-    if (initialMode === "edit" && canManage(item)) {
-      setEditing(item);
-    }
+    startTransition(() => {
+      setSelected(item.id);
+      setOpened(item);
+      if (initialMode === "edit" && canManage(item)) {
+        setEditing(item);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMode, initialOpenId, resources]);
 
   function handleCardClick(item: ResourceWithLinks) {
@@ -100,14 +112,6 @@ export function ResourcesTableClient({
       setSelected(null);
     });
   }
-
-  const canManage = (item: ResourceWithLinks) =>
-    canManageContent({
-      actorId: actor.id,
-      actorRole: actor.role,
-      ownerId: item.createdBy,
-      ownerRole: item.uploaderRole,
-    });
 
   return (
     <div className="space-y-3">

@@ -26,8 +26,7 @@ export default async function MacroPage() {
   }
 
   return (
-    <div className="space-y-3 pt-2">
-      <h1 className="page-title">Macro</h1>
+    <div className="space-y-3">
       <MacroPageClient series={series} />
     </div>
   );

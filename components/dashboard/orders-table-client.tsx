@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Highlight } from "@/components/dashboard/highlight";
 
 export type OrderRow = {
   orderId: string;
@@ -15,17 +16,19 @@ export type OrderRow = {
 
 type SortKey = "ticker" | "side" | "quantity" | "fillPrice" | "status" | "timestamp";
 
-export function OrdersTableClient() {
+export function OrdersTableClient({
+  query,
+  from,
+  to,
+}: {
+  query: string;
+  from: string;
+  to: string;
+}) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [tickerQ, setTickerQ] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
-    key: "timestamp",
-    dir: "desc",
-  });
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,8 +57,24 @@ export function OrdersTableClient() {
 
   const filtered = useMemo(() => {
     let rows = [...orders];
-    const tq = tickerQ.trim().toUpperCase();
-    if (tq) rows = rows.filter((r) => r.ticker.includes(tq));
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => {
+        const hay = [
+          r.ticker,
+          r.side,
+          r.status,
+          String(r.quantity),
+          r.timestamp,
+          new Date(r.timestamp).toLocaleDateString("en-US"),
+          new Date(r.timestamp).toLocaleString("en-US"),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
     if (from) {
       const f = new Date(from).getTime();
       rows = rows.filter((r) => new Date(r.timestamp).getTime() >= f);
@@ -64,50 +83,36 @@ export function OrdersTableClient() {
       const t = new Date(to).getTime() + 86400000;
       rows = rows.filter((r) => new Date(r.timestamp).getTime() < t);
     }
-    const mul = sort.dir === "asc" ? 1 : -1;
-    rows.sort((a, b) => {
-      const av = a[sort.key];
-      const bv = b[sort.key];
-      if (sort.key === "quantity" || sort.key === "fillPrice") {
-        return (Number(av) - Number(bv)) * mul;
-      }
-      if (sort.key === "timestamp") {
-        return (new Date(String(av)).getTime() - new Date(String(bv)).getTime()) * mul;
-      }
-      return String(av).localeCompare(String(bv)) * mul;
-    });
+    // Default ordering (standard): newest → oldest
+    rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    if (sort) {
+      const mul = sort.dir === "asc" ? 1 : -1;
+      rows.sort((a, b) => {
+        const av = a[sort.key];
+        const bv = b[sort.key];
+        if (sort.key === "quantity" || sort.key === "fillPrice") {
+          return (Number(av) - Number(bv)) * mul;
+        }
+        if (sort.key === "timestamp") {
+          return (new Date(String(av)).getTime() - new Date(String(bv)).getTime()) * mul;
+        }
+        return String(av).localeCompare(String(bv)) * mul;
+      });
+    }
     return rows;
-  }, [orders, from, to, tickerQ, sort]);
+  }, [orders, from, to, query, sort]);
 
   function toggleSort(key: SortKey) {
-    setSort((s) =>
-      s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" },
-    );
+    setSort((s) => {
+      if (!s || s.key !== key) return { key, dir: "desc" };
+      if (s.dir === "desc") return { key, dir: "asc" };
+      return null;
+    });
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className="glass-input rounded-[8px] px-2 py-1.5 text-xs text-zinc-200"
-        />
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className="glass-input rounded-[8px] px-2 py-1.5 text-xs text-zinc-200"
-        />
-        <input
-          value={tickerQ}
-          onChange={(e) => setTickerQ(e.target.value.toUpperCase())}
-          placeholder="Ticker"
-          className="glass-input min-w-[100px] flex-1 rounded-[8px] px-2 py-1.5 text-xs uppercase text-zinc-200 placeholder:text-zinc-600"
-        />
-      </div>
-
       <section className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-xs">
@@ -129,11 +134,11 @@ export function OrdersTableClient() {
                       onClick={() => toggleSort(key)}
                       className={cn(
                         "inline-flex items-center gap-1 hover:text-white",
-                        sort.key === key && "text-white",
+                        sort?.key === key && "text-white",
                       )}
                     >
                       {label}
-                      {sort.key === key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
+                      {sort?.key === key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
                     </button>
                   </th>
                 ))}
@@ -152,6 +157,12 @@ export function OrdersTableClient() {
                     {err}
                   </td>
                 </tr>
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
+                    No orders placed at this time.
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
@@ -161,7 +172,9 @@ export function OrdersTableClient() {
               ) : (
                 filtered.map((r) => (
                   <tr key={r.orderId} className="odd:bg-white/[0.015] text-zinc-200">
-                    <td className="px-3 py-2 font-semibold text-white">{r.ticker}</td>
+                    <td className="px-3 py-2 font-semibold text-white">
+                      <Highlight text={r.ticker} query={query} />
+                    </td>
                     <td className="px-3 py-2">
                       <span
                         className={cn(
@@ -169,16 +182,23 @@ export function OrdersTableClient() {
                           r.side === "BUY" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300",
                         )}
                       >
-                        {r.side}
+                        <Highlight text={r.side} query={query} />
                       </span>
                     </td>
-                    <td className="px-3 py-2 tabular-nums">{r.quantity.toLocaleString()}</td>
                     <td className="px-3 py-2 tabular-nums">
-                      {r.fillPrice.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                      <Highlight text={r.quantity.toLocaleString()} query={query} />
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">{r.status}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      <Highlight
+                        text={r.fillPrice.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                        query={query}
+                      />
+                    </td>
                     <td className="px-3 py-2 text-zinc-400">
-                      {r.timestamp ? new Date(r.timestamp).toLocaleString() : "—"}
+                      <Highlight text={r.status} query={query} />
+                    </td>
+                    <td className="px-3 py-2 text-zinc-400">
+                      {r.timestamp ? <Highlight text={new Date(r.timestamp).toLocaleString()} query={query} /> : "—"}
                     </td>
                   </tr>
                 ))

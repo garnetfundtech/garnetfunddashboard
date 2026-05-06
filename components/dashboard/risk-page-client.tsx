@@ -45,8 +45,15 @@ export function RiskPageClient({
           <p className="caps-label">Market risk</p>
           <h2 className="text-sm font-semibold text-white">Portfolio beta (vs SPY)</h2>
           <p className="mt-4 text-4xl font-semibold tabular-nums text-white">
-            {stats?.betaVsSpy != null ? stats.betaVsSpy.toFixed(2) : "—"}
+            {stats?.betaVsSpy != null
+              ? stats.betaVsSpy.toFixed(2)
+              : positions.length === 0
+                ? "0.00"
+                : "—"}
           </p>
+          {positions.length === 0 && !stats && (
+            <p className="mt-1 text-[10px] text-zinc-500">No equity positions — portfolio is 100% cash (β = 0).</p>
+          )}
           <p className="mt-2 text-xs text-zinc-500">Higher beta = more equity sensitivity vs the S&amp;P 500 ETF.</p>
         </section>
 

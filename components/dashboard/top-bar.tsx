@@ -20,8 +20,19 @@ function relativeTime(iso: string) {
   return `${Math.floor(mins / 60)}h ago`;
 }
 
-export function TopBar() {
-  const [open, setOpen]     = useState(false);
+export function TopBar({
+  searchValue,
+  onSearchChange,
+  placeholder = "Search by ticker, title, or user...",
+  leftExtras,
+}: {
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  placeholder?: string;
+  leftExtras?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [internalSearch, setInternalSearch] = useState("");
   const ref                 = useRef<HTMLDivElement>(null);
   const { notifs, dismiss, clearAll } = useMarketNotifications();
 
@@ -35,14 +46,22 @@ export function TopBar() {
     return () => document.removeEventListener("pointerdown", handler);
   }, []);
 
+  const value = searchValue ?? internalSearch;
+  const setValue = onSearchChange ?? setInternalSearch;
+
   return (
     <header className="flex items-center justify-between gap-3">
-      <div className="glass-input flex h-[42px] w-full items-center gap-2 px-3">
-        <Search className="h-4 w-4 text-zinc-500" />
-        <input
-          className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-          placeholder="Search by ticker, title, or user..."
-        />
+      <div className="flex w-full items-center gap-2">
+        <div className="glass-input flex h-[42px] min-w-[240px] flex-1 items-center gap-2 px-3">
+          <Search className="h-4 w-4 text-zinc-500" />
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+            placeholder={placeholder}
+          />
+        </div>
+        {leftExtras ? <div className="flex items-center gap-2">{leftExtras}</div> : null}
       </div>
 
       {/* Notification bell */}
@@ -60,7 +79,7 @@ export function TopBar() {
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full z-50 mt-1.5 w-[300px] rounded-[9px] bg-white/[0.03] border border-white/[0.06] shadow-2xl p-1">
+          <div className="absolute right-0 top-full z-50 mt-1.5 w-[300px] rounded-[9px] bg-white/10 backdrop-blur-2xl border border-white/[0.12] shadow-2xl p-1">
             {/* Header */}
             <div className="flex items-center justify-between px-2 py-1.5">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">

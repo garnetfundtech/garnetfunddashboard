@@ -1,9 +1,6 @@
 import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
-import { SchwabDiagnosticPanel } from "@/components/admin/schwab-diagnostic-panel";
-import { SchwabTokenControls } from "@/components/admin/schwab-token-controls";
-import { SchwabNextSyncLabel } from "@/components/admin/schwab-next-sync";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
 import { RoleSelect } from "@/components/admin/role-select";
 import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
@@ -36,8 +33,10 @@ export default async function AdminPage() {
     : null;
 
   return (
-    <div className="space-y-3 pt-2">
-      <h1 className="page-title">Admin</h1>
+    <div className="space-y-3">
+
+      {/* Hidden form for the invite row — must live outside the table to be valid HTML */}
+      <form id="invite-user-form" action={inviteUserAction} />
 
       {/* Users table with Send Invite as last row */}
       <section className="panel overflow-hidden">
@@ -62,72 +61,61 @@ export default async function AdminPage() {
 
             {/* Send Invite row — last in the table */}
             <tr className="border-t border-white/[0.06]">
-              <form action={inviteUserAction} className="contents">
-                <td className="px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <input
-                      name="firstName"
-                      placeholder="First"
-                      className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
-                      required
-                    />
-                    <input
-                      name="lastName"
-                      placeholder="Last"
-                      className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
-                      required
-                    />
-                  </div>
-                </td>
-                <td className="px-4 py-3">
+              <td className="px-4 py-3">
+                <div className="flex gap-1.5">
                   <input
-                    name="email"
-                    type="email"
-                    placeholder="email@example.com"
-                    className="glass-input w-full px-2.5 py-1.5 text-xs outline-none"
+                    name="firstName"
+                    form="invite-user-form"
+                    placeholder="First"
+                    className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
                     required
                   />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {/* Native select kept small; custom dropdown would need client wrapper */}
-                    <select
-                      name="role"
-                      className="glass-input bg-transparent px-2.5 py-1.5 text-xs outline-none text-zinc-300"
-                    >
-                      <option value="analyst">Analyst</option>
-                      <option value="pm">PM</option>
-                      <option value="admin">Admin</option>
-                      <option value="developer">Developer</option>
-                    </select>
-                    <button
-                      type="submit"
-                      className="shrink-0 rounded-[8px] bg-[#8e0604] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#a80705] transition-colors"
-                    >
-                      Send Invite
-                    </button>
-                  </div>
-                </td>
-              </form>
+                  <input
+                    name="lastName"
+                    form="invite-user-form"
+                    placeholder="Last"
+                    className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
+                    required
+                  />
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <input
+                  name="email"
+                  form="invite-user-form"
+                  type="email"
+                  placeholder="email@example.com"
+                  className="glass-input w-full px-2.5 py-1.5 text-xs outline-none"
+                  required
+                />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <select
+                    name="role"
+                    form="invite-user-form"
+                    className="glass-input bg-transparent px-2.5 py-1.5 text-xs outline-none text-zinc-300"
+                  >
+                    <option value="analyst">Analyst</option>
+                    <option value="pm">PM</option>
+                    <option value="admin">Admin</option>
+                    <option value="developer">Developer</option>
+                  </select>
+                  <button
+                    type="submit"
+                    form="invite-user-form"
+                    className="shrink-0 rounded-[8px] bg-[#8e0604] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#a80705] transition-colors"
+                  >
+                    Send Invite
+                  </button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
       </section>
 
-      <div className="space-y-2">
-        <SchwabTokenControls
-          accessExpiresAt={schwabDiagnostics.token.expiresAt}
-          refreshExpiresAt={schwabDiagnostics.token.refreshExpiresAt}
-        />
-        <SchwabNextSyncLabel
-          lastFinishedAt={schwabDiagnostics.lastSync?.finishedAt ?? null}
-          intervalMinutes={syncIntervalMin}
-        />
-      </div>
-
-      <ExternalApiStatusPanel rows={apiStatus} />
-
-      <SchwabDiagnosticPanel data={schwabDiagnostics} liveVerification={liveVerification} />
+      <ExternalApiStatusPanel rows={apiStatus} schwabDiagnostics={schwabDiagnostics} liveVerification={liveVerification} />
     </div>
   );
 }

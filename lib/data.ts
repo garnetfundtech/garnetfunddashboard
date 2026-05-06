@@ -438,17 +438,36 @@ export async function getWatchlistTickers(): Promise<string[]> {
   return rows.map((r) => r.ticker);
 }
 
-export async function getResearchOptionsForPipeline(): Promise<{ id: string; title: string; ticker: string | null }[]> {
+export async function getResearchOptionsForPipeline(): Promise<{ id: string; title: string; ticker: string | null; viewUrl: string | null }[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("research_posts")
-    .select("id, title, ticker")
+    .select("id, title, ticker, view_url, file_path")
     .order("created_at", { ascending: false })
     .limit(80);
   if (error || !data) return [];
-  return data.map((r) => ({
-    id: r.id as string,
-    title: r.title as string,
-    ticker: (r.ticker as string | null) ?? null,
-  }));
+
+  const admin = createAdminClient();
+  const results: { id: string; title: string; ticker: string | null; viewUrl: string | null }[] = [];
+
+  for (const r of data) {
+    let viewUrl = (r.view_url as string | null) ?? null;
+
+    if (!viewUrl && r.file_path) {
+      const { bucket, objectPath } = parseFilePath(r.file_path as string);
+      if (bucket && objectPath) {
+        const view = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10);
+        if (view.data?.signedUrl) viewUrl = view.data.signedUrl;
+      }
+    }
+
+    results.push({
+      id: r.id as string,
+      title: r.title as string,
+      ticker: (r.ticker as string | null) ?? null,
+      viewUrl,
+    });
+  }
+
+  return results;
 }
