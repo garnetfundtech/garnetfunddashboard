@@ -29,7 +29,8 @@ export async function getValidTraderToken(): Promise<string | null> {
       .single();
 
     if (!tokenRow?.access_token) return null;
-    if (tokenRow.needs_reauth) return null;
+    // Do not hard-fail on needs_reauth: it can be set by transient refresh errors.
+    // We'll attempt refresh and only require full re-auth on clear invalid_grant signals.
 
     // Proactively refresh if expiring within 5 minutes
     const expiresAt = new Date(tokenRow.expires_at).getTime();
@@ -52,9 +53,48 @@ export async function getValidTraderToken(): Promise<string | null> {
           })
           .eq("id", "trader");
         return refreshed.access_token as string;
-      } catch {
-        await admin.from("schwab_tokens").update({ needs_reauth: true }).eq("id", "trader");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        const invalidGrant =
+          msg.toLowerCase().includes("invalid_grant") ||
+          msg.toLowerCase().includes("invalid grant") ||
+          msg.toLowerCase().includes("refresh token");
+
+        // Only set needs_reauth on clear invalid_grant-like failures.
+        if (invalidGrant) {
+          await admin.from("schwab_tokens").update({ needs_reauth: true }).eq("id", "trader");
+          return null;
+        }
+
+        // Transient failure: keep existing access token if it's still valid.
+        if (Date.now() < expiresAt) {
+          return tokenRow.access_token as string;
+        }
+
         return null;
+      }
+    }
+
+    // Access token valid. If needs_reauth is set, try a best-effort refresh in background
+    // to clear the flag (without breaking the UI).
+    if (tokenRow.needs_reauth && tokenRow.refresh_token) {
+      try {
+        const refreshed = await refreshAccessToken(tokenRow.refresh_token, "trader");
+        const newExpiresAt = new Date(
+          Date.now() + Number(refreshed.expires_in ?? 1800) * 1000,
+        ).toISOString();
+        await admin
+          .from("schwab_tokens")
+          .update({
+            access_token: refreshed.access_token,
+            refresh_token: refreshed.refresh_token ?? tokenRow.refresh_token,
+            expires_at: newExpiresAt,
+            needs_reauth: false,
+          })
+          .eq("id", "trader");
+        return refreshed.access_token as string;
+      } catch {
+        // ignore; keep using existing access token
       }
     }
 

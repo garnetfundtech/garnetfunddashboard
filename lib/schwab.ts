@@ -97,7 +97,9 @@ export async function refreshAccessToken(
   });
 
   if (!response.ok) {
-    throw new Error(`Token refresh failed: ${response.status}`);
+    const text = await response.text().catch(() => "");
+    // Preserve status + payload so callers can distinguish transient vs invalid_grant.
+    throw new Error(`Token refresh failed: ${response.status} ${text}`.trim());
   }
 
   return response.json();

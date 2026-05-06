@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
+import "@fontsource-variable/dm-sans";
 
 export const metadata: Metadata = {
   title: "Garnet Fund Dashboard",
@@ -27,7 +21,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("dark h-full antialiased", dmSans.variable, "font-sans")}
+      className={cn("dark h-full antialiased", "font-sans")}
     >
       <body className="min-h-full bg-background text-foreground font-sans">
         {children}
