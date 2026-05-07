@@ -106,7 +106,10 @@ export async function deletePitchAction(formData: FormData) {
   const isElevated = canSetTerminal(profile.role);
   if (!isOwner && !isElevated) return;
 
-  await supabase.from("pitches").delete().eq("id", id);
+  const { error } = await supabase.from("pitches").delete().eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
   revalidatePath("/pipeline");
 }
 

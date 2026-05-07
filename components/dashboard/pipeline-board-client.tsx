@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import type { PitchRow, PitchStage, UserRole } from "@/lib/types";
@@ -36,6 +37,7 @@ export function PipelineBoardClient({
   actor: { id: string; role: UserRole };
   researchOptions: { id: string; title: string; ticker: string | null; viewUrl: string | null }[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PitchRow | null>(null);
   const [pending, startTransition] = useTransition();
@@ -74,6 +76,7 @@ export function PipelineBoardClient({
     fd.set("stage", stage);
     startTransition(async () => {
       await updatePitchStageAction(fd);
+      router.refresh();
     });
   }
 
@@ -144,7 +147,12 @@ export function PipelineBoardClient({
                               const fd = new FormData();
                               fd.set("id", p.id);
                               startTransition(async () => {
-                                await deletePitchAction(fd);
+                                try {
+                                  await deletePitchAction(fd);
+                                  router.refresh();
+                                } catch (e) {
+                                  alert(e instanceof Error ? e.message : "Could not delete pitch.");
+                                }
                               });
                             }}
                             className="rounded-[6px] bg-rose-500/10 p-1 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
@@ -220,8 +228,8 @@ export function PipelineBoardClient({
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="panel w-full max-w-md p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">New pitch</h2>
               <button type="button" onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white">
@@ -235,6 +243,7 @@ export function PipelineBoardClient({
                 const fd = new FormData(e.currentTarget);
                 startTransition(async () => {
                   await createPitchAction(fd);
+                  router.refresh();
                   setOpen(false);
                 });
               }}
@@ -281,8 +290,8 @@ export function PipelineBoardClient({
       ) : null}
 
       {editing ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="panel w-full max-w-md p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">Edit pitch</h2>
               <button type="button" onClick={() => setEditing(null)} className="text-zinc-500 hover:text-white">
@@ -298,6 +307,7 @@ export function PipelineBoardClient({
                 fd.set("id", editing.id);
                 startTransition(async () => {
                   await updatePitchAction(fd);
+                  router.refresh();
                   setEditing(null);
                 });
               }}

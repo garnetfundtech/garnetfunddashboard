@@ -39,8 +39,8 @@ export function ResourcesUploadModal() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-          <div className="panel w-full max-w-sm p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-6">
+          <div className="w-full max-w-sm rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="caps-label">Resources</p>

@@ -114,7 +114,7 @@ export function FloatingChat() {
       </button>
 
       {open ? (
-        <div className="fixed bottom-5 right-5 z-[100] flex h-[min(560px,80vh)] w-[min(400px,92vw)] flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-[#08090a] shadow-2xl">
+        <div className="fixed bottom-5 right-5 z-[100] flex h-[min(560px,80vh)] w-[min(400px,92vw)] flex-col overflow-hidden rounded-[14px] border border-white/[0.08] bg-black/85 backdrop-blur-md shadow-2xl">
           <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
             <div>
               <p className="text-sm font-semibold text-white">Ask AI</p>

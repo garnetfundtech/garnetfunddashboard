@@ -183,7 +183,14 @@ export function AiChatPanel() {
   if (!open || isExcluded) return null;
 
   return (
-    <div className="fixed top-3 right-3 bottom-3 z-[100] flex w-[360px] flex-col overflow-hidden rounded-[12px] border border-white/[0.08] bg-[#08090a] shadow-2xl">
+    <div
+      className={cn(
+        "fixed top-3 right-3 bottom-3 z-[100] flex w-[360px] flex-col overflow-hidden rounded-[12px] border border-white/[0.08] shadow-2xl",
+        // Match the Research PDF side rail “dark glass” feel (that rail sits over a dimmed backdrop).
+        // We add explicit backdrop blur + a darker translucent fill here so the AI pop-up matches.
+        "backdrop-blur-md bg-black/85",
+      )}
+    >
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
         <div className="flex items-center gap-2">

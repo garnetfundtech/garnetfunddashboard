@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { Download, Minus, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
 import type { ResourceWithLinks } from "@/lib/data";
-import type { UserRole } from "@/lib/types";
+import type { StoredAnalysis, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResourceAction, updateResourceAction } from "@/app/(dashboard)/resources/actions";
 import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
@@ -47,6 +47,8 @@ function roleBadge(role: UserRole) {
 const ACTION_BTN =
   "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
 
+type Analysis = StoredAnalysis;
+
 export function ResourcesTableClient({
   resources,
   actor,
@@ -63,6 +65,9 @@ export function ResourcesTableClient({
   const [opened, setOpened]           = useState<ResourceWithLinks | null>(null);
   const [editing, setEditing]         = useState<ResourceWithLinks | null>(null);
   const [isPending, startTransition]  = useTransition();
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisErr, setAnalysisErr] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages]   = useState<number | null>(null);
   const [zoom, setZoom]               = useState(1);
@@ -95,6 +100,8 @@ export function ResourcesTableClient({
     startTransition(() => {
       setSelected(item.id);
       setOpened(item);
+      setAnalysis(null);
+      setAnalysisErr(null);
       if (initialMode === "edit" && canManage(item)) {
         setEditing(item);
       }
@@ -103,11 +110,33 @@ export function ResourcesTableClient({
   }, [initialMode, initialOpenId, resources]);
 
   function handleCardClick(item: ResourceWithLinks) {
+    setAnalysis(null);
+    setAnalysisErr(null);
     setCurrentPage(1);
     setTotalPages(null);
     setZoom(1);
     setOpened(item);
     setSelected(item.id);
+  }
+
+  async function runAnalysis() {
+    if (!opened?.viewUrl) return;
+    setAnalysisLoading(true);
+    setAnalysisErr(null);
+    try {
+      const res = await fetch("/api/gemini/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: opened.viewUrl }),
+      });
+      const json = (await res.json()) as { ok?: boolean; analysis?: Analysis; message?: string };
+      if (!res.ok || !json.ok) throw new Error(json.message ?? "Analysis failed");
+      setAnalysis(json.analysis ?? null);
+    } catch (e) {
+      setAnalysisErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setAnalysisLoading(false);
+    }
   }
 
   function handleDelete(item: ResourceWithLinks) {
@@ -240,6 +269,32 @@ export function ResourcesTableClient({
                     </div>
                   )}
                 </dl>
+
+                {/* AI analysis output */}
+                {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
+                {analysis ? (
+                  <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs">
+                    <p className="caps-label mb-2">AI snapshot</p>
+                    <dl className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-emerald-400">Bull</dt>
+                        <dd className="text-zinc-300">{analysis.bull}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-rose-400">Bear</dt>
+                        <dd className="text-zinc-300">{analysis.bear}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Comps</dt>
+                        <dd className="text-zinc-300">{analysis.comps.join(", ")}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Size</dt>
+                        <dd className="text-zinc-300">{analysis.sizeRange}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : null}
               </div>
 
               {/* Fixed action buttons — always at bottom */}
@@ -265,6 +320,32 @@ export function ResourcesTableClient({
                   </button>
                 </div>
 
+                {/* Analyze + Edit details side by side */}
+                {(opened.viewUrl || canManage(opened)) && (
+                  <div className="flex gap-1">
+                    {opened.viewUrl && (
+                      <button
+                        type="button"
+                        disabled={analysisLoading}
+                        onClick={() => void runAnalysis()}
+                        className={`${ACTION_BTN} flex-1 disabled:opacity-50`}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {analysisLoading ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze with AI"}
+                      </button>
+                    )}
+                    {canManage(opened) && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(opened)}
+                        className={`${ACTION_BTN} flex-1`}
+                      >
+                        Edit details
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Download + Print side by side */}
                 <div className="flex gap-1">
                   {opened.downloadEnabled && opened.downloadUrl ? (
@@ -287,16 +368,6 @@ export function ResourcesTableClient({
                 {canManage(opened) && (
                   <button
                     type="button"
-                    onClick={() => setEditing(opened)}
-                    className={ACTION_BTN}
-                  >
-                    Edit details
-                  </button>
-                )}
-
-                {canManage(opened) && (
-                  <button
-                    type="button"
                     onClick={() => handleDelete(opened)}
                     disabled={isPending}
                     className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-rose-500/10 px-3 py-2.5 text-sm font-medium text-rose-400 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
@@ -314,7 +385,7 @@ export function ResourcesTableClient({
       {/* Edit modal */}
       {editing && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
-          <div className="panel w-full max-w-sm p-6">
+          <div className="w-full max-w-sm rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="caps-label">Resources</p>

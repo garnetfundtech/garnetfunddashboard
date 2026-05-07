@@ -61,14 +61,14 @@ export function PdfViewer({ url, scale = 1, onLoadTotalPages, onPageChange }: Pd
 
   if (!url) {
     return (
-      <div className="panel flex h-[640px] items-center justify-center text-sm text-zinc-400">
+      <div className="flex h-[640px] items-center justify-center rounded-[16px] border border-white/[0.08] bg-black/85 backdrop-blur-md text-sm text-zinc-400 shadow-2xl">
         Select a file with a signed URL to preview.
       </div>
     );
   }
 
   return (
-    <div className="panel flex h-full flex-col overflow-hidden rounded-[16px] p-0">
+    <div className="flex h-full flex-col overflow-hidden rounded-[16px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-0 shadow-2xl">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-black/20 p-3">
         <div className="mx-auto w-fit">
           <Document

@@ -232,8 +232,8 @@ export function WatchlistTableClient({
       </section>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="panel w-full max-w-md p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-5 shadow-2xl">
             <h2 className="mb-3 text-sm font-semibold text-white">Add to watchlist</h2>
             <form
               className="space-y-3"

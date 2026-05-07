@@ -385,7 +385,7 @@ export function ResearchTableClient({
 
       {editing && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
-          <div className="panel w-full max-w-sm p-6">
+          <div className="w-full max-w-sm rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="caps-label">Research</p>

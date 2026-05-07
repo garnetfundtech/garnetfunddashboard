@@ -57,7 +57,7 @@ export function RoleSelect({
     <div ref={ref} className="relative inline-block">
       {/* Dropdown popover — same style as sidebar account popup */}
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-1.5 min-w-[140px] rounded-[9px] bg-[#08090a] border border-white/[0.06] p-1 shadow-2xl">
+        <div className="absolute bottom-full left-0 z-30 mb-1.5 min-w-[140px] rounded-[9px] border border-white/[0.06] bg-black/85 backdrop-blur-md p-1 shadow-2xl">
           {ROLES.map((r) => (
             <button
               key={r}

@@ -17,8 +17,8 @@ export function ResourceViewButton({ url, title }: { url: string; title: string 
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-          <div className="panel flex h-[85vh] w-full max-w-5xl flex-col p-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-6">
+          <div className="flex h-[85vh] w-full max-w-5xl flex-col rounded-[12px] border border-white/[0.08] bg-black/85 backdrop-blur-md p-3 shadow-2xl">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm text-zinc-300">{title}</p>
               <button
