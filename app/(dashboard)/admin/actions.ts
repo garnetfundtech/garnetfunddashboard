@@ -84,3 +84,23 @@ export async function assignSectorAction(formData: FormData) {
 
   revalidatePath("/admin");
 }
+
+export async function deleteUserAction(formData: FormData) {
+  await requireRole(["developer", "admin"]);
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const admin = createAdminClient();
+  await admin.from("user_profiles").delete().eq("id", id);
+  await admin.auth.admin.deleteUser(id);
+
+  await logAuditEvent({
+    action: "user.delete",
+    entity_type: "user_profile",
+    entity_id: id,
+    metadata: {},
+  });
+
+  revalidatePath("/admin");
+}

@@ -50,15 +50,12 @@ export default async function HomePage() {
     <div className="space-y-3">
       <TopBar />
 
-      {/* Main grid: left (tiles + chart) · right (market status + indices) */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_300px] xl:min-h-[500px]">
-        {/* Left column */}
-        <div className="flex min-h-0 flex-col gap-3">
-          <MetricGrid portfolio={portfolio} riskStats={riskStats} />
-          <PerformanceChartClient initialBenchmark={benchmarkYtd} cashOnlyMode={cashOnly} />
-        </div>
+      {/* Full-width top row: 5 metric tiles + market status */}
+      <MetricGrid portfolio={portfolio} riskStats={riskStats} market={market} />
 
-        {/* Right column — full height */}
+      {/* Chart (left) + index cards (right), cards match chart height */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_300px] xl:min-h-[500px]">
+        <PerformanceChartClient initialBenchmark={benchmarkYtd} cashOnlyMode={cashOnly} />
         <OverviewRail market={market} />
       </div>
 

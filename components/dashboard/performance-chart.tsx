@@ -52,7 +52,7 @@ function CustomTooltip({
             entry.value == null ? "text-zinc-300" : entry.value >= 0 ? "text-emerald-400" : "text-rose-400"
           }`}
         >
-          {entry.dataKey === "portfolio" ? "Garnet" : "S&P 500"}:{" "}
+          S&P 500:{" "}
           {entry.value == null ? "—" : `${entry.value >= 0 ? "+" : ""}${Number(entry.value).toFixed(2)}%`}
         </p>
       ))}
@@ -101,19 +101,16 @@ export function PerformanceChart({
     });
   }, [range, initialBenchmark, fetchRange]);
 
-  const data = benchmarkData.map((c) => ({
-    ...c,
-    portfolio: 0,
-  }));
+  const data = benchmarkData;
   const interval = tickInterval(data.length, range);
 
   return (
     <section className="panel flex flex-1 flex-col p-4 min-h-[300px]">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="caps-label">Performance</p>
+          <p className="caps-label">Benchmark Performance</p>
           <h2 className="text-sm font-semibold text-white">
-            Portfolio vs S&amp;P 500
+            S&amp;P 500 (SPY)
           </h2>
         </div>
         <div className="flex items-center gap-0.5">
@@ -136,10 +133,6 @@ export function PerformanceChart({
 
       <div className="mb-3 flex flex-wrap items-center gap-4">
         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-          <span className="h-0.5 w-3.5 rounded-full bg-[#8e0604]" />
-          Garnet
-        </span>
-        <span className="flex items-center gap-1.5 text-xs text-zinc-400">
           <span className="h-0.5 w-3.5 rounded-full bg-zinc-500" />
           S&amp;P 500
         </span>
@@ -156,12 +149,8 @@ export function PerformanceChart({
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
               <defs>
-                <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8e0604" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="#8e0604" stopOpacity={0} />
-                </linearGradient>
                 <linearGradient id="benchmarkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#71717a" stopOpacity={0.1} />
+                  <stop offset="0%" stopColor="#71717a" stopOpacity={0.12} />
                   <stop offset="100%" stopColor="#71717a" stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -181,16 +170,6 @@ export function PerformanceChart({
                 width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#2a2f37", strokeWidth: 1 }} />
-              <Area
-                type="monotone"
-                dataKey="portfolio"
-                stroke="#8e0604"
-                strokeWidth={2}
-                fill="url(#portfolioGrad)"
-                dot={false}
-                activeDot={{ r: 3, fill: "#8e0604", strokeWidth: 0 }}
-                connectNulls
-              />
               <Area
                 type="monotone"
                 dataKey="value"

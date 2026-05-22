@@ -1,4 +1,4 @@
-import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
+import { deleteUserAction } from "@/app/(dashboard)/admin/actions";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
@@ -35,19 +35,15 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-3">
-
-      {/* Hidden form for the invite row — must live outside the table to be valid HTML */}
-      <form id="invite-user-form" action={inviteUserAction} />
-
-      {/* Users table with Send Invite as last row */}
       <section className="panel overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-zinc-400">
             <tr>
               <th className="px-4 py-2.5 text-left font-medium">Name</th>
               <th className="px-4 py-2.5 text-left font-medium">Email</th>
-              <th className="px-4 py-2.5 text-left font-medium">Role</th>
-              <th className="px-4 py-2.5 text-left font-medium">Coverage Sector</th>
+              <th className="px-4 py-2.5 text-left font-medium w-[130px]">Role</th>
+              <th className="px-4 py-2.5 text-left font-medium w-[180px]">Coverage Sector</th>
+              <th className="px-4 py-2.5 text-left font-medium w-[60px]"></th>
             </tr>
           </thead>
           <tbody>
@@ -61,61 +57,19 @@ export default async function AdminPage() {
                 <td className="px-4 py-3">
                   <SectorSelect userId={user.id} currentSector={user.coverage_sector ?? null} />
                 </td>
+                <td className="px-4 py-3">
+                  <form action={deleteUserAction}>
+                    <input type="hidden" name="id" value={user.id} />
+                    <button
+                      type="submit"
+                      className="rounded-[6px] px-2.5 py-1.5 text-xs font-medium text-zinc-500 hover:bg-rose-500/15 hover:text-rose-400 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </td>
               </tr>
             ))}
-
-            {/* Send Invite row — last in the table */}
-            <tr className="border-t border-white/[0.06]">
-              <td className="px-4 py-3">
-                <div className="flex gap-1.5">
-                  <input
-                    name="firstName"
-                    form="invite-user-form"
-                    placeholder="First"
-                    className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
-                    required
-                  />
-                  <input
-                    name="lastName"
-                    form="invite-user-form"
-                    placeholder="Last"
-                    className="glass-input w-full max-w-[100px] px-2.5 py-1.5 text-xs outline-none"
-                    required
-                  />
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <input
-                  name="email"
-                  form="invite-user-form"
-                  type="email"
-                  placeholder="email@example.com"
-                  className="glass-input w-full px-2.5 py-1.5 text-xs outline-none"
-                  required
-                />
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <select
-                    name="role"
-                    form="invite-user-form"
-                    className="glass-input bg-transparent px-2.5 py-1.5 text-xs outline-none text-zinc-300"
-                  >
-                    <option value="analyst">Analyst</option>
-                    <option value="pm">PM</option>
-                    <option value="admin">Admin</option>
-                    <option value="developer">Developer</option>
-                  </select>
-                  <button
-                    type="submit"
-                    form="invite-user-form"
-                    className="shrink-0 rounded-[8px] bg-[#8e0604] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#a80705] transition-colors"
-                  >
-                    Send Invite
-                  </button>
-                </div>
-              </td>
-            </tr>
           </tbody>
         </table>
       </section>
