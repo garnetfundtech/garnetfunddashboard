@@ -8,6 +8,10 @@ function usd(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 }
 
+function signedUsd(n: number) {
+  return `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
+}
+
 function sessionBadge(session: string, isOpen: boolean) {
   const labels: Record<string, string> = {
     regular: "Regular",
@@ -31,30 +35,25 @@ function sessionBadge(session: string, isOpen: boolean) {
 
 export function OverviewRail({ market }: { market: MarketOverview | null }) {
   return (
-    <aside className="flex flex-col gap-2.5">
+    <aside className="flex h-full flex-col gap-2.5">
       {/* Market status */}
       <section className="panel p-3">
         <p className="caps-label">Market Status</p>
-        <div className="mt-2 flex items-center justify-between">
+        <div className="mt-1.5 flex items-center justify-between">
           {market ? (
             sessionBadge(market.session, market.isOpen)
           ) : (
             <span className="text-sm font-semibold text-rose-500">X</span>
           )}
-          {market?.sessionEnd && (
-            <span className="text-xs text-zinc-500">
-              Until {new Date(market.sessionEnd).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+          {market?.fetchedAt && (
+            <span className="text-[10px] text-zinc-500">
+              Updated {new Date(market.fetchedAt).toLocaleTimeString()}
             </span>
           )}
         </div>
-        {market?.fetchedAt && (
-          <p className="mt-1.5 text-[10px] text-zinc-600">
-            Updated {new Date(market.fetchedAt).toLocaleTimeString()}
-          </p>
-        )}
       </section>
 
-      {/* Index cards — flex-grow so they fill remaining rail height */}
+      {/* Index cards — flex-1 to fill remaining rail height */}
       {market?.indices?.map((idx) => {
         const positive = idx.change >= 0;
         return (
@@ -62,30 +61,22 @@ export function OverviewRail({ market }: { market: MarketOverview | null }) {
             key={idx.symbol}
             className={`panel flex flex-1 flex-col justify-center p-3 ${positive ? "glass-stat-positive" : "glass-stat-negative"}`}
           >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="caps-label">{idx.label}</p>
-                <p className="text-xs text-zinc-500">{idx.symbol}</p>
-              </div>
-              <span
-                className={`text-xs font-semibold ${positive ? "text-emerald-400" : "text-rose-400"}`}
-              >
-                {pct(idx.pctChange)}
-              </span>
-            </div>
-            <p className="mt-1.5 text-lg font-semibold text-white">{usd(idx.lastPrice)}</p>
-            <p className={`text-xs ${positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {positive ? "▲" : "▼"} {Math.abs(idx.change).toFixed(2)} today
+            <p className="caps-label">
+              {idx.label} <span className="text-zinc-500">({idx.symbol})</span>
             </p>
-            <div className="mt-1 flex justify-between text-[10px] text-zinc-600">
-              <span>L {usd(idx.low)}</span>
-              <span>H {usd(idx.high)}</span>
-            </div>
+            <p className="mt-1.5 text-base font-semibold tabular-nums text-white">
+              {usd(idx.lastPrice)}{" "}
+              <span
+                className={`ml-1 text-sm font-medium ${positive ? "text-emerald-400" : "text-rose-400"}`}
+              >
+                ({pct(idx.pctChange)}, {signedUsd(idx.change)})
+              </span>
+            </p>
           </section>
         );
       })}
 
-      {/* Fallback when no market data — show X so it's clear the pull failed */}
+      {/* Fallback when no market data */}
       {!market && (
         <>
           {[
@@ -93,15 +84,11 @@ export function OverviewRail({ market }: { market: MarketOverview | null }) {
             { label: "Nasdaq 100", symbol: "QQQ" },
             { label: "Russell 2000", symbol: "IWM" },
           ].map(({ label, symbol }) => (
-            <section key={symbol} className="panel flex flex-1 flex-col justify-center p-3 opacity-50">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="caps-label">{label}</p>
-                  <p className="text-xs text-zinc-500">{symbol}</p>
-                </div>
-              </div>
-              <p className="mt-1.5 text-lg font-semibold text-rose-500">X</p>
-              <p className="text-xs text-zinc-500">Data unavailable</p>
+            <section key={symbol} className="panel flex flex-1 flex-col justify-center p-3 opacity-40">
+              <p className="caps-label">
+                {label} <span className="text-zinc-500">({symbol})</span>
+              </p>
+              <p className="mt-1.5 text-base font-semibold text-zinc-500">X</p>
             </section>
           ))}
         </>

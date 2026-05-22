@@ -108,7 +108,7 @@ export function PerformanceChart({
   const interval = tickInterval(data.length, range);
 
   return (
-    <section className="panel flex flex-col p-4" style={{ minHeight: 300 }}>
+    <section className="panel flex flex-1 flex-col p-4 min-h-[300px]">
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="caps-label">Performance</p>
@@ -147,7 +147,7 @@ export function PerformanceChart({
         {error && !loading && <span className="text-[10px] text-rose-500">X — data unavailable</span>}
       </div>
 
-      <div className="min-h-0 flex-1" style={{ height: 240 }}>
+      <div className="min-h-[200px] flex-1">
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-zinc-600">
             {loading ? "Fetching market data…" : "No benchmark data available"}

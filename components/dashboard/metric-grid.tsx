@@ -15,7 +15,7 @@ function fmt(n: number, style: "currency" | "percent" = "currency") {
 type Tile = {
   label: string;
   value: string;
-  delta: string;
+  delta: string | null;
   positive: boolean;
   unavailable?: boolean;
 };
@@ -25,7 +25,7 @@ function buildTiles(
   risk?: { betaVsSpy: number | null; sectorCount: number | null } | null,
 ): Tile[] {
   if (!portfolio) {
-    const x: Tile = { label: "", value: "X", delta: "Data unavailable", positive: false, unavailable: true };
+    const x: Tile = { label: "", value: "X", delta: null, positive: false, unavailable: true };
     return [
       { ...x, label: "Total AUM" },
       { ...x, label: "Unrealized P&L" },
@@ -40,25 +40,26 @@ function buildTiles(
   const unrealized = portfolio.unrealizedPnl;
   const unrealizedPct = aum - cash > 0 ? (unrealized / (aum - cash)) * 100 : 0;
   const dayPnl = portfolio.dayPnl;
+  const dayPnlPct = aum - cash > 0 ? (dayPnl / (aum - cash)) * 100 : 0;
   const positions = portfolio.positionCount;
 
   const base: Tile[] = [
     {
       label: "Total AUM",
       value: fmt(aum),
-      delta: `${positions} position${positions !== 1 ? "s" : ""}`,
+      delta: String(positions),
       positive: true,
     },
     {
       label: "Unrealized P&L",
       value: fmt(unrealized),
-      delta: positions > 0 ? fmt(unrealizedPct, "percent") : "+0.00%",
+      delta: positions > 0 ? fmt(unrealizedPct, "percent") : null,
       positive: unrealized >= 0,
     },
     {
       label: "Day P&L",
       value: fmt(dayPnl),
-      delta: `${dayPnl >= 0 ? "+" : ""}$${Math.abs(dayPnl).toFixed(2)} today`,
+      delta: positions > 0 ? fmt(dayPnlPct, "percent") : null,
       positive: dayPnl >= 0,
     },
   ];
@@ -69,19 +70,14 @@ function buildTiles(
   base.push({
     label: "Portfolio Beta (vs SPY)",
     value: beta != null && Number.isFinite(beta) ? beta.toFixed(2) : "—",
-    delta:
-      positions === 0
-        ? "Cash-only — no equity beta"
-        : beta == null
-          ? "Est. from ~4M daily returns"
-          : "Weighted multifactor est.",
+    delta: null,
     positive: beta == null || beta <= 1.25,
   });
 
   base.push({
     label: "Sector count",
     value: sectors != null ? String(sectors) : "—",
-    delta: positions ? "Distinct sectors (FMP)" : "No equity book",
+    delta: null,
     positive: true,
   });
 
@@ -112,18 +108,16 @@ export function MetricGrid({
           )}
         >
           <p className="caps-label">{tile.label}</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-white">{tile.value}</p>
           <p
             className={cn(
-              "mt-0.5 text-xs tabular-nums",
-              tile.unavailable
-                ? "text-zinc-500"
-                : tile.positive
-                  ? "text-emerald-400"
-                  : "text-rose-400",
+              "mt-1.5 text-base font-semibold tabular-nums",
+              tile.unavailable ? "text-zinc-500" : "text-white",
             )}
           >
-            {tile.delta}
+            {tile.value}
+            {tile.delta ? (
+              <span className="ml-1.5 font-medium text-zinc-500">({tile.delta})</span>
+            ) : null}
           </p>
         </article>
       ))}
