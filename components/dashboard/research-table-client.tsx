@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Download, Minus, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
-import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
+import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
-import { ResearchUploadForm } from "@/components/dashboard/research-upload-modal";
-import type { ResearchItem, StoredAnalysis, UserRole } from "@/lib/types";
+import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
+import type { ResearchItem, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/research/actions";
 import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
@@ -35,8 +34,6 @@ function roleBadge(role: UserRole) {
   );
 }
 
-type Analysis = StoredAnalysis;
-
 const ACTION_BTN =
   "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
 
@@ -55,15 +52,11 @@ export function ResearchTableClient({
   initialMode?: "view" | "edit";
   holdTickers: Set<string>;
 }) {
-  const [activeTab, setActiveTab] = useState<"research" | "upload">("research");
   const [query, setQuery] = useState(() => initialQuery);
   const [selected, setSelected] = useState<string | null>(null);
   const [opened, setOpened] = useState<ResearchItem | null>(null);
   const [editing, setEditing] = useState<ResearchItem | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisErr, setAnalysisErr] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -98,7 +91,6 @@ export function ResearchTableClient({
     startTransition(() => {
       setSelected(item.id);
       setOpened(item);
-      setAnalysis(item.aiAnalysis ?? null);
       if (initialMode === "edit" && canManage(item)) {
         setEditing(item);
       }
@@ -107,8 +99,6 @@ export function ResearchTableClient({
   }, [initialMode, initialOpenId, items]);
 
   function handleCardClick(item: ResearchItem) {
-    setAnalysis(item.aiAnalysis ?? null);
-    setAnalysisErr(null);
     setCurrentPage(1);
     setTotalPages(null);
     setZoom(1);
@@ -126,80 +116,22 @@ export function ResearchTableClient({
     });
   }
 
-  async function runAnalysis() {
-    if (!opened?.viewUrl) return;
-    setAnalysisLoading(true);
-    setAnalysisErr(null);
-    try {
-      const res = await fetch("/api/gemini/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdfUrl: opened.viewUrl, researchId: opened.id }),
-      });
-      const json = (await res.json()) as { ok?: boolean; analysis?: Analysis; message?: string };
-      if (!res.ok || !json.ok) throw new Error(json.message ?? "Analysis failed");
-      setAnalysis(json.analysis ?? null);
-    } catch (e) {
-      setAnalysisErr(e instanceof Error ? e.message : "Error");
-    } finally {
-      setAnalysisLoading(false);
-    }
-  }
 
   return (
     <div className="space-y-3">
-      {/* Tab bar */}
       <div className="flex items-center gap-3">
-        <div className="flex rounded-[10px] bg-white/[0.04] p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("research")}
-            className={`rounded-[8px] px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === "research"
-                ? "bg-white/[0.08] text-white"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Research
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("upload")}
-            className={`rounded-[8px] px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === "upload"
-                ? "bg-white/[0.08] text-white"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Upload
-          </button>
+        <div className="glass-input flex h-[42px] flex-1 items-center gap-2 px-3">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+            placeholder="Search by title, ticker, sector, or analyst"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
-        {activeTab === "research" && (
-          <>
-            <div className="glass-input flex h-[42px] flex-1 items-center gap-2 px-3">
-              <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-              <input
-                className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-                placeholder="Search by title, ticker, sector, or analyst"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <AiChatTrigger />
-          </>
-        )}
+        <ResearchUploadModal />
       </div>
 
-      {activeTab === "upload" && (
-        <div className="panel max-w-sm p-6">
-          <p className="caps-label mb-1">Research</p>
-          <h2 className="mb-4 text-base font-semibold text-white">Upload Report</h2>
-          <ResearchUploadForm onSuccess={() => setActiveTab("research")} />
-        </div>
-      )}
-
-      {activeTab === "research" && (
-        <>
       {filtered.length === 0 ? (
         <section className="panel px-4 py-16 text-center text-sm text-zinc-500">
           {items.length === 0
@@ -309,32 +241,6 @@ export function ResearchTableClient({
                     </div>
                   )}
                 </dl>
-
-                {/* AI analysis output */}
-                {analysisErr ? <p className="text-xs text-rose-400">{analysisErr}</p> : null}
-                {analysis ? (
-                  <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs">
-                    <p className="caps-label mb-2">AI snapshot</p>
-                    <dl className="space-y-1.5">
-                      <div className="flex gap-2">
-                        <dt className="w-12 shrink-0 font-medium text-emerald-400">Bull</dt>
-                        <dd className="text-zinc-300">{analysis.bull}</dd>
-                      </div>
-                      <div className="flex gap-2">
-                        <dt className="w-12 shrink-0 font-medium text-rose-400">Bear</dt>
-                        <dd className="text-zinc-300">{analysis.bear}</dd>
-                      </div>
-                      <div className="flex gap-2">
-                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Comps</dt>
-                        <dd className="text-zinc-300">{analysis.comps.join(", ")}</dd>
-                      </div>
-                      <div className="flex gap-2">
-                        <dt className="w-12 shrink-0 font-medium text-zinc-400">Size</dt>
-                        <dd className="text-zinc-300">{analysis.sizeRange}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                ) : null}
               </div>
 
               {/* Fixed action buttons — always at bottom */}
@@ -360,29 +266,16 @@ export function ResearchTableClient({
                   </button>
                 </div>
 
-                {/* Analyze + Edit details side by side */}
-                {(opened.viewUrl || canManage(opened)) && (
+                {/* Edit details */}
+                {canManage(opened) && (
                   <div className="flex gap-1">
-                    {opened.viewUrl && (
-                      <button
-                        type="button"
-                        disabled={analysisLoading}
-                        onClick={() => void runAnalysis()}
-                        className={`${ACTION_BTN} flex-1 disabled:opacity-50`}
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        {analysisLoading ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze with AI"}
-                      </button>
-                    )}
-                    {canManage(opened) && (
-                      <button
-                        type="button"
-                        onClick={() => setEditing(opened)}
-                        className={`${ACTION_BTN} flex-1`}
-                      >
-                        Edit details
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditing(opened)}
+                      className={`${ACTION_BTN} flex-1`}
+                    >
+                      Edit details
+                    </button>
                   </div>
                 )}
 
@@ -506,8 +399,6 @@ export function ResearchTableClient({
             </form>
           </div>
         </div>
-      )}
-        </>
       )}
     </div>
   );

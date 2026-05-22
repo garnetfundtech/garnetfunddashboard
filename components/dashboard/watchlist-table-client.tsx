@@ -7,7 +7,6 @@ import type { WatchlistRow } from "@/lib/types";
 import { addWatchlistItemAction, removeWatchlistItemAction } from "@/app/(dashboard)/watchlist/actions";
 import type { UserRole } from "@/lib/types";
 import { Plus, Search } from "lucide-react";
-import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import { Highlight } from "@/components/dashboard/highlight";
 
 function fmtUsd(n: number | undefined) {
@@ -128,7 +127,6 @@ export function WatchlistTableClient({
           <Plus className="h-3.5 w-3.5" />
           Add ticker
         </button>
-        <AiChatTrigger />
       </div>
 
       <section className="panel overflow-hidden">

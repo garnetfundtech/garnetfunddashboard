@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { FmpEarningRow } from "@/lib/fmp";
 import { Search } from "lucide-react";
-import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import { Highlight } from "@/components/dashboard/highlight";
 
 type Filter = "all" | "held" | "watch";
@@ -90,7 +89,6 @@ export function EarningsTableClient({
             </button>
           ))}
         </div>
-        <AiChatTrigger />
       </div>
 
       <section className="panel overflow-hidden">

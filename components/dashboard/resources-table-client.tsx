@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
-import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
@@ -134,7 +133,6 @@ export function ResourcesTableClient({
           />
         </div>
         <ResourcesUploadModal />
-        <AiChatTrigger />
       </div>
 
       {/* Grid */}

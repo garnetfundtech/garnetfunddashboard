@@ -15,7 +15,7 @@ export function OrdersPageClient() {
         searchValue={query}
         onSearchChange={setQuery}
         placeholder="Search by ticker, side, quantity, fill status, or time…"
-        leftExtras={
+        rightExtras={
           <>
             <input
               type="date"
