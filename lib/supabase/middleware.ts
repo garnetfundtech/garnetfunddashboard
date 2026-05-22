@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
     "/admin",
     "/onboarding",
     "/orders",
-    "/pipeline",
+    "/coverage",
+    "/alerts",
     "/watchlist",
     "/earnings",
   ].some((path) => request.nextUrl.pathname.startsWith(path));

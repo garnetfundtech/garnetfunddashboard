@@ -71,3 +71,16 @@ export async function updateUserRoleAction(formData: FormData) {
 
   revalidatePath("/admin");
 }
+
+export async function assignSectorAction(formData: FormData) {
+  await requireRole(["developer", "admin"]);
+
+  const id = String(formData.get("id") ?? "");
+  const sector = String(formData.get("sector") ?? "").trim() || null;
+  if (!id) return;
+
+  const admin = createAdminClient();
+  await admin.from("user_profiles").update({ coverage_sector: sector }).eq("id", id);
+
+  revalidatePath("/admin");
+}

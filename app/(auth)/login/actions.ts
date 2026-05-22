@@ -41,8 +41,8 @@ export async function signupAction(_: LoginState, formData: FormData): Promise<L
   if (!firstName || !lastName) {
     return { error: "Enter first and last name." };
   }
-  if (!email.includes("@")) {
-    return { error: "Enter a valid email address." };
+  if (!email.endsWith("@email.sc.edu")) {
+    return { error: "You must sign up with your USC email address (@email.sc.edu)." };
   }
   if (password.length < 8) {
     return { error: "Password must be at least 8 characters." };

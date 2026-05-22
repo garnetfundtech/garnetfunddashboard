@@ -28,7 +28,6 @@ function buildTiles(
     const x: Tile = { label: "", value: "X", delta: "Data unavailable", positive: false, unavailable: true };
     return [
       { ...x, label: "Total AUM" },
-      { ...x, label: "Cash Position" },
       { ...x, label: "Unrealized P&L" },
       { ...x, label: "Day P&L" },
       { ...x, label: "Portfolio Beta" },
@@ -38,7 +37,6 @@ function buildTiles(
 
   const aum = portfolio.liquidationValue;
   const cash = portfolio.cashAvailable;
-  const cashPct = aum > 0 ? (cash / aum) * 100 : 0;
   const unrealized = portfolio.unrealizedPnl;
   const unrealizedPct = aum - cash > 0 ? (unrealized / (aum - cash)) * 100 : 0;
   const dayPnl = portfolio.dayPnl;
@@ -50,12 +48,6 @@ function buildTiles(
       value: fmt(aum),
       delta: `${positions} position${positions !== 1 ? "s" : ""}`,
       positive: true,
-    },
-    {
-      label: "Cash Position",
-      value: fmt(cash),
-      delta: `${cashPct.toFixed(2)}% of AUM`,
-      positive: cashPct < 100,
     },
     {
       label: "Unrealized P&L",
@@ -106,7 +98,7 @@ export function MetricGrid({
   const tiles = buildTiles(portfolio, riskStats ?? null);
 
   return (
-    <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+    <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
       {tiles.map((tile) => (
         <article
           key={tile.label}

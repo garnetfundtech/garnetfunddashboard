@@ -3,6 +3,7 @@ import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
 import { RoleSelect } from "@/components/admin/role-select";
+import { SectorSelect } from "@/components/admin/sector-select";
 import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
 import { getExternalApiStatus } from "@/lib/external-api-status";
 
@@ -46,6 +47,7 @@ export default async function AdminPage() {
               <th className="px-4 py-2.5 text-left font-medium">Name</th>
               <th className="px-4 py-2.5 text-left font-medium">Email</th>
               <th className="px-4 py-2.5 text-left font-medium">Role</th>
+              <th className="px-4 py-2.5 text-left font-medium">Coverage Sector</th>
             </tr>
           </thead>
           <tbody>
@@ -55,6 +57,9 @@ export default async function AdminPage() {
                 <td className="px-4 py-3 text-zinc-400">{user.email}</td>
                 <td className="px-4 py-3">
                   <RoleSelect userId={user.id} currentRole={user.role} />
+                </td>
+                <td className="px-4 py-3">
+                  <SectorSelect userId={user.id} currentSector={user.coverage_sector ?? null} />
                 </td>
               </tr>
             ))}

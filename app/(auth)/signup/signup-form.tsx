@@ -34,9 +34,10 @@ export function SignupForm() {
         name="email"
         type="email"
         className="glass-input w-full px-3 py-2 text-sm outline-none placeholder:text-zinc-500"
-        placeholder="name@example.com"
+        placeholder="yourname@email.sc.edu"
         required
       />
+      <p className="text-xs text-zinc-500">Use your USC email (@email.sc.edu)</p>
 
       <input
         name="password"

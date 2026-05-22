@@ -9,6 +9,7 @@ export type Profile = {
   first_name: string | null;
   last_name: string | null;
   role: UserRole;
+  coverage_sector: string | null;
 };
 
 export async function getCurrentProfile() {
@@ -23,7 +24,7 @@ export async function getCurrentProfile() {
 
   const { data: profile, error } = await supabase
     .from("user_profiles")
-    .select("id,email,full_name,first_name,last_name,role")
+    .select("id,email,full_name,first_name,last_name,role,coverage_sector")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -50,6 +51,7 @@ export async function getCurrentProfile() {
       first_name: firstName,
       last_name: lastName,
       role: "analyst" as const,
+      coverage_sector: null,
     };
   }
 

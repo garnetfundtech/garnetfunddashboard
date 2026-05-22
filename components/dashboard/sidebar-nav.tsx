@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   Bookmark,
   BookOpen,
   CalendarDays,
@@ -11,7 +12,7 @@ import {
   ChevronUp,
   ClipboardList,
   FolderKanban,
-  Kanban,
+  Layers,
   LogOut,
   Settings,
   Shield,
@@ -26,11 +27,12 @@ import { getSidebarNavItems } from "@/lib/nav-access";
 
 const ICONS = {
   "/home": ChartLine,
+  "/coverage": Layers,
   "/users": Users,
   "/research": BookOpen,
   "/resources": FolderKanban,
   "/orders": ClipboardList,
-  "/pipeline": Kanban,
+  "/alerts": Bell,
   "/watchlist": Bookmark,
   "/earnings": CalendarDays,
 } as const;

@@ -265,19 +265,8 @@ export function ResourcesTableClient({
                   </button>
                 </div>
 
-                {/* Download + Print side by side */}
+                {/* Print only — resources are view-only, no download */}
                 <div className="flex gap-1">
-                  {opened.downloadEnabled && opened.downloadUrl ? (
-                    <Link href={opened.downloadUrl} className={`${ACTION_BTN} flex-1`}>
-                      <Download className="h-4 w-4" />
-                      Download
-                    </Link>
-                  ) : (
-                    <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600">
-                      <Download className="h-4 w-4" />
-                      Download
-                    </div>
-                  )}
                   <button type="button" onClick={() => doPrint()} className={`${ACTION_BTN} flex-1`}>
                     <Printer className="h-4 w-4" />
                     Print

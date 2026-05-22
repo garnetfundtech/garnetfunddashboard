@@ -5,7 +5,7 @@ import { Download, Minus, Plus, Printer, Search, Sparkles, Trash2, X } from "luc
 import { AiChatTrigger } from "@/components/dashboard/ai-chat-panel";
 import Link from "next/link";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
-import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
+import { ResearchUploadForm } from "@/components/dashboard/research-upload-modal";
 import type { ResearchItem, StoredAnalysis, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/research/actions";
@@ -55,6 +55,7 @@ export function ResearchTableClient({
   initialMode?: "view" | "edit";
   holdTickers: Set<string>;
 }) {
+  const [activeTab, setActiveTab] = useState<"research" | "upload">("research");
   const [query, setQuery] = useState(() => initialQuery);
   const [selected, setSelected] = useState<string | null>(null);
   const [opened, setOpened] = useState<ResearchItem | null>(null);
@@ -147,20 +148,58 @@ export function ResearchTableClient({
 
   return (
     <div className="space-y-3">
+      {/* Tab bar */}
       <div className="flex items-center gap-3">
-        <div className="glass-input flex h-[42px] flex-1 items-center gap-2 px-3">
-          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-          <input
-            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-            placeholder="Search by title, ticker, sector, or analyst"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className="flex rounded-[10px] bg-white/[0.04] p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("research")}
+            className={`rounded-[8px] px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "research"
+                ? "bg-white/[0.08] text-white"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Research
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("upload")}
+            className={`rounded-[8px] px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "upload"
+                ? "bg-white/[0.08] text-white"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Upload
+          </button>
         </div>
-        <ResearchUploadModal />
-        <AiChatTrigger />
+        {activeTab === "research" && (
+          <>
+            <div className="glass-input flex h-[42px] flex-1 items-center gap-2 px-3">
+              <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+              <input
+                className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                placeholder="Search by title, ticker, sector, or analyst"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <AiChatTrigger />
+          </>
+        )}
       </div>
 
+      {activeTab === "upload" && (
+        <div className="panel max-w-sm p-6">
+          <p className="caps-label mb-1">Research</p>
+          <h2 className="mb-4 text-base font-semibold text-white">Upload Report</h2>
+          <ResearchUploadForm onSuccess={() => setActiveTab("research")} />
+        </div>
+      )}
+
+      {activeTab === "research" && (
+        <>
       {filtered.length === 0 ? (
         <section className="panel px-4 py-16 text-center text-sm text-zinc-500">
           {items.length === 0
@@ -436,16 +475,6 @@ export function ResearchTableClient({
                 className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
                 placeholder="Analyst name"
               />
-              <select
-                name="thesisStatus"
-                defaultValue={editing.thesisStatus}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none"
-              >
-                <option value="active">Active</option>
-                <option value="under_review">Under Review</option>
-                <option value="became_position">Became Position</option>
-                <option value="rejected">Rejected</option>
-              </select>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -477,6 +506,8 @@ export function ResearchTableClient({
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

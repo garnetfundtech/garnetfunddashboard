@@ -200,6 +200,7 @@ export type AdminUser = {
   email: string;
   full_name: string | null;
   role: UserRole;
+  coverage_sector: string | null;
   created_at: string;
 };
 
@@ -207,7 +208,7 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("id,email,full_name,role,created_at")
+    .select("id,email,full_name,role,coverage_sector,created_at")
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];
@@ -471,4 +472,52 @@ export async function getResearchOptionsForPipeline(): Promise<{ id: string; tit
   }
 
   return results;
+}
+
+export async function getResearchItemsForUser(userId: string): Promise<ResearchItem[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("research_posts")
+    .select(
+      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
+    )
+    .eq("created_by", userId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+
+  const mapped: ResearchItem[] = [];
+  for (const row of data) {
+    let viewUrl: string | undefined;
+    if (row.file_path) {
+      const { bucket, objectPath } = parseFilePath(row.file_path);
+      if (bucket && objectPath) {
+        const view = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10);
+        if (view.data?.signedUrl) viewUrl = view.data.signedUrl;
+      }
+    }
+    const ts = (row as { thesis_status?: string }).thesis_status;
+    const validThesis: ThesisStatus =
+      ts === "under_review" || ts === "became_position" || ts === "rejected" || ts === "active"
+        ? ts
+        : "active";
+    mapped.push({
+      id: row.id,
+      title: row.title,
+      author: row.author_override ?? "Unknown",
+      ticker: row.ticker ?? "—",
+      updatedAt: new Date(row.created_at).toLocaleDateString(),
+      createdBy: row.created_by ?? null,
+      uploaderRole: (row.uploader_role as UserRole) ?? "analyst",
+      filePath: row.file_path ?? undefined,
+      viewUrl,
+      downloadEnabled: row.download_enabled ?? false,
+      downloadUrl: undefined,
+      sector: (row as { sector?: string | null }).sector ?? null,
+      thesisStatus: validThesis,
+      analystName: (row as { analyst_name?: string | null }).analyst_name ?? null,
+      aiAnalysis: (row as { ai_analysis?: unknown }).ai_analysis as import("@/lib/types").StoredAnalysis | null ?? null,
+    });
+  }
+  return mapped;
 }

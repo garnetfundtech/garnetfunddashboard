@@ -15,9 +15,9 @@ export async function uploadResearchAction(formData: FormData) {
   const downloadEnabled = formData.get("downloadEnabled") === "true";
   const sector = String(formData.get("sector") ?? "").trim() || null;
   const analystName = String(formData.get("analystName") ?? "").trim() || null;
-  const thesisStatus = String(formData.get("thesisStatus") ?? "active").trim() || "active";
+  const companyName = String(formData.get("companyName") ?? "").trim() || null;
 
-  if (!(file instanceof File) || !title) return;
+  if (!(file instanceof File) || !title || !sector || !analystName) return;
 
   const authorName =
     analystName ||
@@ -39,6 +39,7 @@ export async function uploadResearchAction(formData: FormData) {
   await admin.from("research_posts").insert({
     title,
     ticker: ticker || null,
+    company_name: companyName,
     file_path: fullPath,
     created_by: profile.id,
     author_override: authorName,
@@ -46,9 +47,7 @@ export async function uploadResearchAction(formData: FormData) {
     uploader_role: profile.role,
     sector,
     analyst_name: analystName,
-    thesis_status: ["active", "under_review", "became_position", "rejected"].includes(thesisStatus)
-      ? thesisStatus
-      : "active",
+    thesis_status: "active",
   });
 
   await logAuditEvent({
@@ -68,7 +67,7 @@ export async function updateResearchAction(formData: FormData) {
   const downloadEnabled = formData.get("downloadEnabled") === "true";
   const sector = String(formData.get("sector") ?? "").trim() || null;
   const analystName = String(formData.get("analystName") ?? "").trim() || null;
-  const thesisStatus = String(formData.get("thesisStatus") ?? "active").trim() || "active";
+  const companyName = String(formData.get("companyName") ?? "").trim() || null;
   if (!id || !title) return;
 
   const admin = createAdminClient();
@@ -84,19 +83,15 @@ export async function updateResearchAction(formData: FormData) {
     row.created_by === actor.id || isRoleHigher(actor.role, uploaderRole);
   if (!canManage) return;
 
-  const ts = ["active", "under_review", "became_position", "rejected"].includes(thesisStatus)
-    ? thesisStatus
-    : "active";
-
   await admin
     .from("research_posts")
     .update({
       title,
       ticker: ticker || null,
+      company_name: companyName,
       download_enabled: downloadEnabled,
       sector,
       analyst_name: analystName,
-      thesis_status: ts,
     })
     .eq("id", id);
 
@@ -104,7 +99,7 @@ export async function updateResearchAction(formData: FormData) {
     action: "research.update",
     entity_type: "research_post",
     entity_id: id,
-    metadata: { title, ticker, downloadEnabled, sector, thesisStatus: ts },
+    metadata: { title, ticker, downloadEnabled, sector },
   });
 
   revalidatePath("/research");
