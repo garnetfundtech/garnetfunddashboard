@@ -54,17 +54,16 @@ export default async function HomePage() {
   const benchmarkSpark = benchmarkYtd.map((c) => c.value);
   const lastSync = market?.fetchedAt ?? portfolio?.verifiedAt ?? null;
 
-  // etfQuotes kept for potential future use
   void etfQuotes;
 
   return (
-    <div className="space-y-2">
+    <div className="flex h-full flex-col gap-2">
       <TopBar lastSync={lastSync} />
       <KpiStrip portfolio={portfolio} benchmarkSpark={benchmarkSpark} riskStats={riskStats} />
 
       {/* Row 2: Chart + Indices + Risk — fixed 286px */}
       <div
-        className="grid gap-2"
+        className="grid shrink-0 gap-2"
         style={{ gridTemplateColumns: "minmax(0, 1.55fr) 188px 188px", height: "286px", gridTemplateRows: "minmax(0, 1fr)" }}
       >
         <PerformanceChartClient initialBenchmark={benchmarkYtd} cashOnlyMode={cashOnly} />
@@ -78,14 +77,14 @@ export default async function HomePage() {
         />
       </div>
 
-      {/* Row 3: Holdings + Sector Exposure + Movers */}
+      {/* Row 3: Holdings + Sector Exposure + Movers — fills remaining height */}
       <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(220px, 0.7fr) minmax(220px, 0.7fr)" }}
+        className="grid min-h-0 flex-1 gap-2"
+        style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(200px, 0.65fr) minmax(200px, 0.65fr)" }}
       >
         <HoldingsTable livePositions={enrichedPositions} />
         <SectorExposure positions={enrichedPositions} portfolioValue={portfolio?.liquidationValue ?? null} />
-        <MarketMoversPanel gainers={market?.gainers ?? []} losers={market?.losers ?? []} />
+        <MarketMoversPanel />
       </div>
     </div>
   );

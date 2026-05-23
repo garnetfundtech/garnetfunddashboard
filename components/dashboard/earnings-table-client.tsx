@@ -1,12 +1,59 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { CalendarPlus, Rss } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { KpiRow } from "@/components/dashboard/kpi-row";
+import { FilterTabs } from "@/components/dashboard/filter-tabs";
+import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import type { FmpEarningRow } from "@/lib/fmp";
-import { Search } from "lucide-react";
-import { Highlight } from "@/components/dashboard/highlight";
 
-type Filter = "all" | "held" | "watch";
+type EarningsFilter = "all" | "held" | "high";
+
+function getWeekDays(): { label: string; short: string; date: Date }[] {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return {
+      label: d.toLocaleDateString("en-US", { weekday: "long" }),
+      short: d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase(),
+      date: d,
+    };
+  });
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function importanceTone(
+  isHeld: boolean,
+  isWatch: boolean,
+): "high" | "med" | "low" {
+  if (isHeld) return "high";
+  if (isWatch) return "med";
+  return "low";
+}
+
+const toneBorder: Record<string, string> = {
+  high: "border-[var(--gf-accent)]/35 bg-[var(--gf-accent)]/[0.07]",
+  med: "border-amber-400/20 bg-amber-400/[0.04]",
+  low: "border-white/[0.06] bg-white/[0.02]",
+};
+
+function fmtEps(n: number | null) {
+  if (n == null) return "—";
+  return `${n >= 0 ? "" : "-"}$${Math.abs(n).toFixed(2)}`;
+}
 
 export function EarningsTableClient({
   rows,
@@ -17,150 +64,181 @@ export function EarningsTableClient({
   heldSet: Set<string>;
   watchSet: Set<string>;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
-  const [nowMs] = useState(() => Date.now());
+  const [filter, setFilter] = useState<EarningsFilter>("all");
+  const weekDays = useMemo(() => getWeekDays(), []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = rows.filter((r) => {
+    return rows.filter((r) => {
       const sym = r.symbol.toUpperCase();
       if (filter === "held") return heldSet.has(sym);
-      if (filter === "watch") return watchSet.has(sym);
+      if (filter === "high") return heldSet.has(sym) || watchSet.has(sym);
       return true;
     });
+  }, [rows, filter, heldSet, watchSet]);
 
-    const searched = !q
-      ? base
-      : base.filter((r) => {
-          const sym = r.symbol.toUpperCase();
-          const company = r.name ?? "";
-          const days = Math.ceil((new Date(r.date).getTime() - nowMs) / 86400000);
-          const hay = [
-            sym,
-            company,
-            r.date,
-            String(days),
-            r.epsEstimated != null ? r.epsEstimated.toFixed(2) : "",
-            r.eps != null ? r.eps.toFixed(2) : "",
-            heldSet.has(sym) ? "holding" : "",
-            watchSet.has(sym) ? "watchlist" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return hay.includes(q);
-        });
+  const byDay = useMemo(() => {
+    return weekDays.map(({ date }) => {
+      const items = filtered.filter((r) => {
+        try {
+          // Parse as local date to avoid UTC offset shifting the day
+          const [y, m, d] = r.date.split("-").map(Number);
+          const localDate = new Date(y, m - 1, d);
+          return isSameDay(localDate, date);
+        } catch {
+          return false;
+        }
+      });
+      return items;
+    });
+  }, [filtered, weekDays]);
 
-    // Default sort: soonest → latest
-    return [...searched].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [rows, filter, heldSet, watchSet, query, nowMs]);
+  const totalCount = rows.length;
+  const heldCount = rows.filter((r) => heldSet.has(r.symbol.toUpperCase())).length;
+  const highImpact = rows.filter(
+    (r) =>
+      heldSet.has(r.symbol.toUpperCase()) || watchSet.has(r.symbol.toUpperCase()),
+  ).length;
+  const bmoCount = 0;
+  const amcCount = 0;
+
+  const kpiTiles = [
+    { label: "Events this week", value: String(totalCount), sub: "All companies" },
+    { label: "Our holdings", value: String(heldCount), sub: "Garnet Fund positions" },
+    { label: "High-impact", value: String(highImpact), sub: "Held + watchlist" },
+    { label: "BMO", value: String(bmoCount), sub: "Before market open" },
+    { label: "AMC", value: String(amcCount), sub: "After market close" },
+  ];
+
+  const weekLabel = `Week of ${weekDays[0]?.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${weekDays[4]?.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="glass-input flex h-[42px] min-w-[240px] flex-1 items-center gap-2 px-3">
-          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by ticker or company…"
-            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+    <div className="flex flex-col gap-3">
+      <PageHeader
+        kicker="Calendar"
+        title="Earnings Week"
+        subtitle="Reporting companies this week — our holdings plus key broad-market names."
+        actions={
+          <>
+            <GhostBtn>
+              <Rss className="h-3.5 w-3.5" />
+              Subscribe
+            </GhostBtn>
+            <PrimaryBtn>
+              <CalendarPlus className="h-3.5 w-3.5" />
+              Add to calendar
+            </PrimaryBtn>
+          </>
+        }
+      />
+
+      <KpiRow tiles={kpiTiles} />
+
+      <div className="panel p-3">
+        {/* Top strip */}
+        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+              {weekLabel}
+            </p>
+            <p className="text-[13.5px] font-semibold text-white">Calendar</p>
+          </div>
+          <FilterTabs
+            options={[
+              { value: "all", label: "All" },
+              { value: "held", label: "Holdings only" },
+              { value: "high", label: "High impact" },
+            ] as { value: EarningsFilter; label: string }[]}
+            value={filter}
+            onChange={setFilter}
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["all", "All"],
-              ["held", "Held"],
-              ["watch", "Watchlist"],
-            ] as const
-          ).map(([k, lab]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setFilter(k)}
-              className={cn(
-                "h-[42px] rounded-[8px] px-4 text-xs font-medium transition",
-                filter === k ? "bg-[#8e0604] text-white" : "bg-white/[0.04] text-zinc-400 hover:bg-white/10",
-              )}
-            >
-              {lab}
-            </button>
-          ))}
+
+        {/* Day columns */}
+        <div className="mt-3 grid gap-3 lg:grid-cols-5">
+          {weekDays.map(({ short, label, date }, i) => {
+            const items = byDay[i] ?? [];
+            const isToday = isSameDay(date, new Date());
+
+            return (
+              <div key={label} className="flex flex-col gap-2">
+                {/* Day header */}
+                <div className="flex items-baseline justify-between pb-1.5 border-b border-white/[0.06]">
+                  <div>
+                    <p className={`text-[9.5px] uppercase tracking-[0.08em] ${isToday ? "text-[var(--gf-accent-fg)]" : "text-zinc-500"}`}>
+                      {short}
+                    </p>
+                    <p className={`text-[13px] font-semibold ${isToday ? "text-white" : "text-zinc-300"}`}>
+                      {date.getDate()}
+                    </p>
+                  </div>
+                  <span className="tabular-nums text-[10px] text-zinc-600">
+                    {items.length} ev
+                  </span>
+                </div>
+
+                {/* Events */}
+                {items.length === 0 ? (
+                  <div className="rounded-[8px] border border-dashed border-white/[0.05] px-2 py-3 text-center text-[11px] text-zinc-600">
+                    No events
+                  </div>
+                ) : (
+                  items.map((item) => {
+                    const sym = item.symbol.toUpperCase();
+                    const isHeld = heldSet.has(sym);
+                    const isWatch = watchSet.has(sym);
+                    const tone = importanceTone(isHeld, isWatch);
+
+                    return (
+                      <div
+                        key={`${item.symbol}-${item.date}`}
+                        className={`rounded-[8px] border p-2 ${toneBorder[tone]}`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[12.5px] font-semibold text-white">
+                            {sym}
+                          </span>
+                          <span className={`rounded-[4px] px-1.5 py-[1px] text-[9px] font-semibold bg-white/[0.06] text-zinc-400`}>
+                            {item.epsEstimated != null ? "EST" : "—"}
+                          </span>
+                        </div>
+                        {item.name && item.name !== sym && (
+                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                            {item.name}
+                          </p>
+                        )}
+                        <p className="mt-1 text-[10px] text-zinc-400">
+                          <span className="text-zinc-500">EPS est </span>
+                          <span className="tabular-nums text-zinc-200">
+                            {fmtEps(item.epsEstimated)}
+                          </span>
+                        </p>
+                        {item.eps != null && (
+                          <p className="text-[10px] text-zinc-400">
+                            <span className="text-zinc-500">Actual </span>
+                            <span className={`tabular-nums ${item.eps >= (item.epsEstimated ?? 0) ? "text-emerald-400" : "text-rose-400"}`}>
+                              {fmtEps(item.eps)}
+                            </span>
+                          </p>
+                        )}
+                        {isHeld && (
+                          <span className="mt-1 inline-flex rounded-full border border-[var(--gf-accent)]/30 bg-[var(--gf-accent)]/10 px-1.5 py-[1px] text-[9px] font-medium text-[var(--gf-accent-fg)]">
+                            Held
+                          </span>
+                        )}
+                        {isWatch && !isHeld && (
+                          <span className="mt-1 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-[1px] text-[9px] font-medium text-amber-400">
+                            Watching
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
-
-      <section className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] text-xs">
-            <thead className="bg-white/5 text-zinc-400">
-              <tr>
-                {["Ticker", "Company", "Report date", "Est. EPS", "Actual EPS", "Fund holds"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-medium">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
-                    No upcoming earnings in this window (check FMP_API_KEY and date range).
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((r, i) => {
-                  const sym = r.symbol.toUpperCase();
-                  const held = heldSet.has(sym);
-                  const watch = watchSet.has(sym);
-                  const days = Math.ceil((new Date(r.date).getTime() - nowMs) / 86400000);
-                  const daysLabel = Number.isFinite(days) ? `${days} days` : "—";
-                  return (
-                    <tr
-                      key={`${sym}-${r.date}-${i}`}
-                      className={cn(
-                        "border-t border-white/[0.04] text-zinc-200",
-                        held && "bg-[#8e0604]/12",
-                      )}
-                    >
-                      <td className="px-3 py-2 font-semibold text-white">
-                        <Highlight text={sym} query={query} />
-                      </td>
-                      <td className="px-3 py-2 text-zinc-300">
-                        <Highlight text={r.name ?? "—"} query={query} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Highlight text={`${r.date} (${daysLabel})`} query={query} />
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        <Highlight text={r.epsEstimated != null ? r.epsEstimated.toFixed(2) : "—"} query={query} />
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        <Highlight text={r.eps != null ? r.eps.toFixed(2) : "—"} query={query} />
-                      </td>
-                      <td className="px-3 py-2">
-                        {held ? (
-                          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                            <Highlight text="Holding" query={query} />
-                          </span>
-                        ) : watch ? (
-                          <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-300">
-                            <Highlight text="Watching" query={query} />
-                          </span>
-                        ) : (
-                          <span className="text-zinc-600"><Highlight text="—" query={query} /></span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }

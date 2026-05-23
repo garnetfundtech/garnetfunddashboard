@@ -1,181 +1,314 @@
 "use client";
 
-import { useState } from "react";
-import { BookOpen, TrendingUp } from "lucide-react";
-import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
-import { PdfViewer } from "@/components/dashboard/pdf-viewer";
-import { X } from "lucide-react";
-import type { ResearchItem, LivePosition } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { KpiRow } from "@/components/dashboard/kpi-row";
+import { TableShell } from "@/components/dashboard/table-shell";
+import { StatusPill } from "@/components/dashboard/status-pill";
+import { PrimaryBtn } from "@/components/dashboard/buttons";
+import type { CoverageAnalyst } from "@/app/(dashboard)/coverage/page";
+import type { ResearchItem } from "@/lib/types";
 
-function fmtPct(n: number) {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+const SECTOR_COLORS: Record<string, string> = {
+  Technology: "#a78bfa",
+  Healthcare: "#34d399",
+  "Financial Services": "#60a5fa",
+  "Consumer Cyclical": "#fbbf24",
+  "Consumer Defensive": "#fb923c",
+  Industrials: "#fb7185",
+  "Communication Services": "#22d3ee",
+  Energy: "#facc15",
+  "Basic Materials": "#94a3b8",
+  "Real Estate": "#f472b6",
+  Utilities: "#a3e635",
+};
+
+type SectorStatus = "covered" | "thin" | "gap" | "uncovered";
+
+function sectorStatus(
+  sector: string,
+  analysts: CoverageAnalyst[],
+  tickers: string[],
+): SectorStatus {
+  const assigned = analysts.filter(
+    (a) => a.sector?.toLowerCase() === sector.toLowerCase(),
+  );
+  if (assigned.length === 0) return "uncovered";
+  if (tickers.length === 0) return "gap";
+  if (tickers.length < 2) return "thin";
+  return "covered";
+}
+
+function statusTone(
+  s: SectorStatus,
+): "emerald" | "amber" | "rose" | "neutral" {
+  if (s === "covered") return "emerald";
+  if (s === "thin") return "amber";
+  if (s === "gap") return "rose";
+  return "neutral";
+}
+
+function statusLabel(s: SectorStatus) {
+  if (s === "covered") return "Covered";
+  if (s === "thin") return "Thin";
+  if (s === "gap") return "Coverage gap";
+  return "Uncovered";
 }
 
 export function CoveragePageClient({
-  analystName,
-  coverageSector,
-  myResearch,
-  sectorPositions,
-  sectorQuotes,
+  analysts,
+  research,
+  sectors,
 }: {
-  analystName: string;
-  coverageSector: string | null;
-  myResearch: ResearchItem[];
-  sectorPositions: LivePosition[];
-  sectorQuotes: Record<string, { price: number; changePct: number }>;
+  analysts: CoverageAnalyst[];
+  research: ResearchItem[];
+  sectors: string[];
 }) {
-  const [openedResearch, setOpenedResearch] = useState<ResearchItem | null>(null);
+  const sectorMap = useMemo(() => {
+    const map: Record<string, { analysts: CoverageAnalyst[]; tickers: string[] }> = {};
+    for (const s of sectors) {
+      const sAnalysts = analysts.filter(
+        (a) =>
+          a.sector?.toLowerCase() === s.toLowerCase() &&
+          (a.role === "analyst" || a.role === "pm"),
+      );
+      const sResearch = research.filter(
+        (r) => r.sector?.toLowerCase() === s.toLowerCase(),
+      );
+      const tickers = [
+        ...new Set(
+          sResearch
+            .map((r) => r.ticker)
+            .filter((t) => t && t !== "—")
+            .map((t) => t.toUpperCase()),
+        ),
+      ];
+      map[s] = { analysts: sAnalysts, tickers };
+    }
+    return map;
+  }, [analysts, research, sectors]);
+
+  const activeAnalysts = analysts.filter(
+    (a) => a.role === "analyst" || a.role === "pm",
+  );
+  const covered = sectors.filter((s) => {
+    const st = sectorStatus(s, analysts, sectorMap[s]?.tickers ?? []);
+    return st === "covered" || st === "thin";
+  }).length;
+  const gaps = sectors.filter((s) => {
+    const st = sectorStatus(s, analysts, sectorMap[s]?.tickers ?? []);
+    return st === "gap";
+  }).length;
+  const uncovered = sectors.filter((s) => {
+    const st = sectorStatus(s, analysts, sectorMap[s]?.tickers ?? []);
+    return st === "uncovered";
+  }).length;
+
+  const loadMap: Record<string, number> = {};
+  for (const a of activeAnalysts) {
+    if (!a.sector) continue;
+    const tickers = sectorMap[a.sector]?.tickers ?? [];
+    loadMap[a.id] = tickers.length;
+  }
+  const avgLoad =
+    activeAnalysts.length > 0
+      ? (
+          Object.values(loadMap).reduce((s, n) => s + n, 0) /
+          activeAnalysts.length
+        ).toFixed(1)
+      : "—";
+
+  const kpiTiles = [
+    {
+      label: "Sectors covered",
+      value: `${covered} / ${sectors.length}`,
+      sub: `${gaps + uncovered} need attention`,
+    },
+    {
+      label: "Analysts",
+      value: String(activeAnalysts.length),
+      sub: "Active this term",
+    },
+    {
+      label: "Coverage gaps",
+      value: String(gaps),
+      sub: "Lead assigned, no thesis",
+      tone: gaps > 0 ? ("neg" as const) : null,
+    },
+    {
+      label: "Uncovered",
+      value: String(uncovered),
+      sub: "No analyst on sector",
+      tone: uncovered > 0 ? ("neg" as const) : null,
+    },
+    {
+      label: "Avg tickers / analyst",
+      value: avgLoad,
+      sub: "Across active members",
+    },
+  ];
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="panel p-5">
-        <p className="caps-label mb-1">Coverage</p>
-        <h1 className="page-title">{analystName}</h1>
-        {coverageSector ? (
-          <p className="mt-1 text-sm text-zinc-400">
-            Sector: <span className="font-medium text-white">{coverageSector}</span>
-          </p>
-        ) : (
-          <p className="mt-2 rounded-[8px] bg-amber-500/10 px-3 py-2 text-sm text-amber-400">
-            Your coverage sector has not been assigned yet. Contact an admin.
-          </p>
-        )}
-      </div>
+    <div className="flex flex-col gap-3">
+      <PageHeader
+        kicker="Coverage"
+        title="Sector Coverage"
+        actions={
+          <PrimaryBtn>
+            <Plus className="h-3.5 w-3.5" />
+            Assign analyst
+          </PrimaryBtn>
+        }
+      />
 
-      {/* Sector holdings */}
-      {coverageSector && (
-        <section className="panel p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-zinc-400" />
-            <p className="caps-label">Fund Holdings — {coverageSector}</p>
-          </div>
-          {sectorPositions.length === 0 ? (
-            <p className="text-sm text-zinc-500">No current fund positions in this sector.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/[0.06] text-left text-xs text-zinc-500">
-                    <th className="pb-2 pr-4 font-medium">Ticker</th>
-                    <th className="pb-2 pr-4 font-medium">Name</th>
-                    <th className="pb-2 pr-4 font-medium text-right">Price</th>
-                    <th className="pb-2 pr-4 font-medium text-right">Day %</th>
-                    <th className="pb-2 font-medium text-right">Weight</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sectorPositions.map((p) => {
-                    const q = sectorQuotes[p.ticker];
-                    const price = q?.price ?? p.currentPrice;
-                    const changePct = q?.changePct ?? p.dayPnlPct;
-                    return (
-                      <tr key={p.ticker} className="border-b border-white/[0.03]">
-                        <td className="py-2 pr-4 font-medium text-white">{p.ticker}</td>
-                        <td className="py-2 pr-4 text-zinc-400">{p.name}</td>
-                        <td className="py-2 pr-4 text-right tabular-nums text-zinc-200">
-                          ${price.toFixed(2)}
-                        </td>
-                        <td
-                          className={cn(
-                            "py-2 pr-4 text-right tabular-nums",
-                            changePct >= 0 ? "text-emerald-400" : "text-rose-400",
+      <KpiRow tiles={kpiTiles} />
+
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 0.9fr)" }}
+      >
+        {/* Left — Sectors × Analysts table */}
+        <TableShell
+          title="Sectors"
+          count={sectors.length}
+          actions={
+            <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-[1px] text-[10px] text-zinc-400">
+              GICS 11
+            </span>
+          }
+        >
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+                <th className="px-3 py-2 font-medium">Sector</th>
+                <th className="px-3 py-2 font-medium">Lead</th>
+                <th className="px-3 py-2 text-right font-medium">Analysts</th>
+                <th className="px-3 py-2 font-medium">Tickers</th>
+                <th className="px-3 py-2 text-right font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sectors.map((sector) => {
+                const { analysts: sAnalysts, tickers } = sectorMap[sector] ?? {
+                  analysts: [],
+                  tickers: [],
+                };
+                const status = sectorStatus(sector, analysts, tickers);
+                const lead = sAnalysts.find((a) => a.role === "pm");
+                const analystCount = sAnalysts.length;
+                const color = SECTOR_COLORS[sector] ?? "#94a3b8";
+
+                return (
+                  <tr
+                    key={sector}
+                    className="border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                  >
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: color }}
+                        />
+                        <span className="text-[12px] text-zinc-200">{sector}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-[12px] text-zinc-400">
+                      {lead ? (
+                        <span className="text-zinc-200">{lead.name}</span>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-[12px] text-zinc-300">
+                      {analystCount}
+                    </td>
+                    <td className="px-3 py-2">
+                      {tickers.length === 0 ? (
+                        <span className="text-[12px] text-zinc-600">—</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {tickers.slice(0, 6).map((t) => (
+                            <span
+                              key={t}
+                              className="rounded-[5px] border border-white/[0.06] bg-white/[0.03] px-1.5 py-[1px] text-[10.5px] font-medium text-zinc-200"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          {tickers.length > 6 && (
+                            <span className="text-[10.5px] text-zinc-500">
+                              +{tickers.length - 6}
+                            </span>
                           )}
-                        >
-                          {fmtPct(changePct)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
-                          {p.weight.toFixed(1)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <StatusPill
+                        label={statusLabel(status)}
+                        tone={statusTone(status)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </TableShell>
 
-      {/* My research */}
-      <section>
-        <div className="mb-3 flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-zinc-400" />
-          <p className="caps-label">My Research ({myResearch.length})</p>
-        </div>
-        {myResearch.length === 0 ? (
-          <div className="panel px-4 py-12 text-center text-sm text-zinc-500">
-            You have not uploaded any research yet. Go to the Research tab to upload.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {myResearch.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setOpenedResearch(item)}
-                className="panel overflow-hidden rounded-[14px] text-left transition-all ring-1 ring-white/[0.06] hover:ring-white/[0.12] hover:bg-white/[0.04] focus:outline-none"
-              >
-                <div className="p-3 pb-0">
-                  <PdfThumbnail url={item.viewUrl} title={item.title} fill />
-                </div>
-                <div className="space-y-1 px-3 pt-2 pb-2.5">
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">
-                    {item.title}{" "}
-                    {item.ticker && item.ticker !== "—" ? (
-                      <span className="font-normal text-zinc-400">({item.ticker.toUpperCase()})</span>
-                    ) : null}
-                  </p>
-                  {item.sector && (
-                    <p className="text-[11px] text-zinc-500">{item.sector}</p>
-                  )}
-                  <p className="text-[11px] text-zinc-600">{item.updatedAt}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* PDF viewer modal */}
-      {openedResearch && (
-        <div className="fixed inset-0 z-50 flex bg-black/85 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 flex-col p-4">
-            <PdfViewer url={openedResearch.viewUrl} />
-          </div>
-          <div className="flex w-[min(320px,100vw)] shrink-0 flex-col p-4 pl-0">
-            <div className="panel flex flex-col rounded-[16px] p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  {openedResearch.ticker && openedResearch.ticker !== "—" && (
-                    <p className="caps-label">{openedResearch.ticker.toUpperCase()}</p>
-                  )}
-                  <h2 className="mt-0.5 text-sm font-semibold text-white">{openedResearch.title}</h2>
-                </div>
-                <button
-                  onClick={() => setOpenedResearch(null)}
-                  className="shrink-0 rounded-[8px] p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <dl className="space-y-2 text-sm">
-                {openedResearch.sector && (
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">Sector</dt>
-                    <dd className="text-zinc-200">{openedResearch.sector}</dd>
+        {/* Right — Analyst load card */}
+        <div className="panel p-3">
+          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+            Analyst Load
+          </p>
+          <p className="mt-0.5 text-[13.5px] font-semibold text-white">
+            Tickers per analyst
+          </p>
+          <div className="mt-3 space-y-1.5">
+            {activeAnalysts.length === 0 && (
+              <p className="text-[11px] text-zinc-600">No analysts yet.</p>
+            )}
+            {activeAnalysts.map((a) => {
+              const load = loadMap[a.id] ?? 0;
+              const barPct = Math.min(100, (load / 5) * 100);
+              const initials = a.name
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p) => p[0]?.toUpperCase() ?? "")
+                .join("");
+              return (
+                <div key={a.id} className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-[9.5px] font-semibold text-zinc-200">
+                    {initials}
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">Date</dt>
-                  <dd className="text-zinc-300">{openedResearch.updatedAt}</dd>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="truncate text-[11.5px] text-zinc-200">
+                        {a.name}
+                      </span>
+                      <span className="ml-2 shrink-0 tabular-nums text-[10.5px] text-zinc-500">
+                        {load} tickers
+                      </span>
+                    </div>
+                    <div className="mt-0.5 h-[3px] w-full rounded-full bg-white/[0.05]">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${barPct}%`,
+                          background:
+                            load > 0 ? "var(--gf-accent)" : "#3f3f46",
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </dl>
-            </div>
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

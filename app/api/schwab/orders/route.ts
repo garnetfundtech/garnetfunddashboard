@@ -13,5 +13,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Schwab orders unavailable." }, { status: 503 });
   }
   const orders = normalizeSchwabOrders(raw);
-  return NextResponse.json({ ok: true, orders });
+  return NextResponse.json(
+    { ok: true, orders },
+    { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=120" } },
+  );
 }

@@ -107,11 +107,20 @@ body {
   border-color: var(--border);
 }
 
-.caps-label {
+.caps-label,
+.caps {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted-foreground);
+}
+
+/* Design-system token aliases */
+:root {
+  --gf-accent: var(--primary);
+  --gf-accent-fg: #f4c5c4;
+  --gf-panel: var(--panel);
+  --gf-border: var(--border);
 }
 
 .panel {

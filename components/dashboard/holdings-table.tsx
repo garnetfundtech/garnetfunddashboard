@@ -66,7 +66,7 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
     }
   }
 
-  const thCls = "px-3 py-2 font-medium cursor-pointer hover:text-zinc-200 transition-colors select-none";
+  const thCls = "px-3 py-1.5 font-medium cursor-pointer hover:text-zinc-200 transition-colors select-none";
   const thR = `${thCls} text-right`;
 
   return (
@@ -131,24 +131,24 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
                 const sectorColor = SECTOR_COLORS[pos.sector ?? ""] ?? "#94a3b8";
                 return (
                   <tr key={pos.ticker} className="border-b border-white/[0.025] text-zinc-200 transition hover:bg-white/[0.02] last:border-b-0">
-                    <td className="px-3 py-1.5 font-semibold text-white">{pos.ticker}</td>
-                    <td className="max-w-[120px] truncate px-3 py-1.5 text-zinc-300">{pos.name}</td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1 font-semibold text-white">{pos.ticker}</td>
+                    <td className="max-w-[120px] truncate px-3 py-1 text-zinc-300">{pos.name}</td>
+                    <td className="px-3 py-1">
                       <span className="inline-flex items-center gap-1.5 text-zinc-400">
                         <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: sectorColor }} />
                         {pos.sector ?? "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-500">{pos.assetType}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{pos.quantity.toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{fmtUsd(pos.avgCost)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-medium text-white">{fmtUsd(pos.currentPrice)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{fmtUsd(pos.marketValue)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${colorClass(pos.unrealizedPnl)}`}>{fmtUsd(pos.unrealizedPnl)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums ${colorClass(pos.unrealizedPnlPct)}`}>{fmtPct(pos.unrealizedPnlPct)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums ${colorClass(pos.dayPnl)}`}>{fmtUsd(pos.dayPnl)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums ${colorClass(pos.dayPnlPct)}`}>{fmtPct(pos.dayPnlPct)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3 py-1 text-zinc-500">{pos.assetType}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{pos.quantity.toLocaleString()}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.avgCost)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums font-medium text-white">{fmtUsd(pos.currentPrice)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.marketValue)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums font-medium ${colorClass(pos.unrealizedPnl)}`}>{fmtUsd(pos.unrealizedPnl)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.unrealizedPnlPct)}`}>{fmtPct(pos.unrealizedPnlPct)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.dayPnl)}`}>{fmtUsd(pos.dayPnl)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.dayPnlPct)}`}>{fmtPct(pos.dayPnlPct)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-8 overflow-hidden rounded-full bg-white/[0.06]" style={{ height: 3 }}>
                           <div

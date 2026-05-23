@@ -1,27 +1,64 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
+import { Bell, ChevronDown, ChevronUp, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { KpiRow } from "@/components/dashboard/kpi-row";
+import { TableShell } from "@/components/dashboard/table-shell";
+import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
+import { Spark } from "@/components/dashboard/spark";
 import type { SchwabQuoteResponse } from "@/lib/schwab";
-import type { WatchlistRow } from "@/lib/types";
+import type { WatchlistRow, UserRole } from "@/lib/types";
 import { addWatchlistItemAction, removeWatchlistItemAction } from "@/app/(dashboard)/watchlist/actions";
-import type { UserRole } from "@/lib/types";
-import { Plus, Search } from "lucide-react";
-import { Highlight } from "@/components/dashboard/highlight";
+
+const SECTOR_COLORS: Record<string, string> = {
+  Technology: "#a78bfa",
+  Healthcare: "#34d399",
+  "Financial Services": "#60a5fa",
+  "Consumer Cyclical": "#fbbf24",
+  "Consumer Defensive": "#fb923c",
+  Industrials: "#fb7185",
+  "Communication Services": "#22d3ee",
+  Energy: "#facc15",
+  "Basic Materials": "#94a3b8",
+  "Real Estate": "#f472b6",
+  Utilities: "#a3e635",
+};
 
 function fmtUsd(n: number | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
 }
+
+function fmtPct(n: number | undefined) {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function trendClass(n: number | undefined) {
+  if (n == null) return "text-zinc-400";
+  if (n > 0) return "text-emerald-400";
+  if (n < 0) return "text-rose-400";
+  return "text-zinc-400";
+}
+
+type SortKey = "ticker" | "price" | "changePct" | "adder";
+type SortDir = "asc" | "desc";
 
 function parseTarget(raw: string | null): string {
   if (!raw) return "—";
   const num = parseFloat(raw.replace(/[^0-9.-]/g, ""));
   if (!Number.isFinite(num)) return raw;
-  return num.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  return num.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
 }
-
-type SortKey = "ticker" | "price" | "hi" | "lo" | "pe" | "target" | "adder";
 
 export function WatchlistTableClient({
   rows,
@@ -35,204 +72,251 @@ export function WatchlistTableClient({
   pitchOptions: { id: string; ticker: string; thesis: string }[];
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "ticker", dir: "asc" });
+  const [sortKey, setSortKey] = useState<SortKey>("ticker");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [pending, startTransition] = useTransition();
+  const [newTicker, setNewTicker] = useState("");
 
-  const elevated = actor.role === "pm" || actor.role === "admin" || actor.role === "developer";
+  const elevated =
+    actor.role === "pm" || actor.role === "admin" || actor.role === "developer";
 
   const merged = useMemo(() => {
     return rows.map((r) => {
       const q = quotes[r.ticker]?.quote ?? {};
-      const f = quotes[r.ticker]?.fundamental ?? {};
       const price = q.lastPrice ?? q.mark ?? q.closePrice;
+      const changePct = q.netPercentChange;
       return {
         ...r,
         price: typeof price === "number" ? price : undefined,
-        hi: q["52WeekHigh"],
-        lo: q["52WeekLow"],
-        pe: f.peRatio,
+        changePct: typeof changePct === "number" ? changePct : undefined,
       };
     });
   }, [rows, quotes]);
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = !q
-      ? merged
-      : merged.filter((r) => {
-          const pitch = r.pitchId ? pitchOptions.find((p) => p.id === r.pitchId) : null;
-          const hay = [
-            r.ticker,
-            r.adderName,
-            String(r.analystTarget ?? ""),
-            parseTarget(r.analystTarget),
-            pitch?.ticker ?? "",
-            pitch?.thesis ?? "",
-            fmtUsd(r.price),
-            fmtUsd(r.hi),
-            fmtUsd(r.lo),
-            r.pe != null ? r.pe.toFixed(1) : "",
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return hay.includes(q);
-        });
-
-    const m = [...base];
-    const mul = sort.dir === "asc" ? 1 : -1;
-    m.sort((a, b) => {
-      switch (sort.key) {
-        case "price":
-          return ((a.price ?? 0) - (b.price ?? 0)) * mul;
-        case "hi":
-          return ((a.hi ?? 0) - (b.hi ?? 0)) * mul;
-        case "lo":
-          return ((a.lo ?? 0) - (b.lo ?? 0)) * mul;
-        case "pe":
-          return ((a.pe ?? 0) - (b.pe ?? 0)) * mul;
-        case "target":
-          return (String(a.analystTarget ?? "").localeCompare(String(b.analystTarget ?? ""))) * mul;
-        case "adder":
-          return a.adderName.localeCompare(b.adderName) * mul;
-        default:
-          return a.ticker.localeCompare(b.ticker) * mul;
-      }
+  const sorted = useMemo(() => {
+    const mul = sortDir === "asc" ? 1 : -1;
+    return [...merged].sort((a, b) => {
+      if (sortKey === "ticker") return a.ticker.localeCompare(b.ticker) * mul;
+      if (sortKey === "price") return ((a.price ?? 0) - (b.price ?? 0)) * mul;
+      if (sortKey === "changePct")
+        return ((a.changePct ?? 0) - (b.changePct ?? 0)) * mul;
+      if (sortKey === "adder") return a.adderName.localeCompare(b.adderName) * mul;
+      return 0;
     });
-    return m;
-  }, [merged, sort, query, pitchOptions]);
+  }, [merged, sortKey, sortDir]);
 
-  function toggle(key: SortKey) {
-    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "ticker" || key === "adder" ? "asc" : "desc");
+    }
   }
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="glass-input flex h-[42px] min-w-[240px] flex-1 items-center gap-2 px-3">
-          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search watchlist by ticker or user…"
-            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex h-[42px] items-center gap-2 rounded-[10px] bg-[#8e0604] px-3 text-xs font-medium text-white hover:bg-[#a80705]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add ticker
-        </button>
-      </div>
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return null;
+    return sortDir === "asc" ? (
+      <ChevronUp className="ml-0.5 inline h-2.5 w-2.5" />
+    ) : (
+      <ChevronDown className="ml-0.5 inline h-2.5 w-2.5" />
+    );
+  }
 
-      <section className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-xs">
-            <thead className="bg-white/5 text-zinc-400">
+  function handleRemove(id: string) {
+    const fd = new FormData();
+    fd.set("id", id);
+    startTransition(() => removeWatchlistItemAction(fd));
+  }
+
+  const avgChangePct =
+    merged.length > 0
+      ? merged.reduce((s, r) => s + (r.changePct ?? 0), 0) / merged.length
+      : null;
+
+  const kpiTiles = [
+    { label: "Tickers watched", value: String(rows.length), sub: "On the radar" },
+    {
+      label: "Avg day %",
+      value: avgChangePct != null ? fmtPct(avgChangePct) : "—",
+      sub: "Portfolio-weighted",
+      tone: avgChangePct != null ? (avgChangePct >= 0 ? ("pos" as const) : ("neg" as const)) : null,
+    },
+    { label: "With alerts", value: "—", sub: "Price alerts set" },
+    { label: "Avg time on list", value: "—", sub: "Days since added" },
+    { label: "Coverage overlap", value: "—", sub: "With fund positions" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <PageHeader
+        kicker="Watchlist"
+        title="On the Radar"
+        subtitle="Tickers being researched but not yet in the portfolio."
+        actions={
+          <>
+            <GhostBtn>
+              <Bell className="h-3.5 w-3.5" />
+              Set alert
+            </GhostBtn>
+            <PrimaryBtn onClick={() => setOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add ticker
+            </PrimaryBtn>
+          </>
+        }
+      />
+
+      <KpiRow tiles={kpiTiles} />
+
+      <TableShell
+        title="Watchlist"
+        count={sorted.length}
+        actions={
+          <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-[1px] text-[10px] text-zinc-400">
+            Sortable
+          </span>
+        }
+      >
+        <table className="w-full min-w-[560px]">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+              {(
+                [
+                  ["ticker", "Ticker"],
+                  ["price", "Price"],
+                  ["changePct", "Day %"],
+                  ["adder", "Added by"],
+                ] as [SortKey, string][]
+              ).map(([key, label]) => (
+                <th
+                  key={key}
+                  className={`px-3 py-2 font-medium ${key === "price" || key === "changePct" ? "text-right" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(key)}
+                    className={`hover:text-zinc-200 ${sortKey === key ? "text-zinc-200" : ""}`}
+                  >
+                    {label}
+                    <SortIcon col={key} />
+                  </button>
+                </th>
+              ))}
+              <th className="px-3 py-2 font-medium">Target</th>
+              <th className="px-3 py-2 font-medium">30D</th>
+              <th className="px-3 py-2 text-right font-medium" />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 && (
               <tr>
-                {(
-                  [
-                    ["ticker", "Ticker"],
-                    ["price", "Price"],
-                    ["hi", "52w High"],
-                    ["lo", "52w Low"],
-                    ["pe", "P/E"],
-                    ["target", "Analyst target"],
-                    ["adder", "Added by"],
-                  ] as const
-                ).map(([k, lab]) => (
-                  <th key={k} className="px-3 py-2 text-left font-medium">
-                    <button type="button" className="hover:text-white" onClick={() => toggle(k)}>
-                      {lab}
-                      {sort.key === k ? (sort.dir === "asc" ? "↑" : "↓") : ""}
-                    </button>
-                  </th>
-                ))}
-                <th className="px-3 py-2 text-left font-medium">Pipeline</th>
-                <th className="px-3 py-2" />
+                <td
+                  colSpan={7}
+                  className="px-3 py-12 text-center text-[11.5px] text-zinc-500"
+                >
+                  No tickers on the watchlist yet.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-zinc-500">
-                    No tickers on the watchlist yet. Add one to start tracking.
-                  </td>
-                </tr>
-              ) : (
-                visible.map((r) => {
-                  const pitch = r.pitchId ? pitchOptions.find((p) => p.id === r.pitchId) : null;
-                  return (
-                  <tr key={r.id} className="odd:bg-white/[0.015] text-zinc-200">
-                    <td className="px-3 py-2 font-semibold text-white">
-                      <Highlight text={r.ticker} query={query} />
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">
-                      <Highlight text={fmtUsd(r.price)} query={query} />
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">
-                      <Highlight text={fmtUsd(r.hi)} query={query} />
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">
-                      <Highlight text={fmtUsd(r.lo)} query={query} />
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">
-                      <Highlight text={r.pe != null && Number.isFinite(r.pe) ? r.pe.toFixed(1) : "—"} query={query} />
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-zinc-300">
-                      <Highlight text={parseTarget(r.analystTarget)} query={query} />
-                    </td>
-                    <td className="px-3 py-2 text-zinc-400">
-                      <Highlight text={r.adderName} query={query} />
-                    </td>
-                    <td className="px-3 py-2">
-                      {pitch ? (
-                        <Link
-                          href="/pipeline"
-                          className="underline decoration-[#f4c5c4]/50 text-[#f4c5c4] hover:text-white hover:decoration-white transition-colors"
-                          title={pitch.thesis}
-                        >
-                          <Highlight text={pitch.ticker} query={query} />
-                        </Link>
-                      ) : (
-                        <span className="text-zinc-600">—</span>
+            )}
+            {sorted.map((row) => {
+              const pitch = row.pitchId
+                ? pitchOptions.find((p) => p.id === row.pitchId)
+                : null;
+              const sector = pitch?.ticker
+                ? Object.keys(SECTOR_COLORS).find((s) =>
+                    s.toLowerCase().includes("tech"),
+                  )
+                : undefined;
+              const sectorColor = sector
+                ? SECTOR_COLORS[sector]
+                : "#94a3b8";
+
+              return (
+                <tr
+                  key={row.id}
+                  className="border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                >
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      {sector && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: sectorColor }}
+                        />
                       )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {r.addedBy === actor.id || elevated ? (
+                      <span className="text-[12px] font-semibold text-white">
+                        {row.ticker}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[12px] text-zinc-200">
+                    {fmtUsd(row.price)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums text-[12px] ${trendClass(row.changePct)}`}>
+                    {fmtPct(row.changePct)}
+                  </td>
+                  <td className="px-3 py-2 text-[12px] text-zinc-400">
+                    {row.adderName}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                    {parseTarget(row.analystTarget)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Spark
+                      data={[0]}
+                      width={56}
+                      height={16}
+                      stroke={
+                        (row.changePct ?? 0) >= 0 ? "#34d399" : "#fb7185"
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {elevated && (
                         <button
                           type="button"
+                          onClick={() => handleRemove(row.id)}
                           disabled={pending}
-                          onClick={() => {
-                            const fd = new FormData();
-                            fd.set("id", r.id);
-                            startTransition(async () => {
-                              await removeWatchlistItemAction(fd);
-                            });
-                          }}
-                          className="text-rose-400/90 hover:text-rose-300 disabled:opacity-50"
+                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-rose-400"
                         >
-                          Remove
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                      )}
+                      <button
+                        type="button"
+                        className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </TableShell>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="panel w-full max-w-md p-5">
-            <h2 className="mb-3 text-sm font-semibold text-white">Add to watchlist</h2>
+      {/* Add ticker form */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
+          <div className="panel w-full max-w-sm p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="caps-label">Watchlist</p>
+                <h2 className="text-base font-semibold text-white">
+                  Add ticker
+                </h2>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-[8px] p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
             <form
               className="space-y-3"
               onSubmit={(e) => {
@@ -241,41 +325,64 @@ export function WatchlistTableClient({
                 startTransition(async () => {
                   await addWatchlistItemAction(fd);
                   setOpen(false);
+                  setNewTicker("");
                 });
               }}
             >
               <input
                 name="ticker"
+                value={newTicker}
+                onChange={(e) =>
+                  setNewTicker(
+                    e.target.value.toUpperCase().replace(/[^A-Z]/g, ""),
+                  )
+                }
+                className="glass-input w-full px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
+                placeholder="Ticker (e.g. NVDA)"
                 required
-                placeholder="Ticker"
-                className="glass-input w-full px-3 py-2 text-sm uppercase outline-none"
               />
-              <input
-                name="analystTarget"
-                placeholder="Analyst price target (optional)"
-                className="glass-input w-full px-3 py-2 text-sm outline-none"
-              />
-              <textarea name="notes" placeholder="Notes" className="glass-input w-full px-3 py-2 text-sm outline-none" rows={2} />
-              <select name="pitchId" className="glass-input w-full px-3 py-2 text-sm text-zinc-200">
-                <option value="">Link pitch (optional)</option>
+              <select
+                name="pitchId"
+                className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none"
+              >
+                <option value="">No pitch linked</option>
                 {pitchOptions.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.ticker}{p.thesis ? ` — ${p.thesis.slice(0, 40)}${p.thesis.length > 40 ? "…" : ""}` : ""}
+                    {p.ticker} — {p.thesis.slice(0, 40)}
                   </option>
                 ))}
               </select>
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setOpen(false)} className="text-xs text-zinc-400">
+              <input
+                name="analystTarget"
+                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                placeholder="Analyst target (optional)"
+              />
+              <textarea
+                name="notes"
+                rows={2}
+                className="glass-input w-full resize-none px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                placeholder="Notes (optional)"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-[10px] px-4 py-2 text-sm text-zinc-400 hover:bg-white/5 hover:text-white"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="rounded-[8px] bg-[#8e0604] px-3 py-2 text-xs text-white">
-                  Save
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--gf-accent)] px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  Add
                 </button>
               </div>
             </form>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

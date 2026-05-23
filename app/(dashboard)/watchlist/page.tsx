@@ -28,13 +28,11 @@ export default async function WatchlistPage() {
   const pitchOptions = pitches.map((p) => ({ id: p.id, ticker: p.ticker, thesis: p.thesis }));
 
   return (
-    <div className="space-y-3">
-      <WatchlistTableClient
-        rows={rows}
-        quotes={quotes}
-        actor={{ id: profile.id, role: profile.role }}
-        pitchOptions={pitchOptions}
-      />
-    </div>
+    <WatchlistTableClient
+      rows={rows}
+      quotes={quotes}
+      actor={{ id: profile.id, role: profile.role }}
+      pitchOptions={pitchOptions}
+    />
   );
 }

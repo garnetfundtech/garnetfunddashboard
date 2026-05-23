@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/dashboard/logo-mark";
 import type { UserRole } from "@/lib/types";
 import { logoutAction } from "@/app/(auth)/login/actions";
 import { getSidebarNavItems } from "@/lib/nav-access";
@@ -58,7 +59,8 @@ export function SidebarNav({
 
   return (
     <aside className="panel flex h-full w-[176px] flex-col bg-[#08090a] px-2.5 py-3">
-      <div className="px-2 py-1">
+      <div className="flex items-center gap-2.5 px-2 py-1">
+        <LogoMark />
         <span className="text-[13px] font-semibold tracking-tight text-white">Garnet Fund</span>
       </div>
       <nav className="mt-5 flex flex-col gap-0.5">

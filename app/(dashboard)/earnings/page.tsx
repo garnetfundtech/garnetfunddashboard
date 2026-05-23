@@ -42,9 +42,5 @@ export default async function EarningsPage() {
   const heldSet = new Set((portfolio?.positions ?? []).map((p) => p.ticker.toUpperCase()));
   const watchSet = new Set(watchTickers.map((t) => t.toUpperCase()));
 
-  return (
-    <div className="space-y-3">
-      <EarningsTableClient rows={rows} heldSet={heldSet} watchSet={watchSet} />
-    </div>
-  );
+  return <EarningsTableClient rows={rows} heldSet={heldSet} watchSet={watchSet} />;
 }
