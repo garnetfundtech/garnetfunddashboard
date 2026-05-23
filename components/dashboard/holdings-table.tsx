@@ -83,17 +83,9 @@ const LEGACY_COLS = ["Ticker", "Company", "Sector", "1D", "5D", "1M", "3M", "6M"
 function LegacyHoldingsTable({ rows }: { rows: HoldingRow[] }) {
   return (
     <section className="panel overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2.5">
-        <div>
-          <p className="caps-label">Portfolio Holdings</p>
-          <h2 className="text-sm font-semibold text-white">Performance by Security</h2>
-        </div>
-        <select className="glass-input px-2 py-1 text-sm text-zinc-300 outline-none">
-          <option>All sectors</option>
-          <option>Technology</option>
-          <option>Healthcare</option>
-          <option>Energy</option>
-        </select>
+      <div className="px-3 py-2.5">
+        <p className="caps-label">Portfolio Holdings</p>
+        <h2 className="text-sm font-semibold text-white">Performance by Security</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-xs">

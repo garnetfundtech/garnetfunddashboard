@@ -10,8 +10,6 @@ import { getExternalApiStatus } from "@/lib/external-api-status";
 export default async function AdminPage() {
   await requireRole(["developer", "admin"]);
 
-  const syncIntervalMin = Math.max(5, Number(process.env.SCHWAB_SYNC_INTERVAL_MINUTES ?? "60"));
-
   const [users, schwabDiagnostics, livePortfolio, liveMarket, apiStatus] = await Promise.all([
     getAdminUsers(),
     getSchwabDiagnostics(),

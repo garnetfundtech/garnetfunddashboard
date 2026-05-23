@@ -123,6 +123,7 @@ export function AlertsPageClient({
   }, [alerts]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- setState only fires after await fetch, not synchronously
     void refreshPrices();
     refreshIntervalRef.current = setInterval(() => void refreshPrices(), 30_000);
     return () => {

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Download, Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
-import Link from "next/link";
+import { Minus, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import { PdfThumbnail } from "@/components/dashboard/pdf-thumbnail";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
 import type { ResourceWithLinks } from "@/lib/data";

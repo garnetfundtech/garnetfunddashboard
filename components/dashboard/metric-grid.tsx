@@ -36,7 +36,6 @@ function buildTiles(
   }
 
   const aum = portfolio.liquidationValue;
-  const cash = portfolio.cashAvailable;
   const unrealized = portfolio.unrealizedPnl;
   const unrealizedPct = aum > 0 ? (unrealized / aum) * 100 : 0;
   const dayPnl = portfolio.dayPnl;

@@ -104,7 +104,7 @@ export function PerformanceChart({
   // On initial YTD load, benchmark comes from SSR; still fetch portfolio
   useEffect(() => {
     if (range === "YTD" && initialBenchmark.length > 0) {
-      setBenchmarkData(initialBenchmark);
+      // benchmarkData already initialised from SSR — only fetch portfolio overlay
       void fetch(`/api/schwab/portfolio/performance?period=YTD`)
         .then((r) => r.json())
         .then((json) => {
@@ -113,6 +113,7 @@ export function PerformanceChart({
         .catch(() => {});
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- setLoading(true) is intentional loading state before async fetch
     void fetchRange(range);
   }, [range, initialBenchmark, fetchRange]);
 
