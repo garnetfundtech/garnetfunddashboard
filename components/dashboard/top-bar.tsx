@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 
 function relativeTime(isoString: string): string {
   const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
@@ -65,14 +65,6 @@ export function TopBar({
           </button>
         </div>
       )}
-
-      <button
-        type="button"
-        className="flex h-[32px] items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--panel)] px-3 text-[12px] text-zinc-300 transition-colors hover:bg-white/[0.04] shrink-0"
-      >
-        <Download className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Export</span>
-      </button>
 
       {rightExtras && <div className="flex items-center gap-2">{rightExtras}</div>}
     </header>

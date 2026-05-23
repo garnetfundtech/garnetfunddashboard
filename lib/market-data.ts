@@ -213,10 +213,6 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
     const longMarketValue = Number(balances.longMarketValue ?? 0);
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
-    const totalMarketValue = rawPositions.reduce(
-      (s: number, p: Record<string, unknown>) => s + Number(p.marketValue ?? 0),
-      0,
-    );
 
     const positions: LivePosition[] = rawPositions
       .filter((p) => {
@@ -234,7 +230,9 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
         const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
         const dayPnl = Number(p.currentDayProfitLoss ?? 0);
         const dayPnlPct = Number(p.currentDayProfitLossPercentage ?? 0);
-        const weight = totalMarketValue > 0 ? (marketValue / totalMarketValue) * 100 : 0;
+        // Use liquidationValue (cash + securities) as denominator so weights
+        // reflect true portfolio allocation including uninvested cash
+        const weight = liquidationValue > 0 ? (marketValue / liquidationValue) * 100 : 0;
 
         return {
           ticker: String(inst.symbol),

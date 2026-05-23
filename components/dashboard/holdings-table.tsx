@@ -62,7 +62,7 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir(["ticker", "name", "sector", "assetType"].includes(key) ? "asc" : "desc");
+      setSortDir(["ticker", "name", "sector"].includes(key) ? "asc" : "desc");
     }
   }
 
@@ -99,13 +99,12 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed text-[10.5px]">
+        <table className="w-full min-w-[900px] table-fixed text-[10.5px]">
           <thead className="bg-white/[0.015] text-left text-zinc-500">
             <tr>
               <th className={thCls} onClick={() => handleSort("ticker")}>Ticker <SortIcon sortKey={sortKey} k="ticker" sortDir={sortDir} /></th>
               <th className={thCls} onClick={() => handleSort("name")}>Name <SortIcon sortKey={sortKey} k="name" sortDir={sortDir} /></th>
               <th className={thCls} onClick={() => handleSort("sector")}>Sector <SortIcon sortKey={sortKey} k="sector" sortDir={sortDir} /></th>
-              <th className={thCls} onClick={() => handleSort("assetType")}>Type <SortIcon sortKey={sortKey} k="assetType" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("quantity")}>Qty <SortIcon sortKey={sortKey} k="quantity" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("avgCost")}>Avg Cost <SortIcon sortKey={sortKey} k="avgCost" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("currentPrice")}>Price <SortIcon sortKey={sortKey} k="currentPrice" sortDir={sortDir} /></th>
@@ -120,7 +119,7 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
           <tbody>
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={13} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={12} className="px-3 py-6 text-center text-zinc-500">
                   {positions.length === 0
                     ? "No positions found. Holdings will appear here after securities are purchased."
                     : "No positions match this filter."}
@@ -136,10 +135,9 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
                     <td className="px-3 py-1">
                       <span className="inline-flex items-center gap-1.5 text-zinc-400">
                         <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: sectorColor }} />
-                        {pos.sector ?? "—"}
+                        <span className="whitespace-nowrap">{pos.sector ?? "—"}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-1 text-zinc-500">{pos.assetType}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{pos.quantity.toLocaleString()}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.avgCost)}</td>
                     <td className="px-3 py-1 text-right tabular-nums font-medium text-white">{fmtUsd(pos.currentPrice)}</td>
