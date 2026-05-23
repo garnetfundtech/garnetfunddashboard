@@ -18,7 +18,6 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LogoMark } from "@/components/dashboard/logo-mark";
 import type { UserRole } from "@/lib/types";
 import { logoutAction } from "@/app/(auth)/login/actions";
 import { getSidebarNavItems } from "@/lib/nav-access";
@@ -58,11 +57,11 @@ export function SidebarNav({
   const items = getSidebarNavItems(role);
 
   return (
-    <aside className="panel flex h-full w-[64px] flex-col bg-[#08090a] px-3 py-3">
-      <div className="flex justify-center px-1 py-1">
-        <LogoMark />
+    <aside className="panel flex h-full w-[176px] flex-col bg-[#08090a] px-2.5 py-3">
+      <div className="px-2 py-1">
+        <span className="text-[13px] font-semibold tracking-tight text-white">Garnet Fund</span>
       </div>
-      <nav className="mt-6 flex flex-col gap-1">
+      <nav className="mt-5 flex flex-col gap-0.5">
         {items.map((item) => {
           const active = pathname === item.href;
           const Icon = ICONS[item.href as keyof typeof ICONS] ?? ChartLine;
@@ -71,42 +70,45 @@ export function SidebarNav({
             <Link
               key={item.href}
               href={item.href}
-              title={item.label}
               className={cn(
-                "flex items-center justify-center rounded-[10px] px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900/70 hover:text-white",
+                "flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] text-zinc-400 transition hover:bg-zinc-900/70 hover:text-white",
                 active && "bg-white/[0.045] text-white",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-[15px] w-[15px] shrink-0" />
+              <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto space-y-2 pt-2">
+      <div className="mt-auto space-y-1.5 pt-2">
         {isMenuOpen ? (
           <div className="rounded-[9px] bg-white/[0.03] p-1">
             {role === "developer" || role === "admin" ? (
               <Link
                 href="/admin"
-                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
+                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
               >
-                <Shield className="h-3.5 w-3.5" />
+                <Shield className="h-3.5 w-3.5 shrink-0" />
+                <span>Admin</span>
               </Link>
             ) : (
               <Link
                 href="/onboarding"
-                className="flex items-center gap-2 rounded-[8px] px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
+                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
               >
-                <Settings className="h-3.5 w-3.5" />
+                <Settings className="h-3.5 w-3.5 shrink-0" />
+                <span>Settings</span>
               </Link>
             )}
             <form action={logoutAction}>
               <button
                 type="submit"
-                className="mt-1 flex w-full items-center gap-2 rounded-[8px] px-2 py-2 text-left text-xs text-zinc-300 hover:bg-[#8e060420] hover:text-[#f4c5c4]"
+                className="mt-1 flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-xs text-zinc-300 hover:bg-[#8e060420] hover:text-[#f4c5c4]"
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut className="h-3.5 w-3.5 shrink-0" />
+                <span>Sign out</span>
               </button>
             </form>
           </div>
@@ -114,11 +116,12 @@ export function SidebarNav({
         <button
           type="button"
           onClick={() => setIsMenuOpen((value) => !value)}
-          className="glass-input flex w-full justify-center items-center rounded-[9px] px-1.5 py-2 hover:bg-white/[0.1]"
+          className="glass-input flex w-full items-center gap-2.5 rounded-[9px] px-2 py-2 hover:bg-white/[0.06]"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-xs font-semibold text-zinc-200">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-xs font-semibold text-zinc-200">
             {initials || "U"}
           </div>
+          <span className="truncate text-[12px] text-zinc-400">{fullName}</span>
         </button>
       </div>
     </aside>

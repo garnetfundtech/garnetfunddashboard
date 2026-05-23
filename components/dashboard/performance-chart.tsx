@@ -129,7 +129,7 @@ export function PerformanceChart({
   const hasPortfolio = !cashOnlyMode && portfolioCandles.length > 0;
 
   return (
-    <section className="panel flex flex-1 flex-col p-4 min-h-[300px]">
+    <section className="panel flex h-full min-h-0 flex-col overflow-hidden p-3">
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="caps-label">Performance</p>
@@ -183,7 +183,7 @@ export function PerformanceChart({
         {error && !loading && <span className="text-[10px] text-rose-500">Data unavailable</span>}
       </div>
 
-      <div className="min-h-[200px] flex-1">
+      <div className="min-h-0 flex-1">
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-zinc-600">
             {loading ? "Fetching market data…" : "No benchmark data available"}

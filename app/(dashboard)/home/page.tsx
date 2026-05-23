@@ -65,7 +65,7 @@ export default async function HomePage() {
       {/* Row 2: Chart + Indices + Risk — fixed 286px */}
       <div
         className="grid gap-2"
-        style={{ gridTemplateColumns: "minmax(0, 1.55fr) 188px 188px", height: "286px" }}
+        style={{ gridTemplateColumns: "minmax(0, 1.55fr) 188px 188px", height: "286px", gridTemplateRows: "minmax(0, 1fr)" }}
       >
         <PerformanceChartClient initialBenchmark={benchmarkYtd} cashOnlyMode={cashOnly} />
         <OverviewRail market={market} />
