@@ -1,9 +1,10 @@
 import { HoldingsTable } from "@/components/dashboard/holdings-table";
 import { MarketMoversPanel } from "@/components/dashboard/market-movers-panel";
-import { MetricGrid } from "@/components/dashboard/metric-grid";
+import { KpiStrip } from "@/components/dashboard/kpi-strip";
+import { RiskPanel } from "@/components/dashboard/risk-panel";
+import { SectorExposure } from "@/components/dashboard/sector-exposure";
 import { OverviewRail } from "@/components/dashboard/overview-rail";
 import { PerformanceChartClient } from "@/components/dashboard/performance-chart-client";
-import { SectorPerformance } from "@/components/dashboard/sector-performance";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { getHomepageData } from "@/lib/data";
 import { computePortfolioRiskStats, enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
@@ -17,7 +18,7 @@ export default async function HomePage() {
   const { portfolio, market, benchmarkYtd } = await getHomepageData();
   const token = await getValidTraderToken();
 
-  let riskStats: { betaVsSpy: number | null; sectorCount: number | null } | null = null;
+  let riskStats: { betaVsSpy: number | null; sectorCount: number | null; sharpe30?: number | null; sharpe90?: number | null } | null = null;
   let enrichedPositions = portfolio?.positions ?? [];
   let etfQuotes: Record<string, SchwabQuoteResponse> | null = null;
 
@@ -28,7 +29,12 @@ export default async function HomePage() {
       getQuotes(token, SECTOR_ETF_TICKERS),
     ]);
     if (riskResult.status === "fulfilled") {
-      riskStats = { betaVsSpy: riskResult.value.betaVsSpy, sectorCount: riskResult.value.sectorCount };
+      riskStats = {
+        betaVsSpy: riskResult.value.betaVsSpy,
+        sectorCount: riskResult.value.sectorCount,
+        sharpe30: (riskResult.value as { sharpe30?: number | null }).sharpe30 ?? null,
+        sharpe90: (riskResult.value as { sharpe90?: number | null }).sharpe90 ?? null,
+      };
     }
     if (enriched.status === "fulfilled") {
       enrichedPositions = enriched.value;
@@ -45,28 +51,42 @@ export default async function HomePage() {
   }
 
   const cashOnly = enrichedPositions.length === 0;
+  const benchmarkSpark = benchmarkYtd.map((c) => c.value);
+  const lastSync = market?.fetchedAt ?? portfolio?.verifiedAt ?? null;
+
+  // etfQuotes kept for potential future use
+  void etfQuotes;
 
   return (
-    <div className="space-y-3">
-      <TopBar />
+    <div className="space-y-2">
+      <TopBar lastSync={lastSync} />
+      <KpiStrip portfolio={portfolio} benchmarkSpark={benchmarkSpark} riskStats={riskStats} />
 
-      {/* Full-width top row: 5 metric tiles + market status */}
-      <MetricGrid portfolio={portfolio} riskStats={riskStats} market={market} />
-
-      {/* Chart (left) + index cards (right), cards match chart height */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_300px] xl:min-h-[500px]">
+      {/* Row 2: Chart + Indices + Risk — fixed 286px */}
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: "minmax(0, 1.55fr) 188px 188px", height: "286px" }}
+      >
         <PerformanceChartClient initialBenchmark={benchmarkYtd} cashOnlyMode={cashOnly} />
         <OverviewRail market={market} />
+        <RiskPanel
+          betaVsSpy={riskStats?.betaVsSpy ?? null}
+          sharpe30={riskStats?.sharpe30 ?? null}
+          sharpe90={riskStats?.sharpe90 ?? null}
+          sectorCount={riskStats?.sectorCount ?? null}
+          positions={enrichedPositions}
+        />
       </div>
 
-      <HoldingsTable livePositions={enrichedPositions} />
-
-      <SectorPerformance positions={enrichedPositions} etfQuotes={etfQuotes} portfolioValue={portfolio?.liquidationValue ?? null} />
-
-      <MarketMoversPanel
-        gainers={market?.gainers ?? []}
-        losers={market?.losers ?? []}
-      />
+      {/* Row 3: Holdings + Sector Exposure + Movers */}
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(220px, 0.7fr) minmax(220px, 0.7fr)" }}
+      >
+        <HoldingsTable livePositions={enrichedPositions} />
+        <SectorExposure positions={enrichedPositions} portfolioValue={portfolio?.liquidationValue ?? null} />
+        <MarketMoversPanel gainers={market?.gainers ?? []} losers={market?.losers ?? []} />
+      </div>
     </div>
   );
 }

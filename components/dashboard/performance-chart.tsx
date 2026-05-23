@@ -137,7 +137,7 @@ export function PerformanceChart({
             {hasPortfolio ? "Portfolio vs S&P 500" : "S&P 500 (SPY)"}
           </h2>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 rounded-[7px] border border-white/[0.06] bg-black/30 p-0.5">
           {RANGES.map((r) => (
             <button
               key={r}
@@ -145,7 +145,7 @@ export function PerformanceChart({
               disabled={loading}
               className={`rounded-[5px] px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                 r === range
-                  ? "bg-white/10 text-white"
+                  ? "bg-[#8e0604]/20 text-[#f4c5c4]"
                   : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
               }`}
             >
@@ -166,6 +166,19 @@ export function PerformanceChart({
           <span className="h-0.5 w-3.5 rounded-full bg-zinc-500" />
           S&amp;P 500
         </span>
+        {hasPortfolio && portfolioCandles.length > 0 && benchmarkData.length > 0 && (() => {
+          const gfEnd = portfolioCandles[portfolioCandles.length - 1]?.portfolio;
+          const spyEnd = benchmarkData[benchmarkData.length - 1]?.value;
+          if (gfEnd == null || spyEnd == null) return null;
+          const alpha = gfEnd - spyEnd;
+          return (
+            <span className="whitespace-nowrap rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-[1px] text-[10.5px] text-zinc-300">
+              α <span className={`tabular-nums ${alpha >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {alpha >= 0 ? "+" : ""}{alpha.toFixed(2)}%
+              </span>
+            </span>
+          );
+        })()}
         {loading && <span className="text-[10px] text-zinc-600 animate-pulse">Loading…</span>}
         {error && !loading && <span className="text-[10px] text-rose-500">Data unavailable</span>}
       </div>

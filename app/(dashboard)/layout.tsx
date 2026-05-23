@@ -12,7 +12,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen gap-3 overflow-hidden bg-background p-3">
+    <div className="flex h-screen gap-2 overflow-hidden bg-background p-2">
       <SidebarNav
         role={profile.role}
         fullName={
