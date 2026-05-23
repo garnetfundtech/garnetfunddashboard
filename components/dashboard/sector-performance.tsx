@@ -36,8 +36,8 @@ function PctBadge({ value }: { value: number | null | undefined }) {
   );
 }
 
-/** Weighted day P&L % per sector from our portfolio */
-function buildFundSectors(positions: LivePosition[]) {
+/** Weighted day P&L % per sector from our portfolio, including cash */
+function buildFundSectors(positions: LivePosition[], portfolioValue: number) {
   const sectors = new Map<string, { totalValue: number; weightedDayPnl: number }>();
   for (const p of positions) {
     const s = p.sector ?? "Unknown";
@@ -46,25 +46,43 @@ function buildFundSectors(positions: LivePosition[]) {
     existing.weightedDayPnl += p.dayPnl;
     sectors.set(s, existing);
   }
-  const totalPortfolioValue = positions.reduce((sum, p) => sum + p.marketValue, 0);
-  return [...sectors.entries()]
+  const investedValue = positions.reduce((sum, p) => sum + p.marketValue, 0);
+  const totalValue = portfolioValue > 0 ? portfolioValue : investedValue;
+  const cashValue = Math.max(0, totalValue - investedValue);
+
+  const rows = [...sectors.entries()]
     .map(([name, data]) => ({
       name,
-      weight: totalPortfolioValue > 0 ? (data.totalValue / totalPortfolioValue) * 100 : 0,
+      weight: totalValue > 0 ? (data.totalValue / totalValue) * 100 : 0,
       dayPnlDollars: data.weightedDayPnl,
       dayPnlPct: data.totalValue > 0 ? (data.weightedDayPnl / data.totalValue) * 100 : null,
+      isCash: false,
     }))
     .sort((a, b) => b.weight - a.weight);
+
+  if (cashValue > 0.01) {
+    rows.push({
+      name: "Cash & Equivalents",
+      weight: totalValue > 0 ? (cashValue / totalValue) * 100 : 0,
+      dayPnlDollars: 0,
+      dayPnlPct: null,
+      isCash: true,
+    });
+  }
+
+  return rows;
 }
 
 export function SectorPerformance({
   positions,
   etfQuotes,
+  portfolioValue,
 }: {
   positions: LivePosition[];
   etfQuotes: Record<string, SchwabQuoteResponse> | null;
+  portfolioValue?: number | null;
 }) {
-  const fundSectors = buildFundSectors(positions);
+  const fundSectors = buildFundSectors(positions, portfolioValue ?? 0);
   const hasPositions = positions.length > 0;
 
   return (
@@ -80,13 +98,16 @@ export function SectorPerformance({
               <div key={s.name} className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="truncate text-sm text-zinc-200">{s.name}</span>
-                    <PctBadge value={s.dayPnlPct} />
+                    <span className={`truncate text-sm ${s.isCash ? "text-zinc-500" : "text-zinc-200"}`}>{s.name}</span>
+                    {s.isCash ? (
+                      <span className="tabular-nums text-sm font-semibold text-zinc-600">—</span>
+                    ) : (
+                      <PctBadge value={s.dayPnlPct} />
+                    )}
                   </div>
-                  {/* Weight bar */}
                   <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
                     <div
-                      className="h-full rounded-full bg-[#8e0604]"
+                      className={`h-full rounded-full ${s.isCash ? "bg-zinc-700" : "bg-[#8e0604]"}`}
                       style={{ width: `${Math.min(100, s.weight)}%` }}
                     />
                   </div>

@@ -65,6 +65,34 @@ export function AlertsPageClient({
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [formTicker, setFormTicker] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formLivePrice, setFormLivePrice] = useState<number | null>(null);
+  const [tickerLookupLoading, setTickerLookupLoading] = useState(false);
+
+  function handleTickerChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+    setFormTicker(val);
+    setFormCompany("");
+    setFormLivePrice(null);
+    if (tickerDebounceRef.current) clearTimeout(tickerDebounceRef.current);
+    if (val.length < 1) return;
+    tickerDebounceRef.current = setTimeout(async () => {
+      setTickerLookupLoading(true);
+      try {
+        const res = await fetch(`/api/schwab/market/quotes?symbols=${encodeURIComponent(val)}`);
+        const json = (await res.json()) as { ok: boolean; data?: Record<string, { description?: string; quote?: { lastPrice?: number } }> };
+        if (json.ok && json.data?.[val]) {
+          const q = json.data[val];
+          if (q.description) setFormCompany(q.description);
+          if (q.quote?.lastPrice != null) setFormLivePrice(q.quote.lastPrice);
+        }
+      } catch { /* ignore */ } finally {
+        setTickerLookupLoading(false);
+      }
+    }, 500);
+  }
 
   const refreshPrices = useCallback(async () => {
     const tickers = [...new Set(alerts.map((a) => a.ticker))];
@@ -115,14 +143,20 @@ export function AlertsPageClient({
     (a) => a.status === "triggered_buy" || a.status === "triggered_sell",
   ).length;
 
+  function resetForm() {
+    setFormTicker("");
+    setFormCompany("");
+    setFormLivePrice(null);
+    formRef.current?.reset();
+  }
+
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
       await createAlertAction(fd);
-      formRef.current?.reset();
+      resetForm();
       setShowForm(false);
-      // optimistically add to local state; server will revalidate on next load
     });
   }
 
@@ -160,7 +194,7 @@ export function AlertsPageClient({
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setShowForm((v) => { if (v) resetForm(); return !v; }); }}
           className="inline-flex items-center gap-2 rounded-[10px] bg-[#8e0604] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#a80705]"
         >
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -174,17 +208,33 @@ export function AlertsPageClient({
           <p className="caps-label mb-4">New Alert</p>
           <form ref={formRef} onSubmit={handleCreate} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="flex gap-2">
-              <input
-                name="ticker"
-                placeholder="Ticker (e.g. AAPL)"
-                required
-                className="glass-input w-28 shrink-0 px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
-              />
-              <input
-                name="companyName"
-                placeholder="Company name"
-                className="glass-input flex-1 px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-              />
+              <div className="relative shrink-0">
+                <input
+                  name="ticker"
+                  placeholder="Ticker (e.g. AAPL)"
+                  required
+                  value={formTicker}
+                  onChange={handleTickerChange}
+                  className="glass-input w-28 px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
+                />
+                {tickerLookupLoading && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">…</span>
+                )}
+              </div>
+              <div className="flex flex-1 flex-col gap-0.5">
+                <input
+                  name="companyName"
+                  placeholder="Company name"
+                  value={formCompany}
+                  onChange={(e) => setFormCompany(e.target.value)}
+                  className="glass-input flex-1 px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                />
+                {formLivePrice != null && (
+                  <p className="px-1 text-[11px] text-zinc-500">
+                    Current price: <span className="text-zinc-300">${formLivePrice.toFixed(2)}</span>
+                  </p>
+                )}
+              </div>
             </div>
             <select
               name="sector"

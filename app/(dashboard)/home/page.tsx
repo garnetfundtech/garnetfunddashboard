@@ -61,7 +61,7 @@ export default async function HomePage() {
 
       <HoldingsTable livePositions={enrichedPositions} />
 
-      <SectorPerformance positions={enrichedPositions} etfQuotes={etfQuotes} />
+      <SectorPerformance positions={enrichedPositions} etfQuotes={etfQuotes} portfolioValue={portfolio?.liquidationValue ?? null} />
 
       <MarketMoversPanel
         gainers={market?.gainers ?? []}

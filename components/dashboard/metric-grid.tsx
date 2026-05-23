@@ -38,9 +38,9 @@ function buildTiles(
   const aum = portfolio.liquidationValue;
   const cash = portfolio.cashAvailable;
   const unrealized = portfolio.unrealizedPnl;
-  const unrealizedPct = aum - cash > 0 ? (unrealized / (aum - cash)) * 100 : 0;
+  const unrealizedPct = aum > 0 ? (unrealized / aum) * 100 : 0;
   const dayPnl = portfolio.dayPnl;
-  const dayPnlPct = aum - cash > 0 ? (dayPnl / (aum - cash)) * 100 : 0;
+  const dayPnlPct = aum > 0 ? (dayPnl / aum) * 100 : 0;
   const positions = portfolio.positionCount;
 
   const base: Tile[] = [

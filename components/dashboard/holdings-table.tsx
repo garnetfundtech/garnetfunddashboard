@@ -27,10 +27,10 @@ function LiveHoldingsTable({ positions }: { positions: LivePosition[] }) {
         </span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] text-xs">
+        <table className="w-full min-w-[1060px] text-xs">
           <thead className="bg-white/5 text-zinc-400">
             <tr>
-              {["Ticker", "Name", "Type", "Qty", "Avg Cost", "Price", "Mkt Value", "Unreal P&L", "Unreal %", "Day P&L", "Day %", "Weight"].map((col) => (
+              {["Ticker", "Name", "Sector", "Type", "Qty", "Avg Cost", "Price", "Mkt Value", "Unreal P&L", "Unreal %", "Day P&L", "Day %", "Weight"].map((col) => (
                 <th key={col} className="px-3 py-2 text-left font-medium">{col}</th>
               ))}
             </tr>
@@ -38,7 +38,7 @@ function LiveHoldingsTable({ positions }: { positions: LivePosition[] }) {
           <tbody>
             {positions.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={13} className="px-3 py-6 text-center text-zinc-500">
                   No positions found. Holdings will appear here after securities are purchased.
                 </td>
               </tr>
@@ -47,6 +47,7 @@ function LiveHoldingsTable({ positions }: { positions: LivePosition[] }) {
                 <tr key={pos.ticker} className="text-zinc-200 odd:bg-white/[0.015]">
                   <td className="px-3 py-2 font-semibold text-white">{pos.ticker}</td>
                   <td className="max-w-[140px] truncate px-3 py-2 text-zinc-300">{pos.name}</td>
+                  <td className="px-3 py-2 text-zinc-500">{pos.sector ?? "—"}</td>
                   <td className="px-3 py-2 text-zinc-500">{pos.assetType}</td>
                   <td className="px-3 py-2">{pos.quantity.toLocaleString()}</td>
                   <td className="px-3 py-2">{fmtUsd(pos.avgCost)}</td>

@@ -173,6 +173,7 @@ export async function getQuotes(accessToken: string, symbols: string[]) {
 export type SchwabQuoteResponse = {
   assetMainType?: string;
   symbol?: string;
+  description?: string;
   quote?: {
     lastPrice?: number;
     openPrice?: number;
