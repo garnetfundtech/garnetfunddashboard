@@ -89,17 +89,17 @@ export function SectorExposure({
                   />
                   <span className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-300">
                     {r.name}
+                    {!r.isCash && r.dayPnlPct != null && (
+                      <span
+                        className={`ml-1 text-[10px] tabular-nums ${r.dayPnlPct >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        ({fmtPct(r.dayPnlPct)})
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 tabular-nums text-[11.5px] font-medium text-white">
                     {r.weight.toFixed(1)}%
                   </span>
-                  {!r.isCash && r.dayPnlPct != null && (
-                    <span
-                      className={`w-14 shrink-0 text-right tabular-nums text-[10.5px] ${r.dayPnlPct >= 0 ? "text-emerald-400" : "text-rose-400"}`}
-                    >
-                      {fmtPct(r.dayPnlPct)}
-                    </span>
-                  )}
                 </div>
               );
             })}

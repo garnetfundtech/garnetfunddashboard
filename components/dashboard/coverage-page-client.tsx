@@ -154,6 +154,7 @@ export function CoveragePageClient({
       <PageHeader
         kicker="Coverage"
         title="Sector Coverage"
+        subtitle="Analyst assignments, sector status, and research depth across the portfolio."
         actions={
           <PrimaryBtn>
             <Plus className="h-3.5 w-3.5" />

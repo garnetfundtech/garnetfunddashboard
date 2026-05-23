@@ -1,5 +1,4 @@
 import { HoldingsTable } from "@/components/dashboard/holdings-table";
-import { MarketMoversPanel } from "@/components/dashboard/market-movers-panel";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { RiskPanel } from "@/components/dashboard/risk-panel";
 import { SectorExposure } from "@/components/dashboard/sector-exposure";
@@ -77,14 +76,13 @@ export default async function HomePage() {
         />
       </div>
 
-      {/* Row 3: Holdings + Sector Exposure + Movers — fills remaining height */}
+      {/* Row 3: Holdings + Sector Exposure — fills remaining height */}
       <div
         className="grid min-h-0 flex-1 gap-2"
-        style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(200px, 0.65fr) minmax(200px, 0.65fr)" }}
+        style={{ gridTemplateColumns: "minmax(0, 1.55fr) minmax(200px, 0.45fr)" }}
       >
         <HoldingsTable livePositions={enrichedPositions} />
         <SectorExposure positions={enrichedPositions} portfolioValue={portfolio?.liquidationValue ?? null} />
-        <MarketMoversPanel />
       </div>
     </div>
   );

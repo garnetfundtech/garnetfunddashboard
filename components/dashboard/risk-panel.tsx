@@ -33,13 +33,13 @@ export function RiskPanel({
     },
     {
       key: "Sharpe (30D)",
-      sub: "trailing 30 days",
+      sub: sharpe30 != null ? (sharpe30 > 1 ? "strong risk-adj return" : "risk-adj return") : "insufficient data",
       value: sharpe30 != null && Number.isFinite(sharpe30) ? sharpe30.toFixed(2) : "—",
       tone: sharpe30 != null && sharpe30 > 1 ? "good" : null,
     },
     {
       key: "Sharpe (90D)",
-      sub: "trailing 90 days",
+      sub: sharpe90 != null ? (sharpe90 > 1 ? "strong risk-adj return" : "risk-adj return") : "insufficient data",
       value: sharpe90 != null && Number.isFinite(sharpe90) ? sharpe90.toFixed(2) : "—",
       tone: sharpe90 != null && sharpe90 > 1 ? "good" : null,
     },
@@ -67,9 +67,6 @@ export function RiskPanel({
     <section className="panel flex flex-col p-3">
       <div className="mb-1 flex items-center justify-between">
         <p className="caps text-[10px] text-zinc-500">Risk Profile</p>
-        <span className="inline-flex items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-[1px] text-[10px] text-zinc-400">
-          trailing 90D
-        </span>
       </div>
       <div className="flex flex-1 flex-col justify-between">
         {items.map((it, i) => (
