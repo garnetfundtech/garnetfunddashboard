@@ -128,6 +128,7 @@ export type PortfolioSummary = {
   cashAvailable: number;
   longMarketValue: number;
   unrealizedPnl: number;
+  realizedPnl: number;
   dayPnl: number;
   positionCount: number;
   positions: LivePosition[];
@@ -206,11 +207,14 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
     const balances = sec.currentBalances ?? sec.initialBalances ?? {};
     const aggBalance = first.aggregatedBalance ?? {};
 
-    const liquidationValue = Number(
-      aggBalance.currentLiquidationValue ?? balances.liquidationValue ?? 0,
-    );
     const cashAvailable = Number(balances.cashAvailableForTrading ?? 0);
     const longMarketValue = Number(balances.longMarketValue ?? 0);
+    // Schwab's liquidationValue from securitiesAccount.currentBalances sometimes
+    // reflects only the long market value and omits uninvested cash. Use the
+    // larger of the API value and (cash + securities) so weights and P&L % are
+    // always relative to true AUM.
+    const apiLiqValue = Number(aggBalance.currentLiquidationValue ?? balances.liquidationValue ?? 0);
+    const liquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
 
@@ -253,11 +257,22 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
     const unrealizedPnl = positions.reduce((s, p) => s + p.unrealizedPnl, 0);
     const dayPnl = positions.reduce((s, p) => s + p.dayPnl, 0);
 
+    // Sum all realized gains stored in Supabase (from /api/schwab/realized-gains)
+    let realizedPnl = 0;
+    try {
+      const admin = createAdminClient();
+      const { data } = await admin.from("realized_gains").select("gain_loss");
+      if (data) realizedPnl = data.reduce((s, r) => s + Number(r.gain_loss ?? 0), 0);
+    } catch {
+      /* non-fatal — realized gains table may not exist yet */
+    }
+
     return {
       liquidationValue,
       cashAvailable,
       longMarketValue,
       unrealizedPnl,
+      realizedPnl,
       dayPnl,
       positionCount: positions.length,
       positions,

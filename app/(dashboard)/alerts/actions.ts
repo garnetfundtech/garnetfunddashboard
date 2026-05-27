@@ -13,7 +13,7 @@ export async function createAlertAction(formData: FormData) {
   const buyLimit = formData.get("buyLimit") ? Number(formData.get("buyLimit")) : null;
   const sellLimit = formData.get("sellLimit") ? Number(formData.get("sellLimit")) : null;
 
-  if (!ticker || !sector) return;
+  if (!ticker || !sector || buyLimit === null || sellLimit === null) return;
 
   const supabase = await createClient();
   await supabase.from("stock_alerts").insert({

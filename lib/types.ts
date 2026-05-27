@@ -92,6 +92,7 @@ export type PortfolioSummary = {
   cashAvailable: number;
   longMarketValue: number;
   unrealizedPnl: number;
+  realizedPnl: number;
   dayPnl: number;
   positionCount: number;
   positions: LivePosition[];

@@ -29,7 +29,7 @@ export function KpiStrip({
     const tiles = [
       "Total AUM",
       "Day P&L",
-      "Unrealized P&L",
+      "Total P&L",
       "YTD vs Index",
       "Portfolio Beta",
       "Cash Weight",
@@ -51,7 +51,9 @@ export function KpiStrip({
   const dayPnl = portfolio.dayPnl;
   const dayPnlPct = aum > 0 ? (dayPnl / aum) * 100 : 0;
   const unrealized = portfolio.unrealizedPnl;
-  const unrealizedPct = aum > 0 ? (unrealized / aum) * 100 : 0;
+  const realized = portfolio.realizedPnl ?? 0;
+  const totalPnl = unrealized + realized;
+  const totalPnlPct = aum > 0 ? (totalPnl / aum) * 100 : 0;
   const cashWeightPct = aum > 0 ? (cash / aum) * 100 : 0;
   const benchmarkYtd = benchmarkSpark.length > 0 ? (benchmarkSpark[benchmarkSpark.length - 1] ?? 0) : null;
 
@@ -77,10 +79,10 @@ export function KpiStrip({
       spark: benchmarkSpark.slice(-7),
     },
     {
-      label: "Unrealized P&L",
-      value: <span className={unrealized >= 0 ? "text-emerald-400" : "text-rose-400"}>{fmtSigned(unrealized)}</span>,
-      sub: <span className="text-zinc-500">{fmtPct(unrealizedPct)} on cost</span>,
-      tone: unrealized >= 0 ? "pos" : "neg",
+      label: "Total P&L",
+      value: <span className={totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}>{fmtSigned(totalPnl)}</span>,
+      sub: <span className="text-zinc-500">open + realized{realized !== 0 ? ` (${fmtSigned(realized)} closed)` : ""}</span>,
+      tone: totalPnl >= 0 ? "pos" : "neg",
       spark: benchmarkSpark.slice(-30),
     },
     {

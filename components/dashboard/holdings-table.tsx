@@ -109,8 +109,8 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
               <th className={thR} onClick={() => handleSort("avgCost")}>Avg Cost <SortIcon sortKey={sortKey} k="avgCost" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("currentPrice")}>Price <SortIcon sortKey={sortKey} k="currentPrice" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("marketValue")}>Mkt Value <SortIcon sortKey={sortKey} k="marketValue" sortDir={sortDir} /></th>
-              <th className={thR} onClick={() => handleSort("unrealizedPnl")}>Unreal P&amp;L <SortIcon sortKey={sortKey} k="unrealizedPnl" sortDir={sortDir} /></th>
-              <th className={thR} onClick={() => handleSort("unrealizedPnlPct")}>Unreal % <SortIcon sortKey={sortKey} k="unrealizedPnlPct" sortDir={sortDir} /></th>
+              <th className={thR} onClick={() => handleSort("unrealizedPnl")}>Open P&amp;L <SortIcon sortKey={sortKey} k="unrealizedPnl" sortDir={sortDir} /></th>
+              <th className={thR} onClick={() => handleSort("unrealizedPnlPct")}>Open % <SortIcon sortKey={sortKey} k="unrealizedPnlPct" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("dayPnl")}>Day P&amp;L <SortIcon sortKey={sortKey} k="dayPnl" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("dayPnlPct")}>Day % <SortIcon sortKey={sortKey} k="dayPnlPct" sortDir={sortDir} /></th>
               <th className={thR} onClick={() => handleSort("weight")}>Weight <SortIcon sortKey={sortKey} k="weight" sortDir={sortDir} /></th>

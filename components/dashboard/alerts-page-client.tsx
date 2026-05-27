@@ -74,6 +74,8 @@ export function AlertsPageClient({
   const [formTicker, setFormTicker] = useState("");
   const [formCompany, setFormCompany] = useState("");
   const [formLivePrice, setFormLivePrice] = useState<number | null>(null);
+  const [formBuyLimit, setFormBuyLimit] = useState("");
+  const [formSellLimit, setFormSellLimit] = useState("");
   const [tickerLookupLoading, setTickerLookupLoading] = useState(false);
 
   function handleTickerChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -81,6 +83,8 @@ export function AlertsPageClient({
     setFormTicker(val);
     setFormCompany("");
     setFormLivePrice(null);
+    setFormBuyLimit("");
+    setFormSellLimit("");
     if (tickerDebounceRef.current) clearTimeout(tickerDebounceRef.current);
     if (val.length < 1) return;
     tickerDebounceRef.current = setTimeout(async () => {
@@ -95,6 +99,10 @@ export function AlertsPageClient({
         if (q) {
           setFormCompany(q.description ?? "");
           setFormLivePrice(q.lastPrice ?? null);
+          if (q.lastPrice != null) {
+            setFormBuyLimit(q.lastPrice.toFixed(2));
+            setFormSellLimit(q.lastPrice.toFixed(2));
+          }
         }
       } catch {
         /* ignore */
@@ -396,6 +404,8 @@ export function AlertsPageClient({
                   setFormTicker("");
                   setFormCompany("");
                   setFormLivePrice(null);
+                  setFormBuyLimit("");
+                  setFormSellLimit("");
                 });
               }}
             >
@@ -412,7 +422,10 @@ export function AlertsPageClient({
                   <p className="mt-1 text-[11px] text-zinc-500">Looking up…</p>
                 )}
                 {formCompany && (
-                  <p className="mt-1 text-[11px] text-zinc-400">{formCompany}</p>
+                  <>
+                    <input type="hidden" name="companyName" value={formCompany} />
+                    <p className="mt-1 text-[11px] text-zinc-400">{formCompany}</p>
+                  </>
                 )}
                 {formLivePrice !== null && (
                   <p className="mt-0.5 text-[11px] text-emerald-400">
@@ -435,15 +448,21 @@ export function AlertsPageClient({
                 name="buyLimit"
                 type="number"
                 step="0.01"
+                required
+                value={formBuyLimit}
+                onChange={(e) => setFormBuyLimit(e.target.value)}
                 className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-                placeholder="Buy limit (optional)"
+                placeholder="Buy limit"
               />
               <input
                 name="sellLimit"
                 type="number"
                 step="0.01"
+                required
+                value={formSellLimit}
+                onChange={(e) => setFormSellLimit(e.target.value)}
                 className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
-                placeholder="Sell limit (optional)"
+                placeholder="Sell limit"
               />
               <div className="flex justify-end gap-2 pt-1">
                 <button

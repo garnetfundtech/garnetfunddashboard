@@ -6,6 +6,7 @@ type SchwabPosition = {
   marketValue?: number;
   longQuantity?: number;
   shortQuantity?: number;
+  averagePrice?: number;
   instrument?: {
     symbol?: string;
     description?: string;
@@ -105,6 +106,8 @@ export async function POST() {
               sector: "Unknown",
               market_value: marketValue,
               weight,
+              avg_cost: p.averagePrice != null ? Number(p.averagePrice) : null,
+              quantity: p.longQuantity != null ? Number(p.longQuantity) : null,
             }
           : null;
       })
@@ -115,6 +118,8 @@ export async function POST() {
       sector: string;
       market_value: number;
       weight: number;
+      avg_cost: number | null;
+      quantity: number | null;
     }[];
 
     if (rows.length > 0) {

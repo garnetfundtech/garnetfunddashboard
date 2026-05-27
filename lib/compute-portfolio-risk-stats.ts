@@ -33,8 +33,12 @@ export async function enrichPositionsWithSectors(positions: LivePosition[]): Pro
   if (!process.env.FMP_API_KEY || !positions.length) return positions;
   const enriched = await Promise.all(
     positions.map(async (p) => {
-      const prof = await fetchProfile(p.ticker);
-      return { ...p, sector: prof?.sector ?? p.sector ?? "Unknown" };
+      try {
+        const prof = await fetchProfile(p.ticker);
+        return { ...p, sector: prof?.sector ?? p.sector ?? "Unknown" };
+      } catch {
+        return { ...p, sector: p.sector ?? "Unknown" };
+      }
     }),
   );
   return enriched;

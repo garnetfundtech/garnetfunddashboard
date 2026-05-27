@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getValidTraderToken, fetchPortfolioSummary } from "@/lib/market-data";
-import { getPriceHistory } from "@/lib/schwab";
+import { getValidTraderToken } from "@/lib/market-data";
+import { getAccountPositions, getPriceHistory } from "@/lib/schwab";
 
 type PeriodKey = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
 
@@ -37,14 +37,37 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ ok: false, candles: [] }, { status: 401 });
 
   try {
-    const portfolio = await fetchPortfolioSummary();
-    if (!portfolio?.positions?.length) {
-      return NextResponse.json({ ok: false, candles: [] });
-    }
+    // Fetch positions directly (avoids a second getValidTraderToken + Supabase round-trip)
+    const raw = await getAccountPositions(token);
+    const accountList = Array.isArray(raw) ? raw : [raw];
+    const first = accountList[0];
+    if (!first?.securitiesAccount) return NextResponse.json({ ok: false, candles: [] });
 
-    // Top 10 positions by weight
-    const positions = [...portfolio.positions]
-      .sort((a, b) => b.weight - a.weight)
+    const sec = first.securitiesAccount;
+    const balances = sec.currentBalances ?? sec.initialBalances ?? {};
+    const aggBalance = first.aggregatedBalance ?? {};
+    const cashAvailable = Number(balances.cashAvailableForTrading ?? 0);
+    const longMarketValue = Number(balances.longMarketValue ?? 0);
+    const apiLiqValue = Number(aggBalance.currentLiquidationValue ?? balances.liquidationValue ?? 0);
+    const liquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
+
+    const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
+    const positionList = rawPositions
+      .map((p) => {
+        const inst = p.instrument as Record<string, unknown> | undefined;
+        const ticker = String(inst?.symbol ?? "").toUpperCase();
+        if (!ticker) return null;
+        const qty = Number(p.longQuantity ?? 0);
+        const marketValue = Number(p.marketValue ?? 0);
+        return { ticker, qty, marketValue };
+      })
+      .filter((p): p is { ticker: string; qty: number; marketValue: number } => p !== null && p.qty > 0);
+
+    if (!positionList.length) return NextResponse.json({ ok: false, candles: [] });
+
+    // Top 10 by market value
+    const positions = [...positionList]
+      .sort((a, b) => b.marketValue - a.marketValue)
       .slice(0, 10);
 
     // Fetch price history for each position in parallel
@@ -91,8 +114,6 @@ export async function GET(request: NextRequest) {
       basePriceByTicker[t] = histByTicker[t][0]?.close ?? 0;
     }
 
-    // Use liquidationValue (total AUM incl. cash) as denominator so cash dilutes returns
-    const liquidationValue = portfolio.liquidationValue;
     const coveredPositions = positions.filter(
       (p) => tickers.includes(p.ticker) && basePriceByTicker[p.ticker] > 0,
     );
