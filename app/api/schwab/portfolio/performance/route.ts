@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getValidTraderToken } from "@/lib/market-data";
 import { getAccountPositions, getPriceHistory } from "@/lib/schwab";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type PeriodKey = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
 
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ ok: false, candles: [] }, { status: 401 });
 
   try {
-    // Fetch positions directly (avoids a second getValidTraderToken + Supabase round-trip)
+    // Account snapshot (positions + balances)
     const raw = await getAccountPositions(token);
     const accountList = Array.isArray(raw) ? raw : [raw];
     const first = accountList[0];
@@ -52,97 +53,142 @@ export async function GET(request: NextRequest) {
     const liquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
-    const positionList = rawPositions
+    const heldPositions = rawPositions
       .map((p) => {
         const inst = p.instrument as Record<string, unknown> | undefined;
         const ticker = String(inst?.symbol ?? "").toUpperCase();
         if (!ticker) return null;
         const qty = Number(p.longQuantity ?? 0);
+        const avgCost = Number(p.averagePrice ?? 0);
         const marketValue = Number(p.marketValue ?? 0);
-        return { ticker, qty, marketValue };
+        const unrealizedPnl = Number(p.longOpenProfitLoss ?? (marketValue - avgCost * qty));
+        return { ticker, qty, avgCost, marketValue, unrealizedPnl };
       })
-      .filter((p): p is { ticker: string; qty: number; marketValue: number } => p !== null && p.qty > 0);
+      .filter((p): p is { ticker: string; qty: number; avgCost: number; marketValue: number; unrealizedPnl: number } => p !== null && p.qty > 0);
 
-    if (!positionList.length) return NextResponse.json({ ok: false, candles: [] });
+    // Realized gains from Supabase (gain_loss, filled_at)
+    let realizedRows: { filled_at: string; gain_loss: number }[] = [];
+    try {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("realized_gains")
+        .select("filled_at, gain_loss")
+        .order("filled_at", { ascending: true });
+      if (data) {
+        realizedRows = data
+          .map((r) => ({ filled_at: String(r.filled_at), gain_loss: Number(r.gain_loss ?? 0) }))
+          .filter((r) => Number.isFinite(r.gain_loss));
+      }
+    } catch { /* table missing or empty — non-fatal */ }
+    const totalRealized = realizedRows.reduce((s, r) => s + r.gain_loss, 0);
 
-    // Top 10 by market value
-    const positions = [...positionList]
-      .sort((a, b) => b.marketValue - a.marketValue)
-      .slice(0, 10);
+    // SPY price history is the canonical date axis (always exists for any period)
+    const spy = await getPriceHistory(
+      token,
+      "SPY",
+      params.periodType,
+      params.period,
+      params.frequencyType,
+      params.frequency,
+    );
+    if (!spy.candles?.length) return NextResponse.json({ ok: false, candles: [] });
+    const dateAxis: { datetime: number; date: string }[] = spy.candles.map((c: Record<string, unknown>) => ({
+      datetime: Number(c.datetime),
+      date: formatDate(Number(c.datetime), period),
+    }));
 
-    // Fetch price history for each position in parallel
+    // Per-position price history (for unrealized P&L over time on currently held names)
     const histByTicker: Record<string, { datetime: number; close: number }[]> = {};
-    await Promise.all(
-      positions.map(async (pos) => {
-        try {
-          const hist = await getPriceHistory(
-            token,
-            pos.ticker,
-            params.periodType,
-            params.period,
-            params.frequencyType,
-            params.frequency,
-          );
-          if (hist.candles?.length) {
-            histByTicker[pos.ticker] = hist.candles.map((c: Record<string, unknown>) => ({
-              datetime: Number(c.datetime),
-              close: Number(c.close),
-            }));
-          }
-        } catch { /* skip */ }
-      }),
-    );
+    if (heldPositions.length) {
+      const top = [...heldPositions].sort((a, b) => b.marketValue - a.marketValue).slice(0, 10);
+      await Promise.all(
+        top.map(async (pos) => {
+          try {
+            const hist = await getPriceHistory(
+              token,
+              pos.ticker,
+              params.periodType,
+              params.period,
+              params.frequencyType,
+              params.frequency,
+            );
+            if (hist.candles?.length) {
+              histByTicker[pos.ticker] = hist.candles.map((c: Record<string, unknown>) => ({
+                datetime: Number(c.datetime),
+                close: Number(c.close),
+              }));
+            }
+          } catch { /* skip */ }
+        }),
+      );
+    }
 
-    const tickers = Object.keys(histByTicker);
-    if (!tickers.length) return NextResponse.json({ ok: false, candles: [] });
-
-    // Use the ticker with the most candles as the datetime reference
-    const refTicker = tickers.reduce((a, b) =>
-      histByTicker[a].length >= histByTicker[b].length ? a : b
-    );
-    const refCandles = histByTicker[refTicker];
-
-    // Build datetime → close map for each ticker
+    // Map of datetime → close for each held ticker
     const closeMapByTicker: Record<string, Map<number, number>> = {};
-    for (const t of tickers) {
-      closeMapByTicker[t] = new Map(histByTicker[t].map((c) => [c.datetime, c.close]));
+    for (const [t, candles] of Object.entries(histByTicker)) {
+      closeMapByTicker[t] = new Map(candles.map((c) => [c.datetime, c.close]));
     }
 
-    // Base price = first available close for each ticker
-    const basePriceByTicker: Record<string, number> = {};
-    for (const t of tickers) {
-      basePriceByTicker[t] = histByTicker[t][0]?.close ?? 0;
-    }
+    // Current unrealized P&L across all held positions
+    const currentUnrealized = heldPositions.reduce((s, p) => s + p.unrealizedPnl, 0);
 
-    const coveredPositions = positions.filter(
-      (p) => tickers.includes(p.ticker) && basePriceByTicker[p.ticker] > 0,
+    // Approximate the portfolio value at the START of the period:
+    //   start = current_AUM − total_realized_in_period − current_unrealized
+    // For periods that don't span the realized-gain dates (e.g. "1W") this still
+    // gives a reasonable baseline because the realized gains outside the window
+    // were already reflected in pre-period cash.
+    const periodStart = dateAxis[0]?.datetime ?? 0;
+    const realizedInPeriod = realizedRows.filter(
+      (r) => new Date(r.filled_at).getTime() >= periodStart,
     );
-    if (!coveredPositions.length) return NextResponse.json({ ok: false, candles: [] });
+    const realizedInPeriodTotal = realizedInPeriod.reduce((s, r) => s + r.gain_loss, 0);
+    const startingValue = Math.max(
+      liquidationValue - realizedInPeriodTotal - currentUnrealized,
+      1, // guard against divide-by-zero
+    );
 
-    // Compute weighted portfolio return at each reference datetime
-    const candles = refCandles.map((ref) => {
-      let weightedReturn = 0;
-      let weightSum = 0;
+    // For each datetime on the axis, compute:
+    //   cumulative_realized_in_period_to_date + unrealized_at_date
+    // expressed as % of startingValue.
+    // Compare realized gains by day-of-trade, not exact ms, because Schwab's
+    // daily candle datetime sits at the start of the day while fills land mid-session.
+    const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    const candles = dateAxis.map((d) => {
+      const candleDay = dayKey(d.datetime);
+      const cumRealized = realizedInPeriod
+        .filter((r) => dayKey(new Date(r.filled_at).getTime()) <= candleDay)
+        .reduce((s, r) => s + r.gain_loss, 0);
 
-      for (const pos of coveredPositions) {
-        const base = basePriceByTicker[pos.ticker];
-        if (!base) continue;
-        const close = closeMapByTicker[pos.ticker]?.get(ref.datetime);
-        if (close == null) continue;
-        const ret = ((close - base) / base) * 100;
-        // True portfolio weight: position market value / total AUM (includes cash)
-        const w = liquidationValue > 0 ? pos.marketValue / liquidationValue : 0;
-        weightedReturn += w * ret;
-        weightSum += w;
+      let unrealizedAtDate = 0;
+      for (const pos of heldPositions) {
+        const map = closeMapByTicker[pos.ticker];
+        if (!map) continue;
+        // Find the closest datetime ≤ d.datetime (lookbehind)
+        let priceAt: number | null = null;
+        for (let i = histByTicker[pos.ticker].length - 1; i >= 0; i--) {
+          const h = histByTicker[pos.ticker][i];
+          if (h.datetime <= d.datetime) { priceAt = h.close; break; }
+        }
+        if (priceAt == null) continue;
+        unrealizedAtDate += (priceAt - pos.avgCost) * pos.qty;
       }
 
-      return {
-        date: formatDate(ref.datetime, period),
-        portfolio: weightSum > 0 ? parseFloat(weightedReturn.toFixed(2)) : null,
-      };
+      const totalGain = cumRealized + unrealizedAtDate;
+      const pct = (totalGain / startingValue) * 100;
+      return { date: d.date, portfolio: parseFloat(pct.toFixed(2)) };
     });
 
-    return NextResponse.json({ ok: true, candles });
+    return NextResponse.json({
+      ok: true,
+      candles,
+      meta: {
+        startingValue: parseFloat(startingValue.toFixed(2)),
+        totalRealized: parseFloat(totalRealized.toFixed(2)),
+        realizedInPeriod: parseFloat(realizedInPeriodTotal.toFixed(2)),
+        currentUnrealized: parseFloat(currentUnrealized.toFixed(2)),
+        liquidationValue: parseFloat(liquidationValue.toFixed(2)),
+      },
+    });
   } catch (err) {
     return NextResponse.json({ ok: false, candles: [], error: String(err) });
   }

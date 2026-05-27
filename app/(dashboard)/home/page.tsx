@@ -49,7 +49,9 @@ export default async function HomePage() {
     }
   }
 
-  const cashOnly = enrichedPositions.length === 0;
+  // Portfolio chart should always render — realized P&L from sold positions
+  // is just as much "portfolio performance" as currently-held unrealized P&L.
+  const cashOnly = false;
   const benchmarkSpark = benchmarkYtd.map((c) => c.value);
   const lastSync = market?.fetchedAt ?? portfolio?.verifiedAt ?? null;
 
