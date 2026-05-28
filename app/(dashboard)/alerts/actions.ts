@@ -37,7 +37,7 @@ export async function dismissAlertAction(formData: FormData) {
   const supabase = await createClient();
   await supabase
     .from("stock_alerts")
-    .update({ status: "active", triggered_at: null })
+    .update({ status: "dismissed", triggered_at: null })
     .eq("id", id)
     .eq("created_by", profile.id);
 

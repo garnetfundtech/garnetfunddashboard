@@ -10,13 +10,13 @@ export async function GET(request: NextRequest) {
 
   const token = await getValidTraderToken();
   if (!token) {
-    return NextResponse.json({ ok: false, message: "No valid Schwab token." }, { status: 401 });
+    return NextResponse.json({});
   }
 
   try {
     const symbols = symbolsParam.split(",").map((s) => s.trim()).filter(Boolean);
     const data = await getQuotes(token, symbols);
-    return NextResponse.json({ ok: true, data });
+    return NextResponse.json(data);
   } catch (err) {
     return NextResponse.json(
       { ok: false, message: err instanceof Error ? err.message : "Quotes failed" },

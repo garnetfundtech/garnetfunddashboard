@@ -93,15 +93,16 @@ export function AlertsPageClient({
         const res = await fetch(`/api/schwab/market/quotes?symbols=${val}`);
         const data = (await res.json()) as Record<
           string,
-          { quote?: { description?: string; lastPrice?: number } }
+          { description?: string; quote?: { lastPrice?: number } }
         >;
-        const q = data[val]?.quote;
-        if (q) {
-          setFormCompany(q.description ?? "");
-          setFormLivePrice(q.lastPrice ?? null);
-          if (q.lastPrice != null) {
-            setFormBuyLimit(q.lastPrice.toFixed(2));
-            setFormSellLimit(q.lastPrice.toFixed(2));
+        const entry = data[val];
+        if (entry) {
+          setFormCompany(entry.description ?? "");
+          const price = entry.quote?.lastPrice ?? null;
+          setFormLivePrice(price);
+          if (price != null) {
+            setFormBuyLimit(price.toFixed(2));
+            setFormSellLimit(price.toFixed(2));
           }
         }
       } catch {
@@ -115,12 +116,16 @@ export function AlertsPageClient({
   const refreshPrices = useCallback(async () => {
     const active = alerts.filter((a) => a.status === "active");
     if (!active.length) return;
-    const tickers = [...new Set(active.map((a) => a.ticker))].join(",");
+    const tickers = [...new Set(active.map((a) => a.ticker))];
     try {
-      const res = await fetch(`/api/alerts/prices?tickers=${tickers}`);
+      const res = await fetch("/api/alerts/prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers }),
+      });
       const data = (await res.json()) as {
+        ok?: boolean;
         prices?: Record<string, number>;
-        triggered?: { id: string }[];
       };
       if (data.prices) {
         setAlerts((prev) =>
@@ -130,20 +135,13 @@ export function AlertsPageClient({
           })),
         );
       }
-      if (data.triggered?.length) {
-        setAlerts((prev) =>
-          prev.map((a) => {
-            const t = data.triggered?.find((x) => x.id === a.id);
-            return t ? { ...a, status: "triggered_buy" as const } : a;
-          }),
-        );
-      }
     } catch {
       /* ignore */
     }
   }, [alerts]);
 
   useEffect(() => {
+    refreshPrices();
     refreshIntervalRef.current = setInterval(refreshPrices, 30000);
     return () => {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);

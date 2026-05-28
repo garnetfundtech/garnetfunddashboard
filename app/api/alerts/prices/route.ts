@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   const token = await getValidTraderToken();
   if (!token) {
-    return NextResponse.json({ ok: false, message: "No valid Schwab token." }, { status: 401 });
+    return NextResponse.json({ ok: true, prices: {} });
   }
 
   try {
