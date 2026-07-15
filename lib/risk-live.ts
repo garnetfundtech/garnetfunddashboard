@@ -9,11 +9,12 @@
  * (analytics engine); hit-rate/slugging (realized gains); turnover (orders).
  * Still manual: borrow fee, short interest, borrow drag, liquidity, margin.
  */
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   fetchAccountOrders,
   fetchPortfolioSummary,
-  getValidTraderToken,
+  loadValidTraderToken,
 } from "@/lib/market-data";
 import { enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
 import { computeRiskAnalytics } from "@/lib/risk-analytics";
@@ -65,21 +66,26 @@ async function computeTurnover(grossDollars: number): Promise<number | null> {
   }
 }
 
-export async function getRiskModel(): Promise<RiskModel> {
+/**
+ * Builds the live model, or null when there's no live book. Wrapped in
+ * unstable_cache below so the whole model — analytics (~30 price-history
+ * fetches), trade stats, turnover — is computed once per window and shared
+ * across every user and tab switch, instead of recomputing on each /risk load.
+ */
+async function buildLiveRiskModel(): Promise<RiskModel | null> {
   const asOf = new Date().toISOString();
 
-  try {
-    const portfolio = await fetchPortfolioSummary();
-    if (!portfolio || portfolio.positions.length === 0 || portfolio.liquidationValue <= 0) {
-      return buildSampleModel(asOf);
-    }
+  const portfolio = await fetchPortfolioSummary();
+  if (!portfolio || portfolio.positions.length === 0 || portfolio.liquidationValue <= 0) {
+    return null;
+  }
 
-    const token = await getValidTraderToken();
-    const nav = portfolio.liquidationValue;
+  const token = await loadValidTraderToken();
+  const nav = portfolio.liquidationValue;
 
-    let positions = portfolio.positions as SidedPosition[];
-    const enriched = await enrichPositionsWithSectors(portfolio.positions).catch(() => null);
-    if (enriched) positions = enriched as SidedPosition[];
+  let positions = portfolio.positions as SidedPosition[];
+  const enriched = await enrichPositionsWithSectors(portfolio.positions).catch(() => null);
+  if (enriched) positions = enriched as SidedPosition[];
 
     const [analytics, tradeStats, turnover] = await Promise.all([
       token
@@ -141,7 +147,19 @@ export async function getRiskModel(): Promise<RiskModel> {
           }
         : null,
     });
+}
+
+const cachedLiveRiskModel = unstable_cache(buildLiveRiskModel, ["risk-model-v1"], {
+  revalidate: 90,
+  tags: ["schwab-risk"],
+});
+
+export async function getRiskModel(): Promise<RiskModel> {
+  try {
+    const live = await cachedLiveRiskModel();
+    if (live) return live;
   } catch {
-    return buildSampleModel(asOf);
+    /* fall through to the sample book */
   }
+  return buildSampleModel(new Date().toISOString());
 }

@@ -87,7 +87,7 @@ function refreshTraderTokenSingleFlight(
   return refreshInFlight;
 }
 
-async function loadValidTraderToken(): Promise<string | null> {
+export async function loadValidTraderToken(): Promise<string | null> {
   try {
     const admin = createAdminClient();
     const { data: tokenRow } = await admin
@@ -214,8 +214,8 @@ export async function getTraderAccountHash(): Promise<string | null> {
   }
 }
 
-export async function fetchAccountOrders(days = 60) {
-  const token = await getValidTraderToken();
+async function loadAccountOrders(days = 60) {
+  const token = await loadValidTraderToken();
   if (!token) return null;
   try {
     const nums = await getAccountNumbers(token);
@@ -226,6 +226,12 @@ export async function fetchAccountOrders(days = 60) {
     return null;
   }
 }
+
+/** Recent account orders, shared across users for 60s (orders page + turnover). */
+export const fetchAccountOrders = unstable_cache(loadAccountOrders, ["account-orders-v1"], {
+  revalidate: 60,
+  tags: ["schwab-orders"],
+});
 
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();

@@ -25,7 +25,8 @@ export async function fetchEarningsCalendar(from: string, to: string): Promise<F
   const key = process.env.FMP_API_KEY;
   if (!key) throw new Error("Missing FMP_API_KEY");
   const url = `${FMP_BASE}/earnings-calendar?from=${from}&to=${to}&apikey=${encodeURIComponent(key)}`;
-  const res = await fetch(url, { cache: "no-store" });
+  // Earnings dates barely move intraday — cache for an hour, shared across users.
+  const res = await fetch(url, { next: { revalidate: 3600 } });
   if (!res.ok) throw new Error(`FMP earnings failed: ${res.status}`);
   const data = (await res.json()) as Record<string, unknown>[];
   if (!Array.isArray(data)) return [];

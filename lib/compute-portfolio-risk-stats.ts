@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { getPriceHistory } from "@/lib/schwab";
+import { fetchPortfolioSummary, loadValidTraderToken } from "@/lib/market-data";
 import type { LivePosition } from "@/lib/types";
 import {
   betaFromReturns,
@@ -156,6 +158,22 @@ export async function computePortfolioRiskStats(
     sectors,
   };
 }
+
+/**
+ * Home-page risk stats (beta / Sharpe / vol / sectors), computed once per window
+ * and shared across users and tab switches. Fetches token + portfolio itself so
+ * the whole result is cacheable.
+ */
+export const getCachedHomeRiskStats = unstable_cache(
+  async (): Promise<PortfolioRiskStats | null> => {
+    const token = await loadValidTraderToken();
+    const portfolio = await fetchPortfolioSummary();
+    if (!token || !portfolio?.positions.length) return null;
+    return computePortfolioRiskStats(token, portfolio.positions);
+  },
+  ["home-risk-stats-v1"],
+  { revalidate: 300, tags: ["schwab-risk"] },
+);
 
 export async function correlationMatrixFromToken(
   accessToken: string,

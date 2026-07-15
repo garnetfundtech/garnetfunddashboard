@@ -6,27 +6,26 @@ import { OverviewRail } from "@/components/dashboard/overview-rail";
 import { PerformanceChartClient } from "@/components/dashboard/performance-chart-client";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { getHomepageData } from "@/lib/data";
-import { computePortfolioRiskStats, enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
-import { getValidTraderToken } from "@/lib/market-data";
+import { getCachedHomeRiskStats, enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
 
 export default async function HomePage() {
   const { portfolio, market, benchmarkYtd } = await getHomepageData();
-  const token = await getValidTraderToken();
 
   let riskStats: { betaVsSpy: number | null; sectorCount: number | null; sharpe30?: number | null; sharpe90?: number | null } | null = null;
   let enrichedPositions = portfolio?.positions ?? [];
 
-  if (token && enrichedPositions.length) {
+  if (enrichedPositions.length) {
+    // Cached risk stats (shared across users/tabs) run alongside sector enrichment.
     const [riskResult, enriched] = await Promise.allSettled([
-      computePortfolioRiskStats(token, enrichedPositions),
+      getCachedHomeRiskStats(),
       enrichPositionsWithSectors(enrichedPositions),
     ]);
-    if (riskResult.status === "fulfilled") {
+    if (riskResult.status === "fulfilled" && riskResult.value) {
       riskStats = {
         betaVsSpy: riskResult.value.betaVsSpy,
         sectorCount: riskResult.value.sectorCount,
-        sharpe30: (riskResult.value as { sharpe30?: number | null }).sharpe30 ?? null,
-        sharpe90: (riskResult.value as { sharpe90?: number | null }).sharpe90 ?? null,
+        sharpe30: riskResult.value.sharpe30 ?? null,
+        sharpe90: riskResult.value.sharpe90 ?? null,
       };
     }
     if (enriched.status === "fulfilled") {
