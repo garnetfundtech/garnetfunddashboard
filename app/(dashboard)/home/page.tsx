@@ -8,10 +8,6 @@ import { TopBar } from "@/components/dashboard/top-bar";
 import { getHomepageData } from "@/lib/data";
 import { computePortfolioRiskStats, enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
 import { getValidTraderToken } from "@/lib/market-data";
-import { getQuotes } from "@/lib/schwab";
-import type { SchwabQuoteResponse } from "@/lib/schwab";
-
-const SECTOR_ETF_TICKERS = ["XLK", "XLV", "XLF", "XLY", "XLP", "XLI", "XLC", "XLE", "XLB", "XLRE", "XLU"];
 
 export default async function HomePage() {
   const { portfolio, market, benchmarkYtd } = await getHomepageData();
@@ -19,13 +15,11 @@ export default async function HomePage() {
 
   let riskStats: { betaVsSpy: number | null; sectorCount: number | null; sharpe30?: number | null; sharpe90?: number | null } | null = null;
   let enrichedPositions = portfolio?.positions ?? [];
-  let etfQuotes: Record<string, SchwabQuoteResponse> | null = null;
 
   if (token && enrichedPositions.length) {
-    const [riskResult, enriched, quotes] = await Promise.allSettled([
+    const [riskResult, enriched] = await Promise.allSettled([
       computePortfolioRiskStats(token, enrichedPositions),
       enrichPositionsWithSectors(enrichedPositions),
-      getQuotes(token, SECTOR_ETF_TICKERS),
     ]);
     if (riskResult.status === "fulfilled") {
       riskStats = {
@@ -38,15 +32,6 @@ export default async function HomePage() {
     if (enriched.status === "fulfilled") {
       enrichedPositions = enriched.value;
     }
-    if (quotes.status === "fulfilled") {
-      etfQuotes = quotes.value;
-    }
-  } else if (token) {
-    try {
-      etfQuotes = await getQuotes(token, SECTOR_ETF_TICKERS);
-    } catch {
-      etfQuotes = null;
-    }
   }
 
   // Portfolio chart should always render — realized P&L from sold positions
@@ -54,8 +39,6 @@ export default async function HomePage() {
   const cashOnly = false;
   const benchmarkSpark = benchmarkYtd.map((c) => c.value);
   const lastSync = market?.fetchedAt ?? portfolio?.verifiedAt ?? null;
-
-  void etfQuotes;
 
   return (
     <div className="flex h-full flex-col gap-2">

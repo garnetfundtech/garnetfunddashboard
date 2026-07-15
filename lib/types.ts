@@ -85,12 +85,20 @@ export type LivePosition = {
   weight: number;
   /** Populated when sector data is available (e.g. from FMP) */
   sector?: string;
+  /** "long" or "short" — derived from Schwab long/short quantity. Defaults to long. */
+  side?: "long" | "short";
 };
 
 export type PortfolioSummary = {
   liquidationValue: number;
   cashAvailable: number;
   longMarketValue: number;
+  /** Absolute dollar value of the short book (positive). 0 when long-only. */
+  shortMarketValue: number;
+  /** Longs plus shorts, in dollars — the gross book. */
+  grossMarketValue: number;
+  /** Longs minus shorts, in dollars — the net book. */
+  netMarketValue: number;
   unrealizedPnl: number;
   realizedPnl: number;
   dayPnl: number;

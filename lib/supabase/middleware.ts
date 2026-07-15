@@ -1,12 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isSupabaseConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./config";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // No credentials (e.g. local dev without env) — don't crash every route; let
+  // pages render. Page-level guards still redirect unauthenticated users.
+  if (!isSupabaseConfigured) {
+    return response;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {

@@ -1,5 +1,7 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type { UserRole } from "@/lib/types";
 
 export type Profile = {
@@ -12,7 +14,11 @@ export type Profile = {
   coverage_sector: string | null;
 };
 
-export async function getCurrentProfile() {
+export const getCurrentProfile = cache(async () => {
+  // Without credentials there is no session to read — treat as logged out so
+  // the app routes to /login instead of hitting a placeholder Supabase.
+  if (!isSupabaseConfigured) return null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -56,7 +62,7 @@ export async function getCurrentProfile() {
   }
 
   return profile as Profile;
-}
+});
 
 export async function requireProfile() {
   const profile = await getCurrentProfile();

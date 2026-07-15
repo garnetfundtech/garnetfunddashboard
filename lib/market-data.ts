@@ -16,10 +16,78 @@ import {
   type PriceCandle,
 } from "@/lib/schwab";
 import type { Mover } from "@/lib/types";
+import { unstable_cache } from "next/cache";
+import { cache } from "react";
 
 // ── Token management ─────────────────────────────────────────────────────────
 
-export async function getValidTraderToken(): Promise<string | null> {
+// Single-flight guard: within one server instance only one refresh network call
+// runs at a time. Schwab rotates the refresh token on use, so two concurrent
+// refreshes with the same token invalidate each other — the classic "Schwab
+// disconnects after a while" bug. Combined with the React cache() wrapper
+// (per-request dedup) and unstable_cache on the data fetchers (which limits how
+// often the token is checked at all), this keeps the connection stable under load.
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshTraderTokenSingleFlight(
+  refreshToken: string,
+  currentAccessToken: string,
+  expiresAtMs: number,
+): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const admin = createAdminClient();
+    try {
+      const refreshed = await refreshAccessToken(refreshToken, "trader");
+      const newExpiresAt = new Date(
+        Date.now() + Number(refreshed.expires_in ?? 1800) * 1000,
+      ).toISOString();
+      await admin
+        .from("schwab_tokens")
+        .update({
+          access_token: refreshed.access_token,
+          refresh_token: refreshed.refresh_token ?? refreshToken,
+          expires_at: newExpiresAt,
+          needs_reauth: false,
+        })
+        .eq("id", "trader");
+      return refreshed.access_token as string;
+    } catch (e) {
+      const msg = (e instanceof Error ? e.message : "").toLowerCase();
+      const invalidGrant =
+        msg.includes("invalid_grant") ||
+        msg.includes("invalid grant") ||
+        msg.includes("refresh token");
+
+      if (invalidGrant) {
+        // Another instance may have rotated the token microseconds earlier.
+        // Re-read before giving up so we don't flag a healthy connection dead.
+        const { data: fresh } = await admin
+          .from("schwab_tokens")
+          .select("access_token, expires_at")
+          .eq("id", "trader")
+          .single();
+        const freshExp = fresh?.expires_at ? new Date(fresh.expires_at).getTime() : 0;
+        if (fresh?.access_token && freshExp > Date.now() + 60_000) {
+          return fresh.access_token as string;
+        }
+        await admin.from("schwab_tokens").update({ needs_reauth: true }).eq("id", "trader");
+        return null;
+      }
+
+      // Transient failure — keep the existing access token if it's still valid.
+      if (Date.now() < expiresAtMs) return currentAccessToken;
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+async function loadValidTraderToken(): Promise<string | null> {
   try {
     const admin = createAdminClient();
     const { data: tokenRow } = await admin
@@ -29,73 +97,28 @@ export async function getValidTraderToken(): Promise<string | null> {
       .single();
 
     if (!tokenRow?.access_token) return null;
-    // Do not hard-fail on needs_reauth: it can be set by transient refresh errors.
-    // We'll attempt refresh and only require full re-auth on clear invalid_grant signals.
 
-    // Proactively refresh if expiring within 5 minutes
-    const expiresAt = new Date(tokenRow.expires_at).getTime();
+    const expiresAtMs = new Date(tokenRow.expires_at).getTime();
     const fiveMin = 5 * 60 * 1000;
 
-    if (Date.now() + fiveMin >= expiresAt) {
+    // Proactively refresh if expiring within 5 minutes (single-flighted).
+    if (Date.now() + fiveMin >= expiresAtMs) {
       if (!tokenRow.refresh_token) return null;
-      try {
-        const refreshed = await refreshAccessToken(tokenRow.refresh_token, "trader");
-        const newExpiresAt = new Date(
-          Date.now() + Number(refreshed.expires_in ?? 1800) * 1000,
-        ).toISOString();
-        await admin
-          .from("schwab_tokens")
-          .update({
-            access_token: refreshed.access_token,
-            refresh_token: refreshed.refresh_token ?? tokenRow.refresh_token,
-            expires_at: newExpiresAt,
-            needs_reauth: false,
-          })
-          .eq("id", "trader");
-        return refreshed.access_token as string;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "";
-        const invalidGrant =
-          msg.toLowerCase().includes("invalid_grant") ||
-          msg.toLowerCase().includes("invalid grant") ||
-          msg.toLowerCase().includes("refresh token");
-
-        // Only set needs_reauth on clear invalid_grant-like failures.
-        if (invalidGrant) {
-          await admin.from("schwab_tokens").update({ needs_reauth: true }).eq("id", "trader");
-          return null;
-        }
-
-        // Transient failure: keep existing access token if it's still valid.
-        if (Date.now() < expiresAt) {
-          return tokenRow.access_token as string;
-        }
-
-        return null;
-      }
+      return refreshTraderTokenSingleFlight(
+        tokenRow.refresh_token as string,
+        tokenRow.access_token as string,
+        expiresAtMs,
+      );
     }
 
-    // Access token valid. If needs_reauth is set, try a best-effort refresh in background
-    // to clear the flag (without breaking the UI).
+    // Token valid. If a prior transient error set needs_reauth, clear it in the
+    // background without blocking the request or risking the live access token.
     if (tokenRow.needs_reauth && tokenRow.refresh_token) {
-      try {
-        const refreshed = await refreshAccessToken(tokenRow.refresh_token, "trader");
-        const newExpiresAt = new Date(
-          Date.now() + Number(refreshed.expires_in ?? 1800) * 1000,
-        ).toISOString();
-        await admin
-          .from("schwab_tokens")
-          .update({
-            access_token: refreshed.access_token,
-            refresh_token: refreshed.refresh_token ?? tokenRow.refresh_token,
-            expires_at: newExpiresAt,
-            needs_reauth: false,
-          })
-          .eq("id", "trader");
-        return refreshed.access_token as string;
-      } catch {
-        // ignore; keep using existing access token
-      }
+      void refreshTraderTokenSingleFlight(
+        tokenRow.refresh_token as string,
+        tokenRow.access_token as string,
+        expiresAtMs,
+      );
     }
 
     return tokenRow.access_token as string;
@@ -103,6 +126,9 @@ export async function getValidTraderToken(): Promise<string | null> {
     return null;
   }
 }
+
+/** Request-deduplicated valid Schwab trader access token (auto-refreshing). */
+export const getValidTraderToken = cache(loadValidTraderToken);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,12 +147,20 @@ export type LivePosition = {
   weight: number;
   /** Optional sector label when enriched (e.g. FMP) */
   sector?: string;
+  /** "long" or "short" — derived from Schwab long/short quantity. */
+  side?: "long" | "short";
 };
 
 export type PortfolioSummary = {
   liquidationValue: number;
   cashAvailable: number;
   longMarketValue: number;
+  /** Absolute dollar value of the short book (positive). 0 when long-only. */
+  shortMarketValue: number;
+  /** Longs plus shorts, in dollars — the gross book. */
+  grossMarketValue: number;
+  /** Longs minus shorts, in dollars — the net book. */
+  netMarketValue: number;
   unrealizedPnl: number;
   realizedPnl: number;
   dayPnl: number;
@@ -193,8 +227,8 @@ export async function fetchAccountOrders(days = 60) {
   }
 }
 
-export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> {
-  const token = await getValidTraderToken();
+async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
+  const token = await loadValidTraderToken();
   if (!token) return null;
 
   try {
@@ -225,24 +259,36 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
       })
       .map((p) => {
         const inst = p.instrument as Record<string, unknown>;
-        const qty = Number(p.longQuantity ?? 0);
+        // Schwab reports a leg as either longQuantity or shortQuantity. For a
+        // short, marketValue and the open P&L come back negative and the side
+        // is derived from shortQuantity so the whole book flows through.
+        const shortQty = Number(p.shortQuantity ?? 0);
+        const isShort = shortQty > 0;
+        const side: "long" | "short" = isShort ? "short" : "long";
+        const absQty = isShort ? shortQty : Number(p.longQuantity ?? 0);
+        const quantity = isShort ? -absQty : absQty;
         const avgCost = Number(p.averagePrice ?? 0);
         const marketValue = Number(p.marketValue ?? 0);
-        const currentPrice = qty > 0 ? marketValue / qty : 0;
-        const unrealizedPnl = Number(p.longOpenProfitLoss ?? 0);
-        const costBasis = avgCost * qty;
+        const currentPrice = absQty > 0 ? Math.abs(marketValue) / absQty : 0;
+        const unrealizedPnl = Number(
+          (isShort ? p.shortOpenProfitLoss : p.longOpenProfitLoss) ?? p.longOpenProfitLoss ?? 0,
+        );
+        const costBasis = avgCost * absQty;
+        // Negative pct = losing: for a long that's a drop from cost, for a short
+        // that's the name moving against us. Both feed the kill-trigger rows.
         const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
         const dayPnl = Number(p.currentDayProfitLoss ?? 0);
         const dayPnlPct = Number(p.currentDayProfitLossPercentage ?? 0);
         // Use liquidationValue (cash + securities) as denominator so weights
-        // reflect true portfolio allocation including uninvested cash
+        // reflect true portfolio allocation including uninvested cash. Shorts
+        // carry a negative marketValue and therefore a negative weight.
         const weight = liquidationValue > 0 ? (marketValue / liquidationValue) * 100 : 0;
 
         return {
           ticker: String(inst.symbol),
           name: String(inst.description ?? inst.symbol),
           assetType: String(inst.type ?? "EQUITY"),
-          quantity: qty,
+          quantity,
           avgCost,
           currentPrice,
           marketValue,
@@ -251,11 +297,21 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
           dayPnl,
           dayPnlPct,
           weight,
+          side,
         };
       });
 
     const unrealizedPnl = positions.reduce((s, p) => s + p.unrealizedPnl, 0);
     const dayPnl = positions.reduce((s, p) => s + p.dayPnl, 0);
+    // Split the book by side so net / gross exposure is available downstream.
+    const positionsLongMV = positions
+      .filter((p) => p.side !== "short")
+      .reduce((s, p) => s + Math.abs(p.marketValue), 0);
+    const shortMarketValue = positions
+      .filter((p) => p.side === "short")
+      .reduce((s, p) => s + Math.abs(p.marketValue), 0);
+    const grossMarketValue = positionsLongMV + shortMarketValue;
+    const netMarketValue = positionsLongMV - shortMarketValue;
 
     // Sum all realized gains stored in Supabase (from /api/schwab/realized-gains)
     let realizedPnl = 0;
@@ -271,6 +327,9 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
       liquidationValue,
       cashAvailable,
       longMarketValue,
+      shortMarketValue,
+      grossMarketValue,
+      netMarketValue,
       unrealizedPnl,
       realizedPnl,
       dayPnl,
@@ -283,6 +342,16 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> 
     return null;
   }
 }
+
+/**
+ * Portfolio summary, shared across all users via the Next data cache. One fund
+ * account → one upstream Schwab fetch per revalidation window regardless of how
+ * many people load the dashboard at once.
+ */
+export const fetchPortfolioSummary = unstable_cache(loadPortfolioSummary, ["portfolio-summary-v1"], {
+  revalidate: 30,
+  tags: ["schwab-portfolio"],
+});
 
 // ── Market overview ───────────────────────────────────────────────────────────
 
@@ -343,8 +412,8 @@ function normalizeMover(raw: SchwabMover): Mover {
   };
 }
 
-export async function fetchMarketOverview(): Promise<MarketOverview | null> {
-  const token = await getValidTraderToken();
+async function loadMarketOverview(): Promise<MarketOverview | null> {
+  const token = await loadValidTraderToken();
   if (!token) return null;
 
   try {
@@ -416,6 +485,12 @@ export async function fetchMarketOverview(): Promise<MarketOverview | null> {
   }
 }
 
+/** Market overview (indices, movers, session), shared across users for 30s. */
+export const fetchMarketOverview = unstable_cache(loadMarketOverview, ["market-overview-v1"], {
+  revalidate: 30,
+  tags: ["schwab-market"],
+});
+
 // ── Price history for benchmark chart ────────────────────────────────────────
 
 type PeriodKey = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
@@ -456,8 +531,8 @@ function normalizeToPctReturn(candles: PriceCandle[], period: PeriodKey): Benchm
   }));
 }
 
-export async function fetchBenchmarkHistory(period: PeriodKey = "YTD"): Promise<BenchmarkHistory | null> {
-  const token = await getValidTraderToken();
+async function loadBenchmarkHistory(period: PeriodKey = "YTD"): Promise<BenchmarkHistory | null> {
+  const token = await loadValidTraderToken();
   if (!token) return null;
 
   try {
@@ -474,6 +549,12 @@ export async function fetchBenchmarkHistory(period: PeriodKey = "YTD"): Promise<
     return null;
   }
 }
+
+/** Benchmark (SPY) history per period, shared across users for 3 min. */
+export const fetchBenchmarkHistory = unstable_cache(loadBenchmarkHistory, ["benchmark-history-v1"], {
+  revalidate: 180,
+  tags: ["schwab-benchmark"],
+});
 
 export { PERIOD_PARAMS };
 export type { PeriodKey };

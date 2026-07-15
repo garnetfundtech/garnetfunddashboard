@@ -164,7 +164,7 @@ export async function getQuotes(accessToken: string, symbols: string[]) {
   const params = new URLSearchParams({ symbols: symbols.join(","), fields: "quote,fundamental" });
   const response = await fetch(`${SCHWAB_MARKET_BASE}/quotes?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
+    next: { revalidate: 30 },
   });
   if (!response.ok) throw new Error(`Quotes request failed: ${response.status}`);
   return response.json() as Promise<Record<string, SchwabQuoteResponse>>;
@@ -224,7 +224,7 @@ export async function getPriceHistory(
   });
   const response = await fetch(`${SCHWAB_MARKET_BASE}/pricehistory?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
+    next: { revalidate: 180 },
   });
   if (!response.ok) throw new Error(`Price history request failed: ${response.status}`);
   return response.json() as Promise<{ symbol: string; empty: boolean; candles: PriceCandle[] }>;
@@ -253,7 +253,7 @@ export async function getMarketMovers(
   const encodedIndex = encodeURIComponent(index);
   const response = await fetch(`${SCHWAB_MARKET_BASE}/movers/${encodedIndex}?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
+    next: { revalidate: 120 },
   });
   if (!response.ok) throw new Error(`Movers request failed: ${response.status}`);
   const data = await response.json();
@@ -265,7 +265,7 @@ export async function getMarketHours(accessToken: string) {
   const params = new URLSearchParams({ markets: "equity,option", date: today });
   const response = await fetch(`${SCHWAB_MARKET_BASE}/markets?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
+    next: { revalidate: 600 },
   });
   if (!response.ok) throw new Error(`Market hours request failed: ${response.status}`);
   return response.json() as Promise<Record<string, Record<string, {

@@ -3,6 +3,7 @@ import type { UserRole } from "@/lib/types";
 /** Routes shown in sidebar + used for page guards */
 export const ROUTES = {
   home: "/home",
+  risk: "/risk",
   coverage: "/coverage",
   users: "/users",
   research: "/research",
@@ -16,6 +17,7 @@ export const ROUTES = {
 
 const ANALYST_PATHS = new Set<string>([
   ROUTES.home,
+  ROUTES.risk,
   ROUTES.coverage,
   ROUTES.research,
   ROUTES.resources,
@@ -35,6 +37,7 @@ const ADMIN_ONLY = new Set<string>([
 export function getSidebarNavItems(role: UserRole): { href: string; label: string }[] {
   const all: { href: string; label: string }[] = [
     { href: ROUTES.home, label: "Home" },
+    { href: ROUTES.risk, label: "Risk Monitor" },
     { href: ROUTES.coverage, label: "Coverage" },
     { href: ROUTES.research, label: "Research" },
     { href: ROUTES.resources, label: "Resources" },

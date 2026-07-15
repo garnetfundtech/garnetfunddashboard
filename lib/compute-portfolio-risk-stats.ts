@@ -6,6 +6,7 @@ import {
   correlation,
   logReturnsFromCloses,
   sharpeAnnualized,
+  stdSample,
 } from "@/lib/portfolio-analytics";
 import { fetchProfile } from "@/lib/fmp";
 
@@ -20,6 +21,8 @@ export type PortfolioRiskStats = {
   betaVsSpy: number | null;
   sharpe30: number | null;
   sharpe90: number | null;
+  /** Annualized realized volatility of the basket proxy, in percent. */
+  realizedVol: number | null;
   sectorCount: number;
   sectors: { name: string; weight: number }[];
 };
@@ -33,6 +36,9 @@ export async function enrichPositionsWithSectors(positions: LivePosition[]): Pro
   if (!process.env.FMP_API_KEY || !positions.length) return positions;
   const enriched = await Promise.all(
     positions.map(async (p) => {
+      // Skip tickers already carrying a real sector so a second enrichment pass
+      // (e.g. home page + risk stats) doesn't re-hit FMP.
+      if (p.sector && p.sector !== "Unknown") return p;
       try {
         const prof = await fetchProfile(p.ticker);
         return { ...p, sector: prof?.sector ?? p.sector ?? "Unknown" };
@@ -49,7 +55,7 @@ export async function computePortfolioRiskStats(
   positions: LivePosition[],
 ): Promise<PortfolioRiskStats> {
   if (!positions.length) {
-    return { betaVsSpy: null, sharpe30: null, sharpe90: null, sectorCount: 0, sectors: [] };
+    return { betaVsSpy: null, sharpe30: null, sharpe90: null, realizedVol: null, sectorCount: 0, sectors: [] };
   }
 
   const withSectors = await enrichPositionsWithSectors(positions);
@@ -76,30 +82,37 @@ export async function computePortfolioRiskStats(
   }
   const spyR = logReturnsFromCloses(spyCloses);
 
+  // Fetch every position's price history concurrently. This loop used to run
+  // serially (up to 12 round-trips back-to-back), which was the single biggest
+  // source of slow page loads; the underlying fetches are also data-cached now.
+  const perPosition = await Promise.all(
+    withSectors.slice(0, 12).map(async (p) => {
+      try {
+        const hist = await getPriceHistory(
+          accessToken,
+          p.ticker,
+          HISTORY_PARAMS.periodType,
+          HISTORY_PARAMS.period,
+          HISTORY_PARAMS.frequencyType,
+          HISTORY_PARAMS.frequency,
+        );
+        const closes = closesFromCandles(hist.candles ?? []);
+        const r = logReturnsFromCloses(closes);
+        const { spy: sA, stock: rA } = alignReturns(spyR, r);
+        const b = betaFromReturns(rA, sA);
+        return { weight: p.weight, r, b };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
   const betas: { w: number; b: number }[] = [];
   const portfolioReturnSeries: number[][] = [];
-
-  for (const p of withSectors.slice(0, 12)) {
-    try {
-      const hist = await getPriceHistory(
-        accessToken,
-        p.ticker,
-        HISTORY_PARAMS.periodType,
-        HISTORY_PARAMS.period,
-        HISTORY_PARAMS.frequencyType,
-        HISTORY_PARAMS.frequency,
-      );
-      const closes = closesFromCandles(hist.candles ?? []);
-      const r = logReturnsFromCloses(closes);
-      const { spy: sA, stock: rA } = alignReturns(spyR, r);
-      const b = betaFromReturns(rA, sA);
-      if (b != null && Number.isFinite(b)) {
-        betas.push({ w: p.weight / 100, b });
-      }
-      if (r.length) portfolioReturnSeries.push(r);
-    } catch {
-      /* skip */
-    }
+  for (const res of perPosition) {
+    if (!res) continue;
+    if (res.b != null && Number.isFinite(res.b)) betas.push({ w: res.weight / 100, b: res.b });
+    if (res.r.length) portfolioReturnSeries.push(res.r);
   }
 
   const totalW = betas.reduce((s, x) => s + x.w, 0);
@@ -109,6 +122,7 @@ export async function computePortfolioRiskStats(
   // Equal-weight average of aligned last-30 and last-90 log returns vs SPY for Sharpe on basket proxy
   let sharpe30: number | null = null;
   let sharpe90: number | null = null;
+  let realizedVol: number | null = null;
   if (portfolioReturnSeries.length && spyCloses.length) {
     const minLen = Math.min(...portfolioReturnSeries.map((s) => s.length), spyR.length);
     if (minLen > 15) {
@@ -127,6 +141,9 @@ export async function computePortfolioRiskStats(
       }
       sharpe30 = sharpeAnnualized(avgRet.slice(-30));
       sharpe90 = sharpeAnnualized(avgRet.slice(-90));
+      // Annualized realized vol of the basket proxy, in percent.
+      const vol90 = stdSample(avgRet.slice(-90));
+      realizedVol = vol90 > 0 ? vol90 * Math.sqrt(252) * 100 : null;
     }
   }
 
@@ -134,6 +151,7 @@ export async function computePortfolioRiskStats(
     betaVsSpy,
     sharpe30,
     sharpe90,
+    realizedVol,
     sectorCount: sectorWeights.size,
     sectors,
   };

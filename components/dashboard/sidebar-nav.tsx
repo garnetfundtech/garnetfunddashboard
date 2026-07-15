@@ -11,6 +11,7 @@ import {
   ChartLine,
   ClipboardList,
   FolderKanban,
+  Gauge,
   Layers,
   LogOut,
   Settings,
@@ -25,6 +26,7 @@ import { getSidebarNavItems } from "@/lib/nav-access";
 
 const ICONS = {
   "/home": ChartLine,
+  "/risk": Gauge,
   "/coverage": Layers,
   "/users": Users,
   "/research": BookOpen,
