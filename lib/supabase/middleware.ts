@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./config";
+import { ROUTES } from "@/lib/nav-access";
+
+// Every dashboard route (from the nav single source of truth) plus onboarding.
+// Deriving this from ROUTES keeps middleware in sync when new pages are added —
+// /risk was silently missing from a previous hand-maintained copy of this list.
+const PROTECTED_PATHS = [...Object.values(ROUTES), "/onboarding"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -34,19 +40,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isProtected = [
-    "/home",
-    "/users",
-    "/research",
-    "/resources",
-    "/admin",
-    "/onboarding",
-    "/orders",
-    "/coverage",
-    "/alerts",
-    "/watchlist",
-    "/earnings",
-  ].some((path) => request.nextUrl.pathname.startsWith(path));
+  const isProtected = PROTECTED_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
   const isLogin = request.nextUrl.pathname.startsWith("/login");
 
   if (!user && isProtected) {

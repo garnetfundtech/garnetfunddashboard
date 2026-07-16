@@ -56,16 +56,3 @@ export async function fetchProfile(symbol: string): Promise<FmpProfile | null> {
     industry: row.industry != null ? String(row.industry) : undefined,
   };
 }
-
-export async function fetchAnalystPriceTarget(symbol: string): Promise<number | null> {
-  const key = process.env.FMP_API_KEY;
-  if (!key) return null;
-  const s = symbol.toUpperCase();
-  const url = `${FMP_BASE}/price-target?symbol=${encodeURIComponent(s)}&apikey=${encodeURIComponent(key)}`;
-  const res = await fetch(url, { next: { revalidate: 3600 } });
-  if (!res.ok) return null;
-  const arr = (await res.json()) as { priceTargetAverage?: number; publishedDate?: string }[];
-  const row = arr?.[0];
-  if (row && typeof row.priceTargetAverage === "number") return row.priceTargetAverage;
-  return null;
-}

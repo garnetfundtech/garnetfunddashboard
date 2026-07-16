@@ -110,33 +110,6 @@ export type PortfolioSummary = {
 
 export type BenchmarkCandle = { date: string; value: number };
 
-export type MetricCard = {
-  label: string;
-  value: string;
-  delta: string;
-  positive: boolean;
-};
-
-export type PerformancePoint = {
-  date: string;
-  portfolio: number;
-  benchmark: number;
-};
-
-export type HoldingRow = {
-  ticker: string;
-  name: string;
-  sector: string;
-  day1: string;
-  day5: string;
-  month1: string;
-  month3: string;
-  month6: string;
-  year1: string;
-  ytd: string;
-  annualized: string;
-};
-
 export type StoredAnalysis = {
   bull: string;
   bear: string;

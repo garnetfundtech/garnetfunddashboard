@@ -138,26 +138,6 @@ export async function getAccountOrders(accessToken: string, accountHash: string,
   return response.json();
 }
 
-export async function getAccountTransactions(
-  accessToken: string,
-  accountHash: string,
-  days = 60,
-) {
-  const to = new Date();
-  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const params = new URLSearchParams({
-    startDate: from.toISOString().split(".")[0] + "Z",
-    endDate: to.toISOString().split(".")[0] + "Z",
-    types: "TRADE,DIVIDEND_OR_INTEREST,RECEIVE_AND_DELIVER",
-  });
-  const response = await fetch(
-    `${SCHWAB_TRADER_BASE}/accounts/${accountHash}/transactions?${params}`,
-    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" },
-  );
-  if (!response.ok) throw new Error(`Transactions request failed: ${response.status}`);
-  return response.json();
-}
-
 // ── Market Data API ──────────────────────────────────────────────────────────
 
 export async function getQuotes(accessToken: string, symbols: string[]) {

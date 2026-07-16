@@ -3,7 +3,8 @@ import { fetchFredSeries } from "@/lib/fred";
 import { fetchEarningsCalendar } from "@/lib/fmp";
 import { fetchRecentForm4ForTicker } from "@/lib/edgar";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { MODEL_ID } from "@/lib/gemini";
+
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 export type ApiHealth = {
   key: string;
@@ -157,7 +158,7 @@ export async function getExternalApiStatus(): Promise<ApiHealth[]> {
   } else {
     try {
       const gen = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = gen.getGenerativeModel({ model: MODEL_ID });
+      const model = gen.getGenerativeModel({ model: GEMINI_MODEL_ID });
       const r = await model.generateContent("Respond with exactly: OK");
       const text = r.response.text().trim();
       out.push(

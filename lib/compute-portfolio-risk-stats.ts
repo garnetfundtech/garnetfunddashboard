@@ -5,7 +5,6 @@ import type { LivePosition } from "@/lib/types";
 import {
   betaFromReturns,
   closesFromCandles,
-  correlation,
   logReturnsFromCloses,
   sharpeAnnualized,
   stdSample,
@@ -174,46 +173,3 @@ export const getCachedHomeRiskStats = unstable_cache(
   ["home-risk-stats-v1"],
   { revalidate: 300, tags: ["schwab-risk"] },
 );
-
-export async function correlationMatrixFromToken(
-  accessToken: string,
-  tickers: string[],
-): Promise<{ labels: string[]; matrix: (number | null)[][] }> {
-  const uniq = [...new Set(tickers.map((t) => t.toUpperCase()))].slice(0, 10);
-  const closesByTicker: Record<string, number[]> = {};
-
-  await Promise.all(
-    uniq.map(async (t) => {
-      try {
-        const hist = await getPriceHistory(
-          accessToken,
-          t,
-          HISTORY_PARAMS.periodType,
-          HISTORY_PARAMS.period,
-          HISTORY_PARAMS.frequencyType,
-          HISTORY_PARAMS.frequency,
-        );
-        closesByTicker[t] = closesFromCandles(hist.candles ?? []);
-      } catch {
-        closesByTicker[t] = [];
-      }
-    }),
-  );
-
-  const returnsBy: Record<string, number[]> = {};
-  for (const t of uniq) {
-    returnsBy[t] = logReturnsFromCloses(closesByTicker[t] ?? []);
-  }
-
-  const n = uniq.length;
-  const matrix: (number | null)[][] = Array.from({ length: n }, () => Array(n).fill(null));
-
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      if (i === j) matrix[i][j] = 1;
-      else matrix[i][j] = correlation(returnsBy[uniq[i]]!, returnsBy[uniq[j]]!);
-    }
-  }
-
-  return { labels: uniq, matrix };
-}

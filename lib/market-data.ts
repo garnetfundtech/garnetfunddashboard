@@ -15,7 +15,15 @@ import {
   type SchwabMover,
   type PriceCandle,
 } from "@/lib/schwab";
-import type { Mover } from "@/lib/types";
+import type {
+  BenchmarkCandle,
+  IndexQuote,
+  LivePosition,
+  MarketOverview,
+  MarketSession,
+  Mover,
+  PortfolioSummary,
+} from "@/lib/types";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -131,69 +139,17 @@ export async function loadValidTraderToken(): Promise<string | null> {
 export const getValidTraderToken = cache(loadValidTraderToken);
 
 // ── Types ────────────────────────────────────────────────────────────────────
+// Canonical definitions live in lib/types.ts; re-exported here for callers that
+// import them alongside the fetchers.
 
-export type LivePosition = {
-  ticker: string;
-  name: string;
-  assetType: string;
-  quantity: number;
-  avgCost: number;
-  currentPrice: number;
-  marketValue: number;
-  unrealizedPnl: number;
-  unrealizedPnlPct: number;
-  dayPnl: number;
-  dayPnlPct: number;
-  weight: number;
-  /** Optional sector label when enriched (e.g. FMP) */
-  sector?: string;
-  /** "long" or "short" — derived from Schwab long/short quantity. */
-  side?: "long" | "short";
-};
-
-export type PortfolioSummary = {
-  liquidationValue: number;
-  cashAvailable: number;
-  longMarketValue: number;
-  /** Absolute dollar value of the short book (positive). 0 when long-only. */
-  shortMarketValue: number;
-  /** Longs plus shorts, in dollars — the gross book. */
-  grossMarketValue: number;
-  /** Longs minus shorts, in dollars — the net book. */
-  netMarketValue: number;
-  unrealizedPnl: number;
-  realizedPnl: number;
-  dayPnl: number;
-  positionCount: number;
-  positions: LivePosition[];
-  accountNumber: string | null;
-  verifiedAt: string;
-};
-
-export type IndexQuote = {
-  symbol: string;
-  label: string;
-  lastPrice: number;
-  change: number;
-  pctChange: number;
-  high: number;
-  low: number;
-};
-
-export type MarketSession = "pre" | "regular" | "post" | "closed";
-
-export type MarketOverview = {
-  isOpen: boolean;
-  session: MarketSession;
-  sessionStart: string | null;
-  sessionEnd: string | null;
-  indices: IndexQuote[];
-  gainers: Mover[];
-  losers: Mover[];
-  fetchedAt: string;
-};
-
-export type BenchmarkCandle = { date: string; value: number };
+export type {
+  LivePosition,
+  PortfolioSummary,
+  IndexQuote,
+  MarketSession,
+  MarketOverview,
+  BenchmarkCandle,
+} from "@/lib/types";
 
 export type BenchmarkHistory = {
   symbol: string;

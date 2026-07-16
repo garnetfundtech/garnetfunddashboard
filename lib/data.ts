@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { holdings } from "@/lib/mock-data";
 import { parseFilePath } from "@/lib/storage";
 import {
   fetchPortfolioSummary,
@@ -9,7 +8,6 @@ import {
 } from "@/lib/market-data";
 import type {
   FundUser,
-  HoldingRow,
   PitchRow,
   PitchStage,
   ResearchItem,
@@ -44,33 +42,6 @@ export async function getHomepageData(): Promise<HomepageData> {
       ? benchmark.value.candles
       : [],
   };
-}
-
-export async function getHoldings(): Promise<HoldingRow[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("holdings_snapshots")
-    .select("ticker, company_name, sector")
-    .order("captured_at", { ascending: false })
-    .limit(20);
-
-  if (error || !data || data.length === 0) {
-    return holdings;
-  }
-
-  return data.map((row) => ({
-    ticker: row.ticker,
-    name: row.company_name,
-    sector: row.sector,
-    day1: "0.0%",
-    day5: "0.0%",
-    month1: "0.0%",
-    month3: "0.0%",
-    month6: "0.0%",
-    year1: "0.0%",
-    ytd: "0.0%",
-    annualized: "0.0%",
-  }));
 }
 
 export async function getResearchItems(): Promise<ResearchItem[]> {
