@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   const model = await getRiskModel();
-  if (model.source !== "live") {
+  if (!model.hasLiveData || model.nav == null) {
     return NextResponse.json({ ok: false, message: "No live data to snapshot." }, { status: 409 });
   }
 

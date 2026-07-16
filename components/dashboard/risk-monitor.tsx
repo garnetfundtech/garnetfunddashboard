@@ -453,8 +453,14 @@ export function RiskMonitor({ model }: { model: RiskModel }) {
 
       {model.source === "sample" && (
         <p className="rounded-[10px] border border-sky-300/15 bg-sky-300/[0.04] px-3 py-1.5 text-[11px] text-sky-200/80">
-          Showing an illustrative long/short book so the full framework is visible. Connect the Schwab account with
-          shorts to populate live values — every metric flips to real data automatically.
+          Illustrative long/short book for demo purposes — the in-app Risk Monitor always shows the real account.
+        </p>
+      )}
+
+      {model.source === "live" && !model.hasLiveData && (
+        <p className="rounded-[10px] border border-amber-400/20 bg-amber-400/[0.05] px-3 py-1.5 text-[11px] text-amber-200/85">
+          Schwab data is temporarily unavailable (token refresh or API issue). Values will repopulate automatically —
+          check the Admin panel if this persists.
         </p>
       )}
 

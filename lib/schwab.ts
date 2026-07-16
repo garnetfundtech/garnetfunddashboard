@@ -115,9 +115,11 @@ export async function getAccountPositions(accessToken: string) {
 }
 
 export async function getAccountNumbers(accessToken: string) {
+  // The account list / hash never changes — cache a full day so orders,
+  // transactions, and turnover skip this round-trip entirely.
   const response = await fetch(`${SCHWAB_TRADER_BASE}/accounts/accountNumbers`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
+    next: { revalidate: 86400 },
   });
   if (!response.ok) throw new Error(`Account numbers request failed: ${response.status}`);
   return response.json() as Promise<{ accountNumber: string; hashValue: string }[]>;

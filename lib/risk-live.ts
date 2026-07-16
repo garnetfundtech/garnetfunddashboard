@@ -26,7 +26,6 @@ import {
   type RiskValueMap,
   type SidedPosition,
 } from "@/lib/risk-engine";
-import { buildSampleModel } from "@/lib/risk-sample";
 
 async function computeTradeStats(): Promise<{ hitRate: number | null; slugging: number | null }> {
   try {
@@ -67,17 +66,33 @@ async function computeTurnover(grossDollars: number): Promise<number | null> {
 }
 
 /**
- * Builds the live model, or null when there's no live book. Wrapped in
- * unstable_cache below so the whole model — analytics (~30 price-history
- * fetches), trade stats, turnover — is computed once per window and shared
- * across every user and tab switch, instead of recomputing on each /risk load.
+ * Builds the live model. Wrapped in unstable_cache below so the whole model —
+ * analytics (~30 price-history fetches), trade stats, turnover — is computed
+ * once per window and shared across every user and tab switch, instead of
+ * recomputing on each /risk load.
+ *
+ * This ALWAYS returns the real account state — an empty or cash-only book
+ * renders as a live book with no positions, never as the sample. The sample
+ * model exists only for the /risk-preview demo page.
  */
-async function buildLiveRiskModel(): Promise<RiskModel | null> {
+async function buildLiveRiskModel(): Promise<RiskModel> {
   const asOf = new Date().toISOString();
 
   const portfolio = await fetchPortfolioSummary();
-  if (!portfolio || portfolio.positions.length === 0 || portfolio.liquidationValue <= 0) {
-    return null;
+  if (!portfolio) {
+    // Schwab unreachable / token invalid: an honest empty model, not the sample.
+    return buildRiskModel({
+      asOf,
+      source: "live",
+      hasLiveData: false,
+      nav: null,
+      exposure: null,
+      sectorBalance: [],
+      values: {},
+      stress: [],
+      worstStress: null,
+      varView: null,
+    });
   }
 
   const token = await loadValidTraderToken();
@@ -149,17 +164,28 @@ async function buildLiveRiskModel(): Promise<RiskModel | null> {
     });
 }
 
-const cachedLiveRiskModel = unstable_cache(buildLiveRiskModel, ["risk-model-v1"], {
+const cachedLiveRiskModel = unstable_cache(buildLiveRiskModel, ["risk-model-v2"], {
   revalidate: 90,
   tags: ["schwab-risk"],
 });
 
+/** The live risk model — never the sample (that's /risk-preview only). */
 export async function getRiskModel(): Promise<RiskModel> {
   try {
-    const live = await cachedLiveRiskModel();
-    if (live) return live;
+    return await cachedLiveRiskModel();
   } catch {
-    /* fall through to the sample book */
+    // Even a hard failure renders as an honest empty live state.
+    return buildRiskModel({
+      asOf: new Date().toISOString(),
+      source: "live",
+      hasLiveData: false,
+      nav: null,
+      exposure: null,
+      sectorBalance: [],
+      values: {},
+      stress: [],
+      worstStress: null,
+      varView: null,
+    });
   }
-  return buildSampleModel(new Date().toISOString());
 }

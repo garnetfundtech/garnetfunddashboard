@@ -1,6 +1,8 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type { UserRole } from "@/lib/types";
 
@@ -13,6 +15,25 @@ export type Profile = {
   role: UserRole;
   coverage_sector: string | null;
 };
+
+/**
+ * Profile row by user id, cached cross-request for 2 min (keyed per id).
+ * Saves a DB round-trip on every page navigation; the session itself is still
+ * verified live via auth.getUser() below. Role changes propagate within 2 min.
+ */
+const getCachedProfileRow = unstable_cache(
+  async (userId: string): Promise<Profile | null> => {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("user_profiles")
+      .select("id,email,full_name,first_name,last_name,role,coverage_sector")
+      .eq("id", userId)
+      .maybeSingle();
+    return (data as Profile | null) ?? null;
+  },
+  ["profile-row-v1"],
+  { revalidate: 120, tags: ["profiles"] },
+);
 
 export const getCurrentProfile = cache(async () => {
   // Without credentials there is no session to read — treat as logged out so
@@ -28,13 +49,9 @@ export const getCurrentProfile = cache(async () => {
     return null;
   }
 
-  const { data: profile, error } = await supabase
-    .from("user_profiles")
-    .select("id,email,full_name,first_name,last_name,role,coverage_sector")
-    .eq("id", user.id)
-    .maybeSingle();
+  const profile = await getCachedProfileRow(user.id).catch(() => null);
 
-  if (error || !profile) {
+  if (!profile) {
     const firstName = (user.user_metadata?.first_name as string | undefined) ?? null;
     const lastName = (user.user_metadata?.last_name as string | undefined) ?? null;
     const fallbackFromParts = [firstName, lastName].filter(Boolean).join(" ").trim();
