@@ -3,20 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
 import { uploadResearchAction } from "@/app/(dashboard)/research/actions";
-
-const SECTORS = [
-  "Technology",
-  "Healthcare",
-  "Financial Services",
-  "Consumer Cyclical",
-  "Consumer Defensive",
-  "Industrials",
-  "Communication Services",
-  "Energy",
-  "Basic Materials",
-  "Real Estate",
-  "Utilities",
-];
+import { GICS_SECTORS } from "@/lib/sectors";
 
 export function ResearchUploadForm({
   onSuccess,
@@ -95,7 +82,7 @@ export function ResearchUploadForm({
         className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none"
       >
         <option value="" disabled>Select sector</option>
-        {SECTORS.map((s) => (
+        {GICS_SECTORS.map((s) => (
           <option key={s} value={s}>{s}</option>
         ))}
       </select>

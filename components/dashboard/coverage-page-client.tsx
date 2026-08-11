@@ -9,20 +9,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
 import type { CoverageAnalyst } from "@/app/(dashboard)/coverage/page";
 import type { ResearchItem } from "@/lib/types";
-
-const SECTOR_COLORS: Record<string, string> = {
-  Technology: "#a78bfa",
-  Healthcare: "#34d399",
-  "Financial Services": "#60a5fa",
-  "Consumer Cyclical": "#fbbf24",
-  "Consumer Defensive": "#fb923c",
-  Industrials: "#fb7185",
-  "Communication Services": "#22d3ee",
-  Energy: "#facc15",
-  "Basic Materials": "#94a3b8",
-  "Real Estate": "#f472b6",
-  Utilities: "#a3e635",
-};
+import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
 type SectorStatus = "covered" | "thin" | "gap" | "uncovered";
 
@@ -198,7 +185,7 @@ export function CoveragePageClient({
                 const status = sectorStatus(sector, analysts, tickers);
                 const lead = sAnalysts.find((a) => a.role === "pm");
                 const analystCount = sAnalysts.length;
-                const color = SECTOR_COLORS[sector] ?? "#94a3b8";
+                const color = SECTOR_COLORS[sector] ?? SECTOR_FALLBACK_COLOR;
 
                 return (
                   <tr

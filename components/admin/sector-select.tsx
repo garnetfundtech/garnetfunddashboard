@@ -2,20 +2,7 @@
 
 import { useTransition } from "react";
 import { assignSectorAction } from "@/app/(dashboard)/admin/actions";
-
-const SECTORS = [
-  "Technology",
-  "Healthcare",
-  "Financial Services",
-  "Consumer Cyclical",
-  "Consumer Defensive",
-  "Industrials",
-  "Communication Services",
-  "Energy",
-  "Basic Materials",
-  "Real Estate",
-  "Utilities",
-];
+import { GICS_SECTORS } from "@/lib/sectors";
 
 export function SectorSelect({
   userId,
@@ -44,7 +31,7 @@ export function SectorSelect({
       className="w-full rounded-[6px] border border-[#262a2f] bg-[#111214] px-2.5 py-1.5 text-center text-xs font-medium text-zinc-200 outline-none disabled:opacity-60"
     >
       <option value="">Unassigned</option>
-      {SECTORS.map((s) => (
+      {GICS_SECTORS.map((s) => (
         <option key={s} value={s}>
           {s}
         </option>

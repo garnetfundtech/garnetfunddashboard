@@ -2,6 +2,7 @@ import { requireProfile } from "@/lib/auth";
 import { getResearchItems } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { CoveragePageClient } from "@/components/dashboard/coverage-page-client";
+import { GICS_SECTORS } from "@/lib/sectors";
 
 export type CoverageAnalyst = {
   id: string;
@@ -9,20 +10,6 @@ export type CoverageAnalyst = {
   role: string;
   sector: string | null;
 };
-
-const GICS_SECTORS = [
-  "Technology",
-  "Healthcare",
-  "Financial Services",
-  "Consumer Cyclical",
-  "Consumer Defensive",
-  "Industrials",
-  "Communication Services",
-  "Energy",
-  "Basic Materials",
-  "Real Estate",
-  "Utilities",
-];
 
 export default async function CoveragePage() {
   await requireProfile();
@@ -50,7 +37,7 @@ export default async function CoveragePage() {
     <CoveragePageClient
       analysts={analysts}
       research={research}
-      sectors={GICS_SECTORS}
+      sectors={[...GICS_SECTORS]}
     />
   );
 }

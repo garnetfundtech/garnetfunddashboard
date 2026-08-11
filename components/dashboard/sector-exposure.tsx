@@ -1,21 +1,5 @@
 import type { LivePosition } from "@/lib/types";
-
-const SECTOR_COLORS: Record<string, string> = {
-  "Technology":             "#a78bfa",
-  "Healthcare":             "#34d399",
-  "Financials":             "#60a5fa",
-  "Financial Services":     "#60a5fa",
-  "Consumer Cyclical":      "#fbbf24",
-  "Consumer Defensive":     "#fb923c",
-  "Industrials":            "#fb7185",
-  "Communication Services": "#22d3ee",
-  "Communication":          "#22d3ee",
-  "Energy":                 "#facc15",
-  "Basic Materials":        "#94a3b8",
-  "Materials":              "#94a3b8",
-  "Real Estate":            "#f472b6",
-  "Utilities":              "#a3e635",
-};
+import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
 function fmtPct(n: number): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
@@ -80,7 +64,7 @@ export function SectorExposure({
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="space-y-[5px]">
             {rows.map((r) => {
-              const color = r.isCash ? "#52525b" : (SECTOR_COLORS[r.name] ?? "#94a3b8");
+              const color = r.isCash ? "#52525b" : (SECTOR_COLORS[r.name] ?? SECTOR_FALLBACK_COLOR);
               return (
                 <div key={r.name} className="flex items-center gap-2">
                   <span

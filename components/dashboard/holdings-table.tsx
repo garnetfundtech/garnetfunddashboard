@@ -3,23 +3,7 @@
 import { useState } from "react";
 import type { LivePosition } from "@/lib/types";
 import { ChevronUp, ChevronDown } from "lucide-react";
-
-const SECTOR_COLORS: Record<string, string> = {
-  "Technology":            "#a78bfa",
-  "Healthcare":            "#34d399",
-  "Financials":            "#60a5fa",
-  "Financial Services":    "#60a5fa",
-  "Consumer Cyclical":     "#fbbf24",
-  "Consumer Defensive":    "#fb923c",
-  "Industrials":           "#fb7185",
-  "Communication Services":"#22d3ee",
-  "Communication":         "#22d3ee",
-  "Energy":                "#facc15",
-  "Basic Materials":       "#94a3b8",
-  "Materials":             "#94a3b8",
-  "Real Estate":           "#f472b6",
-  "Utilities":             "#a3e635",
-};
+import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
 function fmtUsd(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
@@ -127,7 +111,7 @@ export function HoldingsTable({ livePositions }: { livePositions?: LivePosition[
               </tr>
             ) : (
               sorted.map((pos) => {
-                const sectorColor = SECTOR_COLORS[pos.sector ?? ""] ?? "#94a3b8";
+                const sectorColor = SECTOR_COLORS[pos.sector ?? ""] ?? SECTOR_FALLBACK_COLOR;
                 return (
                   <tr key={pos.ticker} className="border-b border-white/[0.025] text-zinc-200 transition hover:bg-white/[0.02] last:border-b-0">
                     <td className="px-3 py-1 font-semibold text-white">{pos.ticker}</td>
