@@ -39,6 +39,34 @@ export async function fetchEarningsCalendar(from: string, to: string): Promise<F
   }));
 }
 
+/**
+ * Ticker → sector for an arbitrary symbol list, skipping anything FMP can't
+ * place. Each profile lookup is cached for an hour by `fetchProfile`, so
+ * repeat renders of the same watchlist cost nothing.
+ *
+ * Tickers absent from the result have no known sector — callers should render
+ * that as "unknown" rather than substituting a default sector.
+ */
+export async function fetchSectorsByTicker(
+  tickers: string[],
+): Promise<Record<string, string>> {
+  if (!process.env.FMP_API_KEY || !tickers.length) return {};
+
+  const unique = [...new Set(tickers.map((t) => t.toUpperCase()))];
+  const entries = await Promise.all(
+    unique.map(async (symbol) => {
+      try {
+        const profile = await fetchProfile(symbol);
+        return profile?.sector ? ([symbol, profile.sector] as const) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return Object.fromEntries(entries.filter((e) => e !== null));
+}
+
 export async function fetchProfile(symbol: string): Promise<FmpProfile | null> {
   const key = process.env.FMP_API_KEY;
   if (!key) return null;

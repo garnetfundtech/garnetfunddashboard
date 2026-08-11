@@ -10,20 +10,7 @@ import { Spark } from "@/components/dashboard/spark";
 import type { SchwabQuoteResponse } from "@/lib/schwab";
 import type { WatchlistRow, UserRole } from "@/lib/types";
 import { addWatchlistItemAction, removeWatchlistItemAction } from "@/app/(dashboard)/watchlist/actions";
-
-const SECTOR_COLORS: Record<string, string> = {
-  Technology: "#a78bfa",
-  Healthcare: "#34d399",
-  "Financial Services": "#60a5fa",
-  "Consumer Cyclical": "#fbbf24",
-  "Consumer Defensive": "#fb923c",
-  Industrials: "#fb7185",
-  "Communication Services": "#22d3ee",
-  Energy: "#facc15",
-  "Basic Materials": "#94a3b8",
-  "Real Estate": "#f472b6",
-  Utilities: "#a3e635",
-};
+import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
 function fmtUsd(n: number | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -63,11 +50,14 @@ function parseTarget(raw: string | null): string {
 export function WatchlistTableClient({
   rows,
   quotes,
+  sectorByTicker,
   actor,
   pitchOptions,
 }: {
   rows: WatchlistRow[];
   quotes: Record<string, SchwabQuoteResponse>;
+  /** Ticker → sector. Missing keys mean the sector is unknown, not defaulted. */
+  sectorByTicker: Record<string, string>;
   actor: { id: string; role: UserRole };
   pitchOptions: { id: string; ticker: string; thesis: string }[];
 }) {
@@ -220,17 +210,9 @@ export function WatchlistTableClient({
               </tr>
             )}
             {sorted.map((row) => {
-              const pitch = row.pitchId
-                ? pitchOptions.find((p) => p.id === row.pitchId)
-                : null;
-              const sector = pitch?.ticker
-                ? Object.keys(SECTOR_COLORS).find((s) =>
-                    s.toLowerCase().includes("tech"),
-                  )
-                : undefined;
-              const sectorColor = sector
-                ? SECTOR_COLORS[sector]
-                : "#94a3b8";
+              // Undefined when FMP has no sector for this ticker (or no API key
+              // is configured) — the dot is omitted rather than guessed.
+              const sector: string | undefined = sectorByTicker[row.ticker];
 
               return (
                 <tr
@@ -241,8 +223,12 @@ export function WatchlistTableClient({
                     <div className="flex items-center gap-1.5">
                       {sector && (
                         <span
+                          title={sector}
                           className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ background: sectorColor }}
+                          style={{
+                            background:
+                              SECTOR_COLORS[sector] ?? SECTOR_FALLBACK_COLOR,
+                          }}
                         />
                       )}
                       <span className="text-[12px] font-semibold text-white">
