@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const REQUIRED_BUCKETS = ["research", "resources"] as const;
+const REQUIRED_BUCKETS = ["research", "resources", "team-files"] as const;
 
 export async function ensureStorageBuckets() {
   const admin = createAdminClient();
