@@ -10,10 +10,12 @@ export type KpiTileDef = {
   badge?: ReactNode;
 };
 
+/** Same gutter as kpi-strip.tsx — the two components render identical
+ *  spacing so tile rows look the same everywhere they appear. */
 export function KpiRow({ tiles }: { tiles: KpiTileDef[] }) {
   return (
     <div
-      className="grid gap-2"
+      className="grid gap-3"
       style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}
     >
       {tiles.map((t, i) => (
@@ -23,25 +25,18 @@ export function KpiRow({ tiles }: { tiles: KpiTileDef[] }) {
   );
 }
 
-function KpiTileCard({ label, value, sub, tone, spark, badge }: KpiTileDef) {
-  const gradientStyle =
-    tone === "pos"
-      ? { background: "linear-gradient(to top, rgba(52,211,153,0.06), transparent 60%), var(--panel)" }
-      : tone === "neg"
-        ? { background: "linear-gradient(to top, rgba(251,113,133,0.06), transparent 60%), var(--panel)" }
-        : undefined;
-
+function KpiTileCard({ label, value, sub, spark, badge }: KpiTileDef) {
   return (
-    <article className="panel relative overflow-hidden px-3 py-2" style={gradientStyle}>
-      <p className="text-[9.5px] uppercase tracking-[0.08em] text-zinc-500 whitespace-nowrap">{label}</p>
-      <div className="mt-0.5 flex items-baseline justify-between gap-2 whitespace-nowrap">
-        <span className="text-[15px] font-semibold tabular-nums leading-tight text-white">{value}</span>
+    <article className="panel relative overflow-hidden px-3 py-2.5">
+      <p className="caps whitespace-nowrap">{label}</p>
+      <div className="mt-1 flex items-baseline justify-between gap-2 whitespace-nowrap">
+        <span className="stat-value text-[19px] text-ink">{value}</span>
         <div className="flex shrink-0 items-center gap-1">
           {badge}
           {spark && spark.length >= 2 && <Spark data={spark} width={42} height={14} />}
         </div>
       </div>
-      {sub && <p className="mt-0.5 text-[10.5px] tabular-nums text-zinc-500 whitespace-nowrap">{sub}</p>}
+      {sub && <p className="num mt-1 whitespace-nowrap text-[12.5px] text-ink-3">{sub}</p>}
     </article>
   );
 }

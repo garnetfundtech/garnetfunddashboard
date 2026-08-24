@@ -46,13 +46,13 @@ export function RiskPanel({
     {
       key: "Sector Count",
       sub: "of 11 GICS",
-      value: sectorCount != null ? String(sectorCount) : "—",
+      value: sectorCount != null ? String(sectorCount) : "XX",
       tone: null,
     },
     {
       key: "Positions",
-      sub: "live holdings",
-      value: positionCount > 0 ? String(positionCount) : "—",
+      sub: "holdings",
+      value: String(positionCount),
       tone: null,
     },
     {
@@ -66,24 +66,24 @@ export function RiskPanel({
   return (
     <section className="panel flex flex-col p-3">
       <div className="mb-1 flex items-center justify-between">
-        <p className="caps text-[10px] text-zinc-500">Risk Profile</p>
+        <p className="caps text-[11px] text-ink-3">Risk Profile</p>
       </div>
       <div className="flex flex-1 flex-col justify-between">
         {items.map((it, i) => (
           <div
             key={i}
-            className="flex items-baseline justify-between border-b border-white/[0.04] py-[3px] last:border-b-0"
+            className="flex items-baseline justify-between border-b border-line py-[3px] last:border-b-0"
           >
             <div>
-              <p className="text-[11.5px] leading-tight text-zinc-300">{it.key}</p>
-              <p className="text-[9.5px] uppercase leading-tight tracking-wider text-zinc-600">{it.sub}</p>
+              <p className="text-[13px] leading-tight text-ink">{it.key}</p>
+              <p className="text-[12px] uppercase leading-tight tracking-wider text-ink-3">{it.sub}</p>
             </div>
             <p
-              className={`text-[13.5px] font-semibold tabular-nums ${
-                it.tone === "good" ? "text-emerald-400" :
-                it.tone === "bad"  ? "text-rose-400" :
-                it.tone === "warn" ? "text-amber-300" :
-                "text-white"
+              className={`text-[15px] font-semibold tabular-nums ${
+                it.tone === "good" ? "text-pos" :
+                it.tone === "bad"  ? "text-neg" :
+                it.tone === "warn" ? "text-warn" :
+                "text-ink"
               }`}
             >
               {it.value}

@@ -60,21 +60,24 @@ export function PdfViewer({ url, scale = 1, onLoadTotalPages, onPageChange }: Pd
   }, []);
 
   if (!url) {
+    // Every file has a URL — this only shows for the moment between opening
+    // the viewer and the on-demand signed URL arriving, so it should read as
+    // "loading," not as though nothing were selected.
     return (
-      <div className="panel flex h-[640px] items-center justify-center text-sm text-zinc-400">
-        Select a file with a signed URL to preview.
+      <div className="panel flex h-[640px] items-center justify-center">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-line-2 border-t-ink-3" />
       </div>
     );
   }
 
   return (
-    <div className="panel flex h-full flex-col overflow-hidden rounded-[16px] p-0">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-black/20 p-3">
+    <div className="panel flex h-full flex-col overflow-hidden rounded-none p-0">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-paper-2 p-3">
         <div className="mx-auto w-fit">
           <Document
             file={url}
-            loading={<div className="text-xs text-zinc-500">Loading…</div>}
-            error={<div className="text-xs text-rose-400">Could not load PDF</div>}
+            loading={<div className="text-xs text-ink-3">Loading…</div>}
+            error={<div className="text-xs text-neg">Could not load PDF</div>}
             onLoadSuccess={({ numPages: n }) => {
               setNumPages(n);
               pageRefs.current = new Array(n).fill(null);
@@ -92,11 +95,11 @@ export function PdfViewer({ url, scale = 1, onLoadTotalPages, onPageChange }: Pd
                   <Page pageNumber={i + 1} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} />
                   {i < numPages - 1 && (
                     <div className="flex items-center gap-3 py-3">
-                      <div className="h-px flex-1 bg-white/10" />
-                      <span className="text-[10px] tabular-nums text-zinc-600">
+                      <div className="h-px flex-1 bg-paper-2" />
+                      <span className="text-[11px] tabular-nums text-ink-3">
                         {i + 1} / {numPages}
                       </span>
-                      <div className="h-px flex-1 bg-white/10" />
+                      <div className="h-px flex-1 bg-paper-2" />
                     </div>
                   )}
                 </div>

@@ -19,9 +19,11 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
-import { GhostBtn } from "@/components/dashboard/buttons";
+import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
+import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
 import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
 import { canManageContent } from "@/lib/roles";
+import { signFile } from "@/lib/sign-client";
 import type { UserRole } from "@/lib/types";
 import type { TeamBrowseData, TeamFileRow } from "@/lib/team-files";
 import {
@@ -33,7 +35,7 @@ import {
 } from "@/app/(dashboard)/files/actions";
 
 const ACTION_BTN =
-  "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
+  "flex w-full items-center justify-center gap-2 rounded-none bg-paper-2 px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-2";
 
 function fmtSize(bytes: number | null) {
   if (!bytes) return "—";
@@ -62,26 +64,20 @@ function isPdf(file: TeamFileRow) {
 }
 
 function typeChip(file: TeamFileRow) {
-  const map: Record<string, string> = {
-    pdf: "bg-rose-500/15 text-rose-300",
-    xlsx: "bg-emerald-500/15 text-emerald-300",
-    xlsm: "bg-emerald-500/15 text-emerald-300",
-    xls: "bg-emerald-500/15 text-emerald-300",
-    csv: "bg-emerald-500/15 text-emerald-300",
-    docx: "bg-blue-500/15 text-blue-300",
-    doc: "bg-blue-500/15 text-blue-300",
-    pptx: "bg-amber-500/15 text-amber-300",
-    mp4: "bg-purple-500/15 text-purple-300",
+  const map: Record<string, Tone> = {
+    pdf: "rose",
+    xlsx: "emerald",
+    xlsm: "emerald",
+    xls: "emerald",
+    csv: "emerald",
+    docx: "blue",
+    doc: "blue",
+    pptx: "amber",
+    mp4: "blue",
   };
   const ext = extOf(file);
-  const cls = map[ext] ?? "bg-white/[0.05] text-zinc-300";
-  return (
-    <span
-      className={`rounded-[4px] px-1.5 py-[1px] text-[9.5px] font-bold uppercase ${cls}`}
-    >
-      {ext.toUpperCase() || "FILE"}
-    </span>
-  );
+  const tone = map[ext] ?? "neutral";
+  return <StatusPill label={ext.toUpperCase() || "FILE"} tone={tone} dot={false} />;
 }
 
 type Dialog =
@@ -164,6 +160,13 @@ export function TeamFilesClient({
     setTotalPages(null);
     setZoom(1);
     setOpened(file);
+    void signFile("team-files", file.id).then(({ viewUrl, downloadUrl }) => {
+      setOpened((current) =>
+        current && current.id === file.id
+          ? { ...current, viewUrl: viewUrl ?? undefined, downloadUrl: downloadUrl ?? undefined }
+          : current,
+      );
+    });
   }
 
   const totalFiles = useMemo(
@@ -198,9 +201,8 @@ export function TeamFilesClient({
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        kicker="Team Files"
         title="Team Workspace"
-        subtitle="Shared models, memos, and working files, organized by coverage team."
+        meta={`${files.length} file${files.length === 1 ? "" : "s"} in ${locationLabel}`}
         actions={
           canWrite ? (
             <>
@@ -208,17 +210,14 @@ export function TeamFilesClient({
                 <FolderPlus className="h-3.5 w-3.5" />
                 New folder
               </GhostBtn>
-              <button
-                onClick={() => setDialog({ kind: "upload" })}
-                className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#8e0604] px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-[#a80705]"
-              >
+              <PrimaryBtn onClick={() => setDialog({ kind: "upload" })}>
                 <Upload className="h-3.5 w-3.5" />
                 Upload
-              </button>
+              </PrimaryBtn>
             </>
           ) : (
-            <span className="text-[11.5px] text-zinc-500">
-              Read-only — you cover{" "}
+            <span className="text-[13.5px] text-ink-3">
+              Read-only, you cover{" "}
               {actor.sector ?? "no team yet"}
             </span>
           )
@@ -227,11 +226,11 @@ export function TeamFilesClient({
 
       <KpiRow tiles={kpiTiles} />
 
-      <div className="grid gap-2" style={{ gridTemplateColumns: "196px minmax(0,1fr)" }}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "196px minmax(0,1fr)" }}>
         {/* Team rail */}
         <div className="panel flex flex-col overflow-hidden">
-          <div className="border-b border-white/[0.04] px-3 py-2">
-            <span className="text-[13.5px] font-semibold text-white">Teams</span>
+          <div className="border-b border-line px-3 py-2">
+            <span className="text-[15px] font-semibold text-ink">Teams</span>
           </div>
           <div className="flex-1 overflow-auto p-1.5">
             {sectors.map((s) => {
@@ -242,20 +241,16 @@ export function TeamFilesClient({
                   key={s}
                   type="button"
                   onClick={() => navigate({ team: s, folder: null })}
-                  className={`flex w-full items-center justify-between gap-2 rounded-[7px] px-2 py-[7px] text-left text-[12px] transition ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-none px-2 py-[7px] text-left text-[14px] transition ${
                     active
-                      ? "bg-white/[0.06] text-white"
-                      : "text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200"
+                      ? "bg-paper-2 text-ink"
+                      : "text-ink-2 hover:bg-paper-3 hover:text-ink"
                   }`}
                 >
                   <span className="truncate">{s}</span>
                   <span className="flex shrink-0 items-center gap-1">
-                    {s === actor.sector && (
-                      <span className="rounded-[3px] bg-[#8e0604]/25 px-1 py-[1px] text-[8.5px] font-bold uppercase text-rose-300">
-                        Mine
-                      </span>
-                    )}
-                    <span className="tabular-nums text-[10.5px] text-zinc-500">
+                    {s === actor.sector && <StatusPill label="Mine" tone="accent" dot={false} />}
+                    <span className="tabular-nums text-[12px] text-ink-3">
                       {count}
                     </span>
                   </span>
@@ -273,24 +268,24 @@ export function TeamFilesClient({
             // At a team root the panel title already names the location, so the
             // breadcrumb only earns its space once you're inside a folder.
             breadcrumb.length > 0 ? (
-              <nav className="flex items-center gap-0.5 text-[11px]">
+              <nav className="flex items-center gap-0.5 text-[13px]">
                 <button
                   type="button"
                   onClick={() => navigate({ folder: null })}
-                  className="rounded-[5px] px-1.5 py-[2px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-200"
+                  className="rounded-none px-1.5 py-[2px] text-ink-3 transition hover:bg-paper-2 hover:text-ink"
                 >
                   {sector}
                 </button>
                 {breadcrumb.map((crumb, i) => (
                   <span key={crumb.id} className="flex items-center gap-0.5">
-                    <ChevronRight className="h-3 w-3 shrink-0 text-zinc-600" />
+                    <ChevronRight className="h-3 w-3 shrink-0 text-ink-3" />
                     <button
                       type="button"
                       onClick={() => navigate({ folder: crumb.id })}
-                      className={`max-w-[160px] truncate rounded-[5px] px-1.5 py-[2px] transition ${
+                      className={`max-w-[160px] truncate rounded-none px-1.5 py-[2px] transition ${
                         i === breadcrumb.length - 1
-                          ? "text-white"
-                          : "text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+                          ? "text-ink"
+                          : "text-ink-3 hover:bg-paper-2 hover:text-ink"
                       }`}
                     >
                       {crumb.name}
@@ -308,7 +303,7 @@ export function TeamFilesClient({
         >
           <table className={`w-full ${isPending ? "opacity-60" : ""}`}>
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+              <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Size</th>
@@ -322,10 +317,10 @@ export function TeamFilesClient({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-3 py-12 text-center text-[11.5px] text-zinc-500"
+                    className="px-3 py-12 text-center text-[13.5px] text-ink-3"
                   >
                     {canWrite
-                      ? "Nothing here yet — create a folder or upload a file."
+                      ? "Nothing here yet. Create a folder or upload a file."
                       : "This folder is empty."}
                   </td>
                 </tr>
@@ -334,28 +329,26 @@ export function TeamFilesClient({
               {folders.map((folder) => (
                 <tr
                   key={folder.id}
-                  className="cursor-pointer border-b border-white/[0.025] transition hover:bg-white/[0.02]"
+                  className="cursor-pointer border-b border-line transition hover:bg-paper-3"
                   onClick={() => navigate({ folder: folder.id })}
                 >
                   <td className="px-3 py-2">
-                    <span className="flex items-center gap-2 text-[12px] font-medium text-white">
-                      <Folder className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                    <span className="flex items-center gap-2 text-[14px] font-medium text-ink">
+                      <Folder className="h-3.5 w-3.5 shrink-0 text-ink-2" />
                       {folder.name}
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className="rounded-[4px] bg-white/[0.05] px-1.5 py-[1px] text-[9.5px] font-bold uppercase text-zinc-300">
-                      Folder
-                    </span>
+                    <StatusPill label="Folder" tone="neutral" dot={false} />
                   </td>
-                  <td className="px-3 py-2 text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 text-[14px] text-ink-2">
                     {folder.fileCount} file{folder.fileCount === 1 ? "" : "s"}
                     {folder.folderCount > 0 && `, ${folder.folderCount} sub`}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                     {fmtDate(folder.createdAt)}
                   </td>
-                  <td className="px-3 py-2 text-[12px] text-zinc-500">—</td>
+                  <td className="px-3 py-2 text-[14px] text-ink-3">—</td>
                   <td className="px-3 py-2 text-right">
                     {canWrite && (
                       <span className="flex items-center justify-end gap-0.5">
@@ -369,7 +362,7 @@ export function TeamFilesClient({
                               name: folder.name,
                             });
                           }}
-                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-white"
+                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-ink"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -384,7 +377,7 @@ export function TeamFilesClient({
                               fileCount: folder.fileCount,
                             });
                           }}
-                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-rose-400"
+                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -397,20 +390,20 @@ export function TeamFilesClient({
               {files.map((file) => (
                 <tr
                   key={file.id}
-                  className="cursor-pointer border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                  className="cursor-pointer border-b border-line last:border-b-0 transition hover:bg-paper-3"
                   onClick={() => openFile(file)}
                 >
-                  <td className="px-3 py-2 text-[12px] font-medium text-white">
+                  <td className="px-3 py-2 text-[14px] font-medium text-ink">
                     {file.title}
                   </td>
                   <td className="px-3 py-2">{typeChip(file)}</td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                     {fmtSize(file.fileSize)}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                     {fmtDate(file.createdAt)}
                   </td>
-                  <td className="px-3 py-2 text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 text-[14px] text-ink-2">
                     {file.uploaderName}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -424,7 +417,7 @@ export function TeamFilesClient({
                           submit(deleteTeamFileAction, fd, () => setOpened(null));
                         }}
                         disabled={isPending}
-                        className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-rose-400"
+                        className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -439,14 +432,14 @@ export function TeamFilesClient({
 
       {/* Row-level action errors surface here since the table has no dialog. */}
       {error && !dialog && (
-        <p className="rounded-[8px] bg-rose-500/10 px-3 py-2 text-[11.5px] text-rose-300">
+        <p className="rounded-none bg-neg-soft px-3 py-2 text-[13.5px] text-neg">
           {error}
         </p>
       )}
 
       {/* ── File preview ──────────────────────────────────────────────────── */}
       {opened && isPdf(opened) && (
-        <div className="fixed inset-0 z-50 flex bg-black/85 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-w-0 flex-1 flex-col p-4">
             <PdfViewer
               url={opened.viewUrl}
@@ -456,48 +449,48 @@ export function TeamFilesClient({
             />
           </div>
           <div className="flex w-[min(380px,100vw)] shrink-0 flex-col p-4 pl-0">
-            <div className="panel flex flex-1 flex-col min-h-0 overflow-hidden rounded-[16px]">
+            <div className="panel flex flex-1 flex-col min-h-0 overflow-hidden rounded-none">
               <div className="flex-1 space-y-4 overflow-y-auto p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="caps-label">{opened.sector}</p>
-                    <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">
+                    <h2 className="mt-0.5 text-base font-semibold leading-snug text-ink">
                       {opened.title}
                     </h2>
                   </div>
                   <button
                     onClick={() => setOpened(null)}
-                    className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                    className="mt-0.5 shrink-0 rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-zinc-500">Uploaded by</dt>
-                    <dd className="font-medium text-white">{opened.uploaderName}</dd>
+                    <dt className="text-ink-3">Uploaded by</dt>
+                    <dd className="font-medium text-ink">{opened.uploaderName}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-zinc-500">Date</dt>
-                    <dd className="text-zinc-300">{fmtDate(opened.createdAt)}</dd>
+                    <dt className="text-ink-3">Date</dt>
+                    <dd className="text-ink">{fmtDate(opened.createdAt)}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-zinc-500">Size</dt>
-                    <dd className="tabular-nums text-zinc-300">
+                    <dt className="text-ink-3">Size</dt>
+                    <dd className="tabular-nums text-ink">
                       {fmtSize(opened.fileSize)}
                     </dd>
                   </div>
                   {totalPages !== null && (
                     <div className="flex justify-between">
-                      <dt className="text-zinc-500">Pages</dt>
-                      <dd className="tabular-nums text-zinc-300">
+                      <dt className="text-ink-3">Pages</dt>
+                      <dd className="tabular-nums text-ink">
                         {currentPage} of {totalPages}
                       </dd>
                     </div>
                   )}
                 </dl>
               </div>
-              <div className="shrink-0 space-y-2 border-t border-white/[0.06] p-5 pt-4">
+              <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
                 <div className="flex w-full gap-1">
                   <button
                     type="button"
@@ -508,7 +501,7 @@ export function TeamFilesClient({
                   >
                     <Minus className="h-4 w-4" />
                   </button>
-                  <span className="flex flex-1 items-center justify-center rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm tabular-nums text-zinc-300">
+                  <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
                     {Math.round(zoom * 100)}%
                   </span>
                   <button
@@ -539,34 +532,34 @@ export function TeamFilesClient({
 
       {/* Non-PDF files (models, decks, docs) can't render inline — offer the file. */}
       {opened && !isPdf(opened) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6 backdrop-blur-md">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
                 <p className="caps-label">{opened.sector}</p>
-                <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">
+                <h2 className="mt-0.5 text-base font-semibold leading-snug text-ink">
                   {opened.title}
                 </h2>
               </div>
               <button
                 onClick={() => setOpened(null)}
-                className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="mt-0.5 shrink-0 rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <dl className="mb-4 space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-zinc-500">Uploaded by</dt>
-                <dd className="font-medium text-white">{opened.uploaderName}</dd>
+                <dt className="text-ink-3">Uploaded by</dt>
+                <dd className="font-medium text-ink">{opened.uploaderName}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-zinc-500">Date</dt>
-                <dd className="text-zinc-300">{fmtDate(opened.createdAt)}</dd>
+                <dt className="text-ink-3">Date</dt>
+                <dd className="text-ink">{fmtDate(opened.createdAt)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-zinc-500">Size</dt>
-                <dd className="tabular-nums text-zinc-300">
+                <dt className="text-ink-3">Size</dt>
+                <dd className="tabular-nums text-ink">
                   {fmtSize(opened.fileSize)}
                 </dd>
               </div>
@@ -578,7 +571,7 @@ export function TeamFilesClient({
                   Download
                 </a>
               ) : (
-                <p className="rounded-[10px] bg-white/[0.04] px-3 py-2.5 text-[11.5px] text-zinc-400">
+                <p className="rounded-none bg-paper-2 px-3 py-2.5 text-[13.5px] text-ink-2">
                   {opened.downloadEnabled
                     ? "This file’s link couldn’t be generated. Reload the page and try again."
                     : "Download is disabled for this file."}
@@ -623,10 +616,10 @@ export function TeamFilesClient({
               required
               maxLength={80}
               autoFocus
-              className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
             />
-            <p className="text-[11px] text-zinc-500">
-              Creating inside <span className="text-zinc-300">{locationLabel}</span>.
+            <p className="text-[13px] text-ink-3">
+              Creating inside <span className="text-ink">{locationLabel}</span>.
             </p>
             {error && <ErrorNote>{error}</ErrorNote>}
             <DialogActions
@@ -656,7 +649,7 @@ export function TeamFilesClient({
               required
               maxLength={80}
               autoFocus
-              className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
             />
             {error && <ErrorNote>{error}</ErrorNote>}
             <DialogActions
@@ -672,13 +665,13 @@ export function TeamFilesClient({
       {dialog?.kind === "confirm-folder-delete" && (
         <DialogShell kicker="Folder" title="Delete folder" onClose={closeDialog}>
           <div className="space-y-3">
-            <p className="text-[12.5px] leading-relaxed text-zinc-300">
-              Delete <span className="font-semibold text-white">{dialog.name}</span>?
+            <p className="text-[14px] leading-relaxed text-ink">
+              Delete <span className="font-semibold text-ink">{dialog.name}</span>?
               {dialog.fileCount > 0 && (
                 <>
                   {" "}
                   This also permanently deletes{" "}
-                  <span className="font-semibold text-rose-300">
+                  <span className="font-semibold text-neg">
                     {dialog.fileCount} file{dialog.fileCount === 1 ? "" : "s"}
                   </span>{" "}
                   and every subfolder inside it.
@@ -691,7 +684,7 @@ export function TeamFilesClient({
               <button
                 type="button"
                 onClick={closeDialog}
-                className="rounded-[10px] px-4 py-2 text-sm text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="rounded-none px-4 py-2 text-sm text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
               >
                 Cancel
               </button>
@@ -703,7 +696,7 @@ export function TeamFilesClient({
                   fd.set("id", dialog.id);
                   submit(deleteFolderAction, fd);
                 }}
-                className="inline-flex items-center gap-2 rounded-[10px] bg-rose-500/15 px-4 py-2 text-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/25 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-none bg-neg-soft px-4 py-2 text-sm font-medium text-neg transition-colors hover:bg-neg-soft disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 {isPending ? "Deleting…" : "Delete"}
@@ -726,16 +719,16 @@ export function TeamFilesClient({
               submit(uploadTeamFileAction, fd);
             }}
           >
-            <label className="glass-input flex cursor-pointer flex-col items-center justify-center gap-2 px-4 py-6 text-center transition-colors hover:bg-white/[0.06]">
-              <Upload className="h-5 w-5 text-zinc-400" />
+            <label className="glass-input flex cursor-pointer flex-col items-center justify-center gap-2 px-4 py-6 text-center transition-colors hover:bg-paper-2">
+              <Upload className="h-5 w-5 text-ink-2" />
               {pickedFile ? (
-                <span className="text-sm text-zinc-200">{pickedFile.name}</span>
+                <span className="text-sm text-ink">{pickedFile.name}</span>
               ) : (
-                <span className="text-sm text-zinc-400">
-                  Click to select a file — model, memo, or deck
+                <span className="text-sm text-ink-2">
+                  Click to select a file: model, memo, or deck
                 </span>
               )}
-              <span className="text-[10.5px] text-zinc-500">Up to 20 MB</span>
+              <span className="text-[12px] text-ink-3">Up to 20 MB</span>
               <input
                 name="file"
                 type="file"
@@ -762,10 +755,10 @@ export function TeamFilesClient({
               name="title"
               placeholder="Title"
               required
-              className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
             />
-            <p className="text-[11px] text-zinc-500">
-              Uploading to <span className="text-zinc-300">{locationLabel}</span> — every
+            <p className="text-[13px] text-ink-3">
+              Uploading to <span className="text-ink">{locationLabel}</span>. Every
               member of the fund can read it.
             </p>
             {error && <ErrorNote>{error}</ErrorNote>}
@@ -793,16 +786,16 @@ function DialogShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6 backdrop-blur-md">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-6 backdrop-blur-md">
       <div className="panel w-full max-w-sm p-6">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="caps-label truncate">{kicker}</p>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="shrink-0 rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
           >
             <X className="h-4 w-4" />
           </button>
@@ -815,7 +808,7 @@ function DialogShell({
 
 function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-[8px] bg-rose-500/10 px-3 py-2 text-[11.5px] text-rose-300">
+    <p className="rounded-none bg-neg-soft px-3 py-2 text-[13.5px] text-neg">
       {children}
     </p>
   );
@@ -835,17 +828,13 @@ function DialogActions({
       <button
         type="button"
         onClick={onCancel}
-        className="rounded-[10px] px-4 py-2 text-sm text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+        className="rounded-none px-4 py-2 text-sm text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
       >
         Cancel
       </button>
-      <button
-        type="submit"
-        disabled={disabled}
-        className="inline-flex items-center gap-2 rounded-[10px] bg-[#8e0604] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#a80705] disabled:opacity-50"
-      >
+      <PrimaryBtn type="submit" disabled={disabled}>
         {submitLabel}
-      </button>
+                </PrimaryBtn>
     </div>
   );
 }

@@ -12,7 +12,7 @@ export type CoverageAnalyst = {
 };
 
 export default async function CoveragePage() {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
 
   const [{ data: profiles }, research] = await Promise.all([
@@ -38,6 +38,7 @@ export default async function CoveragePage() {
       analysts={analysts}
       research={research}
       sectors={[...GICS_SECTORS]}
+      viewerRole={profile.role}
     />
   );
 }

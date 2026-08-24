@@ -34,7 +34,7 @@ export function RoleSelect({
       defaultValue={currentRole}
       onChange={handleChange}
       disabled={isPending}
-      className="w-full rounded-[6px] border border-[#262a2f] bg-[#111214] px-2.5 py-1.5 text-center text-xs font-medium text-zinc-200 outline-none disabled:opacity-60"
+      className="w-full rounded-none border border-line bg-surface px-2.5 py-1.5 text-center text-xs font-medium text-ink outline-none disabled:opacity-60"
     >
       {ROLES.map((r) => (
         <option key={r} value={r}>

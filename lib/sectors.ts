@@ -33,22 +33,22 @@ export function isGicsSector(value: string): value is GicsSector {
  * SECTOR_FALLBACK_COLOR.
  */
 export const SECTOR_COLORS: Record<string, string> = {
-  Technology: "#a78bfa",
-  Healthcare: "#34d399",
-  "Financial Services": "#60a5fa",
-  "Consumer Cyclical": "#fbbf24",
-  "Consumer Defensive": "#fb923c",
-  Industrials: "#fb7185",
-  "Communication Services": "#22d3ee",
-  Energy: "#facc15",
-  "Basic Materials": "#94a3b8",
-  "Real Estate": "#f472b6",
-  Utilities: "#a3e635",
+  Technology: "#8e0604",
+  Healthcare: "#1a7a4c",
+  "Financial Services": "#1f5c9e",
+  "Consumer Cyclical": "#c2610a",
+  "Consumer Defensive": "#a68b00",
+  Industrials: "#5c5347",
+  "Communication Services": "#0e7d8c",
+  Energy: "#6b4423",
+  "Basic Materials": "#a85a7a",
+  "Real Estate": "#6b4a9e",
+  Utilities: "#5c6b1f",
   // Aliases used by external market-data feeds.
-  Financials: "#60a5fa",
-  Communication: "#22d3ee",
-  Materials: "#94a3b8",
+  Financials: "#1f5c9e",
+  Communication: "#0e7d8c",
+  Materials: "#a85a7a",
 };
 
 /** Neutral gray for sectors missing from SECTOR_COLORS (including "Unknown"). */
-export const SECTOR_FALLBACK_COLOR = "#94a3b8";
+export const SECTOR_FALLBACK_COLOR = "#8b8d86";

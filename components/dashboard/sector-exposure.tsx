@@ -50,38 +50,38 @@ export function SectorExposure({
     <section className="panel flex h-full flex-col overflow-hidden p-3">
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <div>
-          <p className="caps text-[10px] text-zinc-500">Exposure</p>
-          <h2 className="whitespace-nowrap text-[13.5px] font-semibold text-white">By Sector</h2>
+          <p className="caps text-[11px] text-ink-3">Exposure</p>
+          <h2 className="whitespace-nowrap text-[15px] font-semibold text-ink">By Sector</h2>
         </div>
-        <span className="tabular-nums text-[10.5px] text-zinc-500">
-          {sectorOnlyCount > 0 ? `${sectorOnlyCount} sectors` : "—"}
+        <span className="tabular-nums text-[12px] text-ink-3">
+          {sectorOnlyCount > 0 ? `${sectorOnlyCount} sectors` : "XX sectors"}
         </span>
       </div>
 
       {!hasPositions ? (
-        <p className="text-sm text-zinc-500">No positions to display.</p>
+        <p className="text-sm text-ink-3">No positions to display.</p>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="space-y-[5px]">
             {rows.map((r) => {
-              const color = r.isCash ? "#52525b" : (SECTOR_COLORS[r.name] ?? SECTOR_FALLBACK_COLOR);
+              const color = r.isCash ? "var(--ink-3)" : (SECTOR_COLORS[r.name] ?? SECTOR_FALLBACK_COLOR);
               return (
                 <div key={r.name} className="flex items-center gap-2">
                   <span
-                    className="h-2 w-2 shrink-0 rounded-full"
+                    className="h-2 w-2 shrink-0 rounded-none"
                     style={{ background: color }}
                   />
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-300">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
                     {r.name}
                     {!r.isCash && r.dayPnlPct != null && (
                       <span
-                        className={`ml-1 text-[10px] tabular-nums ${r.dayPnlPct >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+                        className={`ml-1 text-[11px] tabular-nums ${r.dayPnlPct >= 0 ? "text-pos" : "text-neg"}`}
                       >
                         ({fmtPct(r.dayPnlPct)})
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 tabular-nums text-[11.5px] font-medium text-white">
+                  <span className="shrink-0 tabular-nums text-[13px] font-medium text-ink">
                     {r.weight.toFixed(1)}%
                   </span>
                 </div>

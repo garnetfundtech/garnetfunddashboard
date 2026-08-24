@@ -197,10 +197,11 @@ export async function getTeamBrowseData({
     };
   });
 
-  // Signed URLs only for the files actually on screen, requested in parallel.
+  // No signed URLs here — /api/files/sign generates one on demand the
+  // instant a file is actually opened, instead of the whole folder's worth
+  // of Storage API calls on every navigation.
   const visibleFiles = filesByFolder.get(activeFolderId) ?? [];
-  const files: TeamFileRow[] = await Promise.all(
-    visibleFiles.map(async (file) => {
+  const files: TeamFileRow[] = visibleFiles.map((file) => {
       const row = file as {
         id: string;
         sector: string;
@@ -216,23 +217,6 @@ export async function getTeamBrowseData({
         created_at: string;
       };
 
-      let viewUrl: string | undefined;
-      let downloadUrl: string | undefined;
-      const { bucket, objectPath } = parseFilePath(row.file_path);
-
-      if (bucket && objectPath) {
-        const [view, dl] = await Promise.all([
-          admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10),
-          row.download_enabled
-            ? admin.storage
-                .from(bucket)
-                .createSignedUrl(objectPath, 60 * 10, { download: true })
-            : Promise.resolve(null),
-        ]);
-        viewUrl = view.data?.signedUrl;
-        downloadUrl = dl?.data?.signedUrl;
-      }
-
       return {
         id: row.id,
         sector: row.sector,
@@ -245,11 +229,8 @@ export async function getTeamBrowseData({
         uploaderName: row.uploader_name ?? "Unknown",
         uploaderRole: row.uploader_role ?? "analyst",
         createdAt: row.created_at,
-        viewUrl,
-        downloadUrl,
       };
-    }),
-  );
+  });
 
   return {
     sector,

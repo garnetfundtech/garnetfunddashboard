@@ -52,6 +52,9 @@ export type ExposureMetrics = {
   worstLongDrawdown: number | null;
   /** Most-negative unrealized P&L % among shorts (worst move against us). */
   worstShortDrawdown: number | null;
+  /** Largest adverse close-to-close day move in the book, as a positive %.
+   *  Favorable moves of any size don't count — only bad news does. */
+  worstAdverseDayMove: number | null;
 };
 
 /** Inverse-Herfindahl "effective number of bets" from a set of book weights. */
@@ -93,6 +96,20 @@ export function computeExposure(positions: SidedPosition[], nav: number): Exposu
     return worst;
   };
 
+  // Day P&L % already encodes direction relative to money (a losing day is
+  // negative regardless of side), so "adverse" is just the largest loss —
+  // no separate long/short sign-flip needed.
+  const worstAdverseDayMove = (() => {
+    let worst: number | null = null;
+    for (const p of positions) {
+      const dayPct = p.dayPnlPct;
+      if (dayPct == null || !Number.isFinite(dayPct) || dayPct >= 0) continue;
+      const adverse = Math.abs(dayPct);
+      if (worst == null || adverse > worst) worst = adverse;
+    }
+    return worst;
+  })();
+
   return {
     nav,
     longMV,
@@ -111,6 +128,7 @@ export function computeExposure(positions: SidedPosition[], nav: number): Exposu
     effectiveBetsShort: effectiveBets(shorts.map(weightOf)),
     worstLongDrawdown: worstDrawdown(longs),
     worstShortDrawdown: worstDrawdown(shorts),
+    worstAdverseDayMove,
   };
 }
 
@@ -253,6 +271,7 @@ export function valuesFromExposure(
     "max-short-weight": exposure.maxShortWeight || null,
     "long-kill-trigger": exposure.worstLongDrawdown,
     "short-kill-trigger": exposure.worstShortDrawdown,
+    "single-day-move": exposure.worstAdverseDayMove,
     "effective-bets-long": exposure.longCount ? exposure.effectiveBetsLong : null,
     "effective-bets-short": exposure.shortCount ? exposure.effectiveBetsShort : null,
   };
@@ -270,6 +289,9 @@ export type BuildModelInput = {
   stress?: StressScenarioView[];
   worstStress?: StressScenarioView | null;
   varView?: VarView | null;
+  /** Effective limits (defaults + any DB threshold overrides). Defaults to
+   *  the hardcoded RISK_LIMITS when the caller hasn't loaded overrides. */
+  limits?: RiskLimit[];
 };
 
 export function buildRiskModel(input: BuildModelInput): RiskModel {
@@ -278,7 +300,8 @@ export function buildRiskModel(input: BuildModelInput): RiskModel {
     ...input.values,
   };
 
-  const rows = RISK_LIMITS.map((limit) => evaluateRow(limit, merged[limit.id]));
+  const limits = input.limits ?? RISK_LIMITS;
+  const rows = limits.map((limit) => evaluateRow(limit, merged[limit.id]));
   const byId = new Map(rows.map((r) => [r.limit.id, r]));
 
   // Sortino carries a dynamic rule: flag if it drops below Sharpe.

@@ -14,7 +14,7 @@ export function Spark({ data, width = 64, height = 18, stroke, strokeWidth = 1.2
   const range = max - min || 1;
   const last = data[data.length - 1] ?? 0;
   const positive = last >= 0;
-  const color = stroke ?? (positive ? "#34d399" : "#fb7185");
+  const color = stroke ?? (positive ? "var(--pos)" : "var(--neg)");
   const pad = 1.5;
   const w = width - pad * 2;
   const h = height - pad * 2;
@@ -28,8 +28,8 @@ export function Spark({ data, width = 64, height = 18, stroke, strokeWidth = 1.2
     : undefined;
   return (
     <svg width={width} height={height} className="block shrink-0" preserveAspectRatio="none">
-      {fill && dFill && <path d={dFill} fill={color} fillOpacity={0.12} />}
-      <path d={d} stroke={color} strokeWidth={strokeWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {fill && dFill && <path d={dFill} style={{ fill: color }} fillOpacity={0.12} />}
+      <path d={d} style={{ stroke: color }} strokeWidth={strokeWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

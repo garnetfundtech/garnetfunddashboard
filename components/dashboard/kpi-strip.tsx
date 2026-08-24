@@ -20,26 +20,28 @@ export function KpiStrip({
   portfolio,
   benchmarkSpark,
   riskStats,
+  fundYtdPct,
 }: {
   portfolio: PortfolioSummary | null;
   benchmarkSpark: number[];
   riskStats?: { betaVsSpy: number | null; sharpe30?: number | null; sectorCount: number | null } | null;
+  fundYtdPct?: number | null;
 }) {
   if (!portfolio) {
-    const tiles = [
-      "Total AUM",
-      "Day P&L",
-      "Total P&L",
-      "YTD vs Index",
-      "Portfolio Beta",
-      "Cash Weight",
+    const tiles: { label: string; placeholder: string }[] = [
+      { label: "Total AUM", placeholder: "$XX.XXM" },
+      { label: "Day P&L", placeholder: "$XX.XXK" },
+      { label: "Total P&L", placeholder: "$XX.XXK" },
+      { label: "YTD vs Index", placeholder: "XX.X%" },
+      { label: "Portfolio Beta", placeholder: "X.XX" },
+      { label: "Cash Weight", placeholder: "XX.X%" },
     ];
     return (
-      <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        {tiles.map((label) => (
-          <article key={label} className="panel relative overflow-hidden px-2.5 py-2 opacity-40">
-            <p className="caps text-[9.5px] whitespace-nowrap text-zinc-500">{label}</p>
-            <p className="mt-0.5 text-[15px] font-semibold text-zinc-500">—</p>
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {tiles.map(({ label, placeholder }) => (
+          <article key={label} className="panel relative overflow-hidden px-3 py-2.5 opacity-50">
+            <p className="caps whitespace-nowrap text-[12px]">{label}</p>
+            <p className="stat-value mt-1 text-[19px] text-ink-3">{placeholder}</p>
           </article>
         ))}
       </section>
@@ -66,64 +68,77 @@ export function KpiStrip({
   }[] = [
     {
       label: "Total AUM",
-      value: <span className="text-white">{fmtCompact(aum)}</span>,
-      sub: <span className="text-zinc-500">{portfolio.positionCount} positions · {fmtCompact(cash)} cash</span>,
+      value: <span className="text-ink">{fmtCompact(aum)}</span>,
+      sub: <span className="text-ink-3">{portfolio.positionCount} positions · {fmtCompact(cash)} cash</span>,
       tone: null,
       spark: null,
     },
     {
       label: "Day P&L",
-      value: <span className={dayPnl >= 0 ? "text-emerald-400" : "text-rose-400"}>{fmtSigned(dayPnl)}</span>,
-      sub: <span className={dayPnl >= 0 ? "text-emerald-400/80" : "text-rose-400/80"}>{fmtPct(dayPnlPct)}</span>,
+      value: <span className={dayPnl >= 0 ? "text-pos" : "text-neg"}>{fmtSigned(dayPnl)}</span>,
+      sub: <span className={dayPnl >= 0 ? "text-pos" : "text-neg"}>{fmtPct(dayPnlPct)}</span>,
       tone: dayPnl >= 0 ? "pos" : "neg",
       spark: benchmarkSpark.slice(-7),
     },
     {
       label: "Total P&L",
-      value: <span className={totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}>{fmtSigned(totalPnl)}</span>,
-      sub: <span className="text-zinc-500">open + realized{realized !== 0 ? ` (${fmtSigned(realized)} closed)` : ""}</span>,
+      value: <span className={totalPnl >= 0 ? "text-pos" : "text-neg"}>{fmtSigned(totalPnl)}</span>,
+      sub: <span className="text-ink-3">open + realized{realized !== 0 ? ` (${fmtSigned(realized)} closed)` : ""}</span>,
       tone: totalPnl >= 0 ? "pos" : "neg",
       spark: benchmarkSpark.slice(-30),
     },
     {
       label: "YTD vs Index",
-      value: <span className={benchmarkYtd != null && benchmarkYtd >= 0 ? "text-white" : "text-rose-400"}>{benchmarkYtd != null ? fmtPct(benchmarkYtd, 1) : "—"}</span>,
-      sub: <span className="text-zinc-500">S&amp;P 500 (YTD)</span>,
-      tone: benchmarkYtd != null ? (benchmarkYtd >= 0 ? "pos" : "neg") : null,
-      spark: benchmarkSpark.length > 2 ? benchmarkSpark : null,
+      value:
+        fundYtdPct != null && benchmarkYtd != null ? (
+          <span className={fundYtdPct - benchmarkYtd >= 0 ? "text-pos" : "text-neg"}>
+            {fmtPct(fundYtdPct - benchmarkYtd, 1)}
+          </span>
+        ) : (
+          <span className="text-ink-3">XX.X%</span>
+        ),
+      sub:
+        fundYtdPct != null && benchmarkYtd != null ? (
+          <span className="text-ink-3">
+            Us {fmtPct(fundYtdPct, 1)} · S&amp;P {fmtPct(benchmarkYtd, 1)}
+          </span>
+        ) : (
+          <span className="text-ink-3">Fund return vs S&amp;P 500</span>
+        ),
+      tone: fundYtdPct != null && benchmarkYtd != null ? (fundYtdPct - benchmarkYtd >= 0 ? "pos" : "neg") : null,
+      spark: null,
     },
     {
       label: "Portfolio Beta",
-      value: <span className="text-white">{riskStats?.betaVsSpy != null ? riskStats.betaVsSpy.toFixed(2) : "—"}</span>,
-      sub: <span className="text-zinc-500">{riskStats?.sharpe30 != null ? `Sharpe ${riskStats.sharpe30.toFixed(2)}` : "risk metrics"}</span>,
+      value: <span className="text-ink">{riskStats?.betaVsSpy != null ? riskStats.betaVsSpy.toFixed(2) : "X.XX"}</span>,
+      sub: <span className="text-ink-3">{riskStats?.sharpe30 != null ? `Sharpe ${riskStats.sharpe30.toFixed(2)}` : "risk metrics"}</span>,
       tone: null,
       spark: null,
     },
     {
       label: "Cash Weight",
-      value: <span className="text-white">{cashWeightPct.toFixed(1)}%</span>,
-      sub: <span className="text-zinc-500">{fmtCompact(cash)} available</span>,
+      value: <span className="text-ink">{cashWeightPct.toFixed(1)}%</span>,
+      sub: <span className="text-ink-3">{fmtCompact(cash)} available</span>,
       tone: null,
       spark: null,
     },
   ];
 
   return (
-    <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+    <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
       {tiles.map((t) => (
-        <article key={t.label} className="panel relative overflow-hidden px-2.5 py-2">
+        <article key={t.label} className="panel relative overflow-hidden px-3 py-2.5">
           {t.tone && (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: `linear-gradient(to top, ${t.tone === "pos" ? "rgba(52,211,153,0.06)" : "rgba(251,113,133,0.06)"}, transparent 60%)`,
-              }}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+              style={{ background: t.tone === "pos" ? "var(--pos)" : "var(--neg)" }}
             />
           )}
           <div className="relative">
-            <p className="caps text-[9.5px] whitespace-nowrap text-zinc-500">{t.label}</p>
-            <div className="mt-0.5 flex items-baseline justify-between gap-2">
-              <p className="text-[15px] font-semibold tabular-nums leading-tight whitespace-nowrap">
+            <p className="caps whitespace-nowrap text-[12px]">{t.label}</p>
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <p className="stat-value whitespace-nowrap text-[19px]">
                 {t.value}
               </p>
               {t.spark && t.spark.length >= 2 && (
@@ -131,12 +146,12 @@ export function KpiStrip({
                   data={t.spark}
                   width={42}
                   height={14}
-                  stroke={t.tone === "neg" ? "#fb7185" : "#34d399"}
+                  stroke={t.tone === "neg" ? "var(--neg)" : "var(--pos)"}
                   strokeWidth={1.25}
                 />
               )}
             </div>
-            <p className="mt-0.5 whitespace-nowrap text-[10.5px] tabular-nums">{t.sub}</p>
+            <p className="num mt-1 whitespace-nowrap text-[12px]">{t.sub}</p>
           </div>
         </article>
       ))}

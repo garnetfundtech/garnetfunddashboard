@@ -8,7 +8,7 @@ const PdfViewerClient = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="panel flex h-[640px] items-center justify-center text-sm text-zinc-400">
+      <div className="panel flex h-[640px] items-center justify-center text-sm text-ink-2">
         Loading viewer…
       </div>
     ),

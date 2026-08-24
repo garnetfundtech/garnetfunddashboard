@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarPlus, Rss } from "lucide-react";
+import { CalendarPlus, Download } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
-import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
+import { GhostBtn } from "@/components/dashboard/buttons";
+import { StatusPill } from "@/components/dashboard/status-pill";
+import { downloadIcs, googleCalendarUrl, type IcsEvent } from "@/lib/ics";
 import type { FmpEarningRow } from "@/lib/fmp";
 
 type EarningsFilter = "all" | "held" | "high";
@@ -45,13 +47,13 @@ function importanceTone(
 }
 
 const toneBorder: Record<string, string> = {
-  high: "border-[var(--gf-accent)]/35 bg-[var(--gf-accent)]/[0.07]",
-  med: "border-amber-400/20 bg-amber-400/[0.04]",
-  low: "border-white/[0.06] bg-white/[0.02]",
+  high: "border-garnet-line bg-garnet-soft",
+  med: "border-warn-line bg-warn-soft",
+  low: "border-line bg-paper-3",
 };
 
 function fmtEps(n: number | null) {
-  if (n == null) return "—";
+  if (n == null) return "$XX.XX";
   return `${n >= 0 ? "" : "-"}$${Math.abs(n).toFixed(2)}`;
 }
 
@@ -114,20 +116,23 @@ export function EarningsTableClient({
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        kicker="Calendar"
         title="Earnings Week"
-        subtitle="Reporting companies this week — our holdings plus key broad-market names."
+        meta={weekLabel}
         actions={
-          <>
-            <GhostBtn>
-              <Rss className="h-3.5 w-3.5" />
-              Subscribe
-            </GhostBtn>
-            <PrimaryBtn>
-              <CalendarPlus className="h-3.5 w-3.5" />
-              Add to calendar
-            </PrimaryBtn>
-          </>
+          <GhostBtn
+            onClick={() => {
+              const events: IcsEvent[] = filtered.map((item) => ({
+                uid: `${item.symbol}-${item.date}`,
+                title: `${item.symbol.toUpperCase()} earnings`,
+                date: item.date,
+                description: item.name,
+              }));
+              downloadIcs(events, "Garnet Fund Earnings", "garnet-fund-earnings.ics");
+            }}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download .ics
+          </GhostBtn>
         }
       />
 
@@ -135,12 +140,12 @@ export function EarningsTableClient({
 
       <div className="panel p-3">
         {/* Top strip */}
-        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+        <div className="flex items-center justify-between border-b border-line pb-2">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+            <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
               {weekLabel}
             </p>
-            <p className="text-[13.5px] font-semibold text-white">Calendar</p>
+            <p className="text-[15px] font-semibold text-ink">Calendar</p>
           </div>
           <FilterTabs
             options={[
@@ -162,23 +167,23 @@ export function EarningsTableClient({
             return (
               <div key={label} className="flex flex-col gap-2">
                 {/* Day header */}
-                <div className="flex items-baseline justify-between pb-1.5 border-b border-white/[0.06]">
+                <div className="flex items-baseline justify-between pb-1.5 border-b border-line">
                   <div>
-                    <p className={`text-[9.5px] uppercase tracking-[0.08em] ${isToday ? "text-[var(--gf-accent-fg)]" : "text-zinc-500"}`}>
+                    <p className={`text-[12px] uppercase tracking-[0.08em] ${isToday ? "text-garnet" : "text-ink-3"}`}>
                       {short}
                     </p>
-                    <p className={`text-[13px] font-semibold ${isToday ? "text-white" : "text-zinc-300"}`}>
+                    <p className={`text-[14.5px] font-semibold ${isToday ? "text-ink" : "text-ink"}`}>
                       {date.getDate()}
                     </p>
                   </div>
-                  <span className="tabular-nums text-[10px] text-zinc-600">
+                  <span className="tabular-nums text-[11px] text-ink-3">
                     {items.length} ev
                   </span>
                 </div>
 
                 {/* Events */}
                 {items.length === 0 ? (
-                  <div className="rounded-[8px] border border-dashed border-white/[0.05] px-2 py-3 text-center text-[11px] text-zinc-600">
+                  <div className="rounded-none border border-dashed border-line px-2 py-3 text-center text-[13px] text-ink-3">
                     No events
                   </div>
                 ) : (
@@ -191,43 +196,57 @@ export function EarningsTableClient({
                     return (
                       <div
                         key={`${item.symbol}-${item.date}`}
-                        className={`rounded-[8px] border p-2 ${toneBorder[tone]}`}
+                        className={`rounded-none border p-2 ${toneBorder[tone]}`}
                       >
                         <div className="flex items-center justify-between gap-1">
-                          <span className="text-[12.5px] font-semibold text-white">
+                          <span className="text-[14px] font-semibold text-ink">
                             {sym}
                           </span>
-                          <span className={`rounded-[4px] px-1.5 py-[1px] text-[9px] font-semibold bg-white/[0.06] text-zinc-400`}>
-                            {item.epsEstimated != null ? "EST" : "—"}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            {item.epsEstimated != null && <StatusPill label="EST" tone="neutral" dot={false} />}
+                            <a
+                              href={googleCalendarUrl({
+                                uid: `${item.symbol}-${item.date}`,
+                                title: `${sym} earnings`,
+                                date: item.date,
+                                description: item.name,
+                              })}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Add to Google Calendar"
+                              className="text-ink-3 transition-colors hover:text-ink"
+                            >
+                              <CalendarPlus className="h-3 w-3" />
+                            </a>
+                          </div>
                         </div>
                         {item.name && item.name !== sym && (
-                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                          <p className="mt-0.5 truncate text-[11px] text-ink-3">
                             {item.name}
                           </p>
                         )}
-                        <p className="mt-1 text-[10px] text-zinc-400">
-                          <span className="text-zinc-500">EPS est </span>
-                          <span className="tabular-nums text-zinc-200">
+                        <p className="mt-1 text-[11px] text-ink-2">
+                          <span className="text-ink-3">EPS est </span>
+                          <span className="tabular-nums text-ink">
                             {fmtEps(item.epsEstimated)}
                           </span>
                         </p>
                         {item.eps != null && (
-                          <p className="text-[10px] text-zinc-400">
-                            <span className="text-zinc-500">Actual </span>
-                            <span className={`tabular-nums ${item.eps >= (item.epsEstimated ?? 0) ? "text-emerald-400" : "text-rose-400"}`}>
+                          <p className="text-[11px] text-ink-2">
+                            <span className="text-ink-3">Actual </span>
+                            <span className={`tabular-nums ${item.eps >= (item.epsEstimated ?? 0) ? "text-pos" : "text-neg"}`}>
                               {fmtEps(item.eps)}
                             </span>
                           </p>
                         )}
                         {isHeld && (
-                          <span className="mt-1 inline-flex rounded-full border border-[var(--gf-accent)]/30 bg-[var(--gf-accent)]/10 px-1.5 py-[1px] text-[9px] font-medium text-[var(--gf-accent-fg)]">
-                            Held
+                          <span className="mt-1 inline-flex">
+                            <StatusPill label="Held" tone="accent" dot={false} />
                           </span>
                         )}
                         {isWatch && !isHeld && (
-                          <span className="mt-1 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-[1px] text-[9px] font-medium text-amber-400">
-                            Watching
+                          <span className="mt-1 inline-flex">
+                            <StatusPill label="Watching" tone="amber" dot={false} />
                           </span>
                         )}
                       </div>

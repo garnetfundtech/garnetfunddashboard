@@ -47,15 +47,15 @@ export function SchwabTokenControls({
   }
 
   return (
-    <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+    <div className="rounded-none border border-line bg-paper-3 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-zinc-400">Schwab token expiry</p>
-          <p className="mt-1 text-sm text-white">
+          <p className="text-xs font-semibold text-ink-2">Schwab token expiry</p>
+          <p className="mt-1 text-sm text-ink">
             {target ? (
               <>
                 {refreshExpiresAt ? "Refresh token" : "Access token"} ·{" "}
-                <span className="tabular-nums text-[#f4c5c4]">
+                <span className="tabular-nums text-garnet">
                   {remaining != null ? fmtRemaining(remaining) : "—"} remaining
                 </span>
               </>
@@ -63,7 +63,7 @@ export function SchwabTokenControls({
               "No expiry timestamp on file"
             )}
           </p>
-          <p className="mt-0.5 text-[10px] text-zinc-600">
+          <p className="mt-0.5 text-[11px] text-ink-3">
             {refreshExpiresAt
               ? "Schwab refresh tokens can be long-lived; re-auth before rotation."
               : "Access tokens refresh automatically while the refresh token is valid."}
@@ -73,7 +73,7 @@ export function SchwabTokenControls({
           <button
             type="button"
             onClick={() => void reauth()}
-            className="rounded-[10px] bg-[#8e0604] px-3 py-2 text-xs font-medium text-white hover:bg-[#a80705]"
+            className="rounded-none bg-garnet px-3 py-2 text-xs font-medium text-white hover:bg-garnet-hover"
           >
             Re-authenticate Schwab
           </button>

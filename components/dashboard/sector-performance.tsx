@@ -28,7 +28,7 @@ function PctBadge({ value }: { value: number | null | undefined }) {
     <span
       className={cn(
         "tabular-nums text-sm font-semibold",
-        !ok ? "text-zinc-600" : positive ? "text-emerald-400" : "text-rose-400",
+        !ok ? "text-ink-3" : positive ? "text-pos" : "text-neg",
       )}
     >
       {fmtPct(value)}
@@ -91,27 +91,27 @@ export function SectorPerformance({
       <section className="panel p-4">
         <p className="caps-label mb-3">Our Sectors</p>
         {!hasPositions ? (
-          <p className="text-sm text-zinc-500">No positions to display.</p>
+          <p className="text-sm text-ink-3">No positions to display.</p>
         ) : (
           <div className="space-y-2">
             {fundSectors.map((s) => (
               <div key={s.name} className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
-                    <span className={`truncate text-sm ${s.isCash ? "text-zinc-500" : "text-zinc-200"}`}>{s.name}</span>
+                    <span className={`truncate text-sm ${s.isCash ? "text-ink-3" : "text-ink"}`}>{s.name}</span>
                     {s.isCash ? (
-                      <span className="tabular-nums text-sm font-semibold text-zinc-600">—</span>
+                      <span className="tabular-nums text-sm font-semibold text-ink-3">—</span>
                     ) : (
                       <PctBadge value={s.dayPnlPct} />
                     )}
                   </div>
-                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-none bg-paper-2">
                     <div
-                      className={`h-full rounded-full ${s.isCash ? "bg-zinc-700" : "bg-[#8e0604]"}`}
+                      className={`h-full rounded-none ${s.isCash ? "bg-ink-2" : "bg-garnet"}`}
                       style={{ width: `${Math.min(100, s.weight)}%` }}
                     />
                   </div>
-                  <p className="mt-0.5 text-[11px] text-zinc-600">
+                  <p className="mt-0.5 text-[12.5px] text-ink-3">
                     {s.weight.toFixed(1)}% of portfolio
                   </p>
                 </div>
@@ -125,7 +125,7 @@ export function SectorPerformance({
       <section className="panel p-4">
         <p className="caps-label mb-3">Market Sectors (SPDR ETFs)</p>
         {!etfQuotes ? (
-          <p className="text-sm text-zinc-500">Market data unavailable — Schwab not connected.</p>
+          <p className="text-sm text-ink-3">Market data unavailable, Schwab not connected.</p>
         ) : (
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             {SECTOR_ETFS.map(({ ticker, name }) => {
@@ -135,15 +135,15 @@ export function SectorPerformance({
               return (
                 <div
                   key={ticker}
-                  className="flex items-center justify-between rounded-[8px] bg-white/[0.03] px-3 py-2"
+                  className="flex items-center justify-between rounded-none bg-paper-3 px-3 py-2"
                 >
                   <div>
-                    <p className="text-xs font-medium text-zinc-200">{ticker}</p>
-                    <p className="text-[11px] text-zinc-500">{name}</p>
+                    <p className="text-xs font-medium text-ink">{ticker}</p>
+                    <p className="text-[12.5px] text-ink-3">{name}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs tabular-nums text-zinc-300">
-                      {price != null ? `$${price.toFixed(2)}` : "—"}
+                    <p className="text-xs tabular-nums text-ink">
+                      {price != null ? `$${price.toFixed(2)}` : "$XX.XX"}
                     </p>
                     <PctBadge value={changePct} />
                   </div>

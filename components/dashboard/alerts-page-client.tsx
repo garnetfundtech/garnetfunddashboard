@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Bell, Plus, Settings, Trash2 } from "lucide-react";
+import { Bell, Plus, Trash2 } from "lucide-react";
 import { createAlertAction, deleteAlertAction, dismissAlertAction } from "@/app/(dashboard)/alerts/actions";
 import type { StockAlert } from "@/app/(dashboard)/alerts/page";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -13,7 +13,7 @@ import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { GICS_SECTORS } from "@/lib/sectors";
 
 function fmtPrice(n: number | null) {
-  if (n == null) return "—";
+  if (n == null) return "$XX.XX";
   return `$${n.toFixed(2)}`;
 }
 
@@ -194,21 +194,16 @@ export function AlertsPageClient({
     },
     { label: "Snoozed", value: String(snoozedCount), sub: "Mute until tomorrow" },
     { label: "Symbols watched", value: String(uniqueTickers), sub: "Distinct tickers" },
-    { label: "Avg time to fire", value: "—", sub: "Trailing 30 days" },
+    { label: "Avg time to fire", value: "XXm", sub: "Trailing 30 days" },
   ];
 
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        kicker="Alerts"
         title="Price & Condition Alerts"
-        subtitle="Auto-monitored thresholds across holdings and watchlist."
+        meta={`${alerts.length} alert${alerts.length === 1 ? "" : "s"}`}
         actions={
           <>
-            <GhostBtn>
-              <Settings className="h-3.5 w-3.5" />
-              Channels
-            </GhostBtn>
             <PrimaryBtn onClick={() => setShowForm(true)}>
               <Plus className="h-3.5 w-3.5" />
               New alert
@@ -220,7 +215,7 @@ export function AlertsPageClient({
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-2"
+        className="grid gap-3"
         style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 0.9fr)" }}
       >
         {/* Left — Conditions table */}
@@ -244,7 +239,7 @@ export function AlertsPageClient({
         >
           <table className="w-full">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+              <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">
                 <th className="px-3 py-2 font-medium">Ticker</th>
                 <th className="px-3 py-2 font-medium">Buy limit</th>
                 <th className="px-3 py-2 font-medium">Sell limit</th>
@@ -259,7 +254,7 @@ export function AlertsPageClient({
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-3 py-12 text-center text-[11.5px] text-zinc-500"
+                    className="px-3 py-12 text-center text-[13.5px] text-ink-3"
                   >
                     No alerts match this filter.
                   </td>
@@ -268,25 +263,25 @@ export function AlertsPageClient({
               {filtered.map((alert) => (
                 <tr
                   key={alert.id}
-                  className="border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                  className="border-b border-line last:border-b-0 transition hover:bg-paper-3"
                 >
                   <td className="px-3 py-2">
-                    <span className="text-[12px] font-semibold text-white">
+                    <span className="text-[14px] font-semibold text-ink">
                       {alert.ticker}
                     </span>
                     {alert.companyName && (
-                      <span className="ml-1 text-[10.5px] text-zinc-500">
+                      <span className="ml-1 text-[12px] text-ink-3">
                         {alert.companyName}
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-300">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink">
                     {fmtPrice(alert.buyLimit)}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-300">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink">
                     {fmtPrice(alert.sellLimit)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[12px] text-zinc-300">
+                  <td className="px-3 py-2 text-right tabular-nums text-[14px] text-ink">
                     {fmtPrice(alert.currentPrice)}
                   </td>
                   <td className="px-3 py-2">
@@ -295,7 +290,7 @@ export function AlertsPageClient({
                       tone={alertStatusTone(alert.status)}
                     />
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                  <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                     {fmtWhen(alert.createdAt)}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -305,7 +300,7 @@ export function AlertsPageClient({
                           type="button"
                           onClick={() => handleDismiss(alert.id)}
                           disabled={isPending}
-                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-ink"
                         >
                           <Bell className="h-3.5 w-3.5" />
                         </button>
@@ -315,7 +310,7 @@ export function AlertsPageClient({
                           type="button"
                           onClick={() => handleDelete(alert.id)}
                           disabled={isPending}
-                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-rose-400"
+                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -330,27 +325,27 @@ export function AlertsPageClient({
 
         {/* Right — Recently triggered card */}
         <div className="panel p-3">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+          <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
             Recently triggered
           </p>
-          <p className="mt-0.5 text-[13.5px] font-semibold text-white">
+          <p className="mt-0.5 text-[15px] font-semibold text-ink">
             Last 7 days
           </p>
           <ul className="mt-3 space-y-0.5">
             {recentTriggered.length === 0 && (
-              <li className="text-[11px] text-zinc-600">No triggered alerts.</li>
+              <li className="text-[13px] text-ink-3">No triggered alerts.</li>
             )}
             {recentTriggered.map((a) => (
               <li key={a.id}>
-                <div className="flex items-center gap-2 rounded-[6px] px-1.5 py-1.5 hover:bg-white/[0.025]">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
-                  <span className="min-w-0 flex-1 text-[11.5px] text-zinc-200">
-                    <span className="font-semibold text-white">{a.ticker}</span>
+                <div className="flex items-center gap-2 rounded-none px-1.5 py-1.5 hover:bg-paper-3">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-none bg-neg" />
+                  <span className="min-w-0 flex-1 text-[13.5px] text-ink">
+                    <span className="font-semibold text-ink">{a.ticker}</span>
                     {" "}
                     {a.status === "triggered_buy" ? "hit buy limit" : "hit sell limit"}
                     {a.companyName ? ` (${a.companyName})` : ""}
                   </span>
-                  <span className="shrink-0 tabular-nums text-[10px] text-zinc-500">
+                  <span className="shrink-0 tabular-nums text-[11px] text-ink-3">
                     {fmtWhen(a.triggeredAt)}
                   </span>
                 </div>
@@ -362,16 +357,16 @@ export function AlertsPageClient({
 
       {/* New alert form */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6 backdrop-blur-sm">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="caps-label">Alerts</p>
-                <h2 className="text-base font-semibold text-white">New alert</h2>
+                <h2 className="text-base font-semibold text-ink">New alert</h2>
               </div>
               <button
                 onClick={() => setShowForm(false)}
-                className="rounded-[8px] p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
+                className="rounded-none p-1.5 text-ink-2 hover:bg-paper-2 hover:text-ink"
               >
                 ×
               </button>
@@ -399,28 +394,28 @@ export function AlertsPageClient({
                   name="ticker"
                   value={formTicker}
                   onChange={handleTickerChange}
-                  className="glass-input w-full px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
+                  className="glass-input w-full px-3 py-2.5 text-sm uppercase text-ink outline-none placeholder:text-ink-3"
                   placeholder="Ticker (e.g. AAPL)"
                   required
                 />
                 {tickerLookupLoading && (
-                  <p className="mt-1 text-[11px] text-zinc-500">Looking up…</p>
+                  <p className="mt-1 text-[13px] text-ink-3">Looking up…</p>
                 )}
                 {formCompany && (
                   <>
                     <input type="hidden" name="companyName" value={formCompany} />
-                    <p className="mt-1 text-[11px] text-zinc-400">{formCompany}</p>
+                    <p className="mt-1 text-[13px] text-ink-2">{formCompany}</p>
                   </>
                 )}
                 {formLivePrice !== null && (
-                  <p className="mt-0.5 text-[11px] text-emerald-400">
+                  <p className="mt-0.5 text-[13px] text-pos">
                     Live: ${formLivePrice.toFixed(2)}
                   </p>
                 )}
               </div>
               <select
                 name="sector"
-                className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-zinc-300 outline-none"
+                className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-ink outline-none"
               >
                 <option value="">Select sector</option>
                 {GICS_SECTORS.map((s) => (
@@ -436,7 +431,7 @@ export function AlertsPageClient({
                 required
                 value={formBuyLimit}
                 onChange={(e) => setFormBuyLimit(e.target.value)}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
                 placeholder="Buy limit"
               />
               <input
@@ -446,21 +441,21 @@ export function AlertsPageClient({
                 required
                 value={formSellLimit}
                 onChange={(e) => setFormSellLimit(e.target.value)}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
                 placeholder="Sell limit"
               />
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="rounded-[10px] px-4 py-2 text-sm text-zinc-400 hover:bg-white/5 hover:text-white"
+                  className="rounded-none px-4 py-2 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--gf-accent)] px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-none bg-garnet px-4 py-2 text-sm font-medium text-white hover:bg-garnet-hover disabled:opacity-50"
                 >
                   Create
                 </button>

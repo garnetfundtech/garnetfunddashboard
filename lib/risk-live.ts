@@ -18,12 +18,15 @@ import {
 } from "@/lib/market-data";
 import { enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
 import { computeRiskAnalytics } from "@/lib/risk-analytics";
+import { getEffectiveLimits } from "@/lib/risk-thresholds";
+import { RISK_LIMITS } from "@/lib/risk-parameters";
 import {
   buildRiskModel,
   computeExposure,
   computeSectorBalance,
   type RiskModel,
   type RiskValueMap,
+  sideOf,
   type SidedPosition,
 } from "@/lib/risk-engine";
 
@@ -77,6 +80,7 @@ async function computeTurnover(grossDollars: number): Promise<number | null> {
  */
 async function buildLiveRiskModel(): Promise<RiskModel> {
   const asOf = new Date().toISOString();
+  const limits = await getEffectiveLimits();
 
   const portfolio = await fetchPortfolioSummary();
   if (!portfolio) {
@@ -92,6 +96,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       stress: [],
       worstStress: null,
       varView: null,
+      limits,
     });
   }
 
@@ -141,6 +146,12 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       "hit-rate": tradeStats.hitRate,
       slugging: tradeStats.slugging,
       turnover,
+      // Proxy for per-price staleness: hours since the whole book was last
+      // confirmed live against Schwab. No per-ticker price timestamp is
+      // stored today, so this is the closest available signal — good enough
+      // to catch "the feed died overnight," which is the failure item 10
+      // exists to catch.
+      "stale-data": (Date.now() - new Date(portfolio.verifiedAt).getTime()) / 3600000,
     };
 
     return buildRiskModel({
@@ -151,6 +162,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       exposure,
       sectorBalance,
       values,
+      limits,
       stress: analytics?.stress.scenarios ?? [],
       worstStress: analytics?.stress.worst ?? null,
       varView: analytics
@@ -186,6 +198,67 @@ export async function getRiskModel(): Promise<RiskModel> {
       stress: [],
       worstStress: null,
       varView: null,
+      limits: RISK_LIMITS,
     });
   }
+}
+
+// ── Daily book snapshot ───────────────────────────────────────────────────
+
+/** One position as persisted in `risk_snapshots.positions`. */
+export type SnapshotPosition = {
+  ticker: string;
+  side: "long" | "short";
+  /** Signed share count. The field drift-vs-trade classification compares. */
+  quantity: number;
+  avgCost: number;
+  price: number;
+  marketValue: number;
+  /** Absolute weight as a % of NAV, so shorts are positive. */
+  weight: number;
+  sector: string | null;
+};
+
+export type SnapshotBook = {
+  nav: number;
+  longMV: number;
+  shortMV: number;
+  positions: SnapshotPosition[];
+};
+
+/**
+ * The day's book, position by position, for the daily snapshot.
+ *
+ * Deliberately separate from `getRiskModel()`: the model is sent to every
+ * browser that loads /risk, and the full position list has no business
+ * inflating that payload. This runs server-side in the snapshot cron only.
+ *
+ * Returns null when there's no live account to snapshot — the caller should
+ * skip the write rather than persist an empty book, which would read as
+ * "we held nothing that day".
+ */
+export async function getSnapshotBook(): Promise<SnapshotBook | null> {
+  const portfolio = await fetchPortfolioSummary();
+  if (!portfolio || !portfolio.liquidationValue) return null;
+
+  const nav = portfolio.liquidationValue;
+  let positions = portfolio.positions as SidedPosition[];
+  const enriched = await enrichPositionsWithSectors(portfolio.positions).catch(() => null);
+  if (enriched) positions = enriched as SidedPosition[];
+
+  const rows: SnapshotPosition[] = positions.map((p) => ({
+    ticker: p.ticker,
+    side: sideOf(p),
+    quantity: p.quantity,
+    avgCost: p.avgCost,
+    price: p.currentPrice,
+    marketValue: p.marketValue,
+    weight: nav > 0 ? (Math.abs(p.marketValue) / nav) * 100 : 0,
+    sector: p.sector ?? null,
+  }));
+
+  const longMV = rows.filter((r) => r.side === "long").reduce((s, r) => s + Math.abs(r.marketValue), 0);
+  const shortMV = rows.filter((r) => r.side === "short").reduce((s, r) => s + Math.abs(r.marketValue), 0);
+
+  return { nav, longMV, shortMV, positions: rows };
 }

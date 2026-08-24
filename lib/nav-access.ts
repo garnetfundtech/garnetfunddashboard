@@ -14,6 +14,7 @@ export const ROUTES = {
   alerts: "/alerts",
   watchlist: "/watchlist",
   earnings: "/earnings",
+  riskAdmin: "/risk-admin",
 } as const;
 
 const ANALYST_PATHS = new Set<string>([
@@ -30,6 +31,7 @@ const ANALYST_PATHS = new Set<string>([
 
 const PM_EXTRA = new Set<string>([
   ROUTES.orders,
+  ROUTES.riskAdmin,
 ]);
 
 const ADMIN_ONLY = new Set<string>([
@@ -48,6 +50,7 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
     { href: ROUTES.watchlist, label: "Watchlist" },
     { href: ROUTES.earnings, label: "Earnings" },
     { href: ROUTES.orders, label: "Trade History" },
+    { href: ROUTES.riskAdmin, label: "Risk Admin" },
     { href: ROUTES.users, label: "Users" },
   ];
 

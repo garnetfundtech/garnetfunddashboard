@@ -6,16 +6,16 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="panel w-full max-w-md space-y-6 p-6">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-white">USC Garnet Fund</h1>
-          <p className="mt-1 text-sm text-zinc-400">Sign in to the dashboard</p>
+          <h1 className="text-xl font-semibold text-ink">USC Garnet Fund</h1>
+          <p className="mt-1 text-sm text-ink-2">Sign in to the dashboard</p>
         </div>
         {!isSupabaseConfigured && (
-          <div className="rounded-[10px] border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2.5 text-[12px] text-amber-200/90">
+          <div className="rounded-none border border-warn-line bg-warn-soft px-3 py-2.5 text-[13.5px] text-warn">
             <p className="font-semibold">Supabase isn&rsquo;t configured</p>
-            <p className="mt-1 text-amber-200/70">
+            <p className="mt-1 text-warn">
               Sign-in is disabled locally until credentials are set. Add your keys to{" "}
-              <code className="text-amber-100">.env.local</code> (see{" "}
-              <code className="text-amber-100">.env.example</code>) and restart the dev server.
+              <code className="text-warn">.env.local</code> (see{" "}
+              <code className="text-warn">.env.example</code>) and restart the dev server.
             </p>
           </div>
         )}

@@ -6,6 +6,7 @@ import {
   fetchMarketOverview,
   fetchBenchmarkHistory,
 } from "@/lib/market-data";
+import { getCachedPortfolioPerformance } from "@/lib/portfolio-performance";
 import type {
   FundUser,
   PitchRow,
@@ -26,13 +27,17 @@ export type HomepageData = {
   portfolio: PortfolioSummary | null;
   market: MarketOverview | null;
   benchmarkYtd: BenchmarkCandle[];
+  /** The fund's own YTD return, computed the same way as the chart's Alpha
+   *  badge — null when there's no valid session or no price history yet. */
+  fundYtdPct: number | null;
 };
 
 export async function getHomepageData(): Promise<HomepageData> {
-  const [portfolio, market, benchmark] = await Promise.allSettled([
+  const [portfolio, market, benchmark, performance] = await Promise.allSettled([
     fetchPortfolioSummary(),
     fetchMarketOverview(),
     fetchBenchmarkHistory("YTD"),
+    getCachedPortfolioPerformance("YTD"),
   ]);
 
   return {
@@ -41,6 +46,7 @@ export async function getHomepageData(): Promise<HomepageData> {
     benchmarkYtd: benchmark.status === "fulfilled" && benchmark.value
       ? benchmark.value.candles
       : [],
+    fundYtdPct: performance.status === "fulfilled" ? performance.value.latestPct : null,
   };
 }
 
@@ -56,26 +62,11 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
 
   if (error || !data) return [];
 
-  const admin = createAdminClient();
+  // No signed URLs here — /api/files/sign generates one on demand the moment
+  // a viewer opens a specific file, instead of every row on every page load.
   const mapped: ResearchItem[] = [];
 
   for (const row of data) {
-    let viewUrl: string | undefined;
-    let downloadUrl: string | undefined;
-
-    if (row.file_path) {
-      const { bucket, objectPath } = parseFilePath(row.file_path);
-      if (bucket && objectPath) {
-        const view = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10);
-        if (view.data?.signedUrl) viewUrl = view.data.signedUrl;
-
-        if (row.download_enabled) {
-          const dl = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10, { download: true });
-          if (dl.data?.signedUrl) downloadUrl = dl.data.signedUrl;
-        }
-      }
-    }
-
     const ts = (row as { thesis_status?: string }).thesis_status;
     const validThesis: ThesisStatus =
       ts === "under_review" || ts === "became_position" || ts === "rejected" || ts === "active"
@@ -91,9 +82,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       createdBy: row.created_by ?? null,
       uploaderRole: (row.uploader_role as UserRole) ?? "analyst",
       filePath: row.file_path ?? undefined,
-      viewUrl,
       downloadEnabled: row.download_enabled ?? false,
-      downloadUrl,
       sector: (row as { sector?: string | null }).sector ?? null,
       thesisStatus: validThesis,
       analystName: (row as { analyst_name?: string | null }).analyst_name ?? null,
@@ -123,45 +112,18 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
 
   if (error || !data) return [];
 
-  const admin = createAdminClient();
-  const mapped: ResourceWithLinks[] = [];
-
-  for (const resource of data) {
-    let viewUrl: string | undefined;
-    let downloadUrl: string | undefined;
-
-    if (resource.file_path) {
-      const { bucket, objectPath } = parseFilePath(resource.file_path);
-      if (bucket && objectPath) {
-        const view = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10);
-        if (view.data?.signedUrl) {
-          viewUrl = view.data.signedUrl;
-        }
-        if (resource.download_enabled) {
-          const dl = await admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10, {
-            download: true,
-          });
-          if (dl.data?.signedUrl) {
-            downloadUrl = dl.data.signedUrl;
-          }
-        }
-      }
-    }
-
-    mapped.push({
-      id: resource.id,
-      title: resource.title,
-      category: resource.category as ResourceItem["category"],
-      downloadEnabled: resource.download_enabled,
-      updatedAt: new Date(resource.created_at).toLocaleDateString(),
-      file_path: resource.file_path,
-      uploadedBy: resource.uploader_name ?? "Unknown",
-      createdBy: resource.created_by ?? null,
-      uploaderRole: (resource.uploader_role as UserRole) ?? "analyst",
-      viewUrl,
-      downloadUrl,
-    });
-  }
+  // No signed URLs here either — same fix as getResearchItems above.
+  const mapped: ResourceWithLinks[] = data.map((resource) => ({
+    id: resource.id,
+    title: resource.title,
+    category: resource.category as ResourceItem["category"],
+    downloadEnabled: resource.download_enabled,
+    updatedAt: new Date(resource.created_at).toLocaleDateString(),
+    file_path: resource.file_path,
+    uploadedBy: resource.uploader_name ?? "Unknown",
+    createdBy: resource.created_by ?? null,
+    uploaderRole: (resource.uploader_role as UserRole) ?? "analyst",
+  }));
 
   return mapped;
 }

@@ -14,16 +14,16 @@ export function FilterTabs<T extends string>({
   );
 
   return (
-    <div className="flex items-center gap-0.5 rounded-[7px] border border-white/[0.06] bg-black/30 p-0.5">
+    <div className="flex items-center gap-0.5 rounded-none border border-line bg-paper-3 p-0.5">
       {resolved.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`rounded-[5px] px-2 py-[2px] text-[10.5px] transition ${
+          className={`rounded-none px-2 py-[3px] text-[12px] transition-colors ${
             value === o.value
-              ? "bg-white/[0.07] text-white"
-              : "text-zinc-500 hover:text-zinc-300"
+              ? "bg-surface text-ink"
+              : "text-ink-3 hover:text-ink"
           }`}
         >
           {o.label}

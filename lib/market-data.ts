@@ -189,9 +189,15 @@ export const fetchAccountOrders = unstable_cache(loadAccountOrders, ["account-or
   tags: ["schwab-orders"],
 });
 
+// Last successful portfolio fetch, kept in memory for this server instance.
+// If Schwab drops mid-demo (or any time), the dashboard keeps showing the
+// last good snapshot — stamped with its real verifiedAt — instead of going
+// blank the instant one request fails. Resets on a cold start/deploy.
+let lastGoodPortfolio: PortfolioSummary | null = null;
+
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();
-  if (!token) return null;
+  if (!token) return lastGoodPortfolio;
 
   try {
     const accounts = await getAccountPositions(token);
@@ -285,7 +291,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       /* non-fatal — realized gains table may not exist yet */
     }
 
-    return {
+    const result: PortfolioSummary = {
       liquidationValue,
       cashAvailable,
       longMarketValue,
@@ -300,8 +306,10 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       accountNumber: String(sec.accountNumber ?? ""),
       verifiedAt: new Date().toISOString(),
     };
+    lastGoodPortfolio = result;
+    return result;
   } catch {
-    return null;
+    return lastGoodPortfolio;
   }
 }
 
@@ -374,9 +382,14 @@ function normalizeMover(raw: SchwabMover): Mover {
   };
 }
 
+// Same stale-fallback pattern as portfolio: keep the last good snapshot in
+// memory so a Schwab hiccup shows slightly-old indices/movers instead of a
+// blank panel.
+let lastGoodMarket: MarketOverview | null = null;
+
 async function loadMarketOverview(): Promise<MarketOverview | null> {
   const token = await loadValidTraderToken();
-  if (!token) return null;
+  if (!token) return lastGoodMarket;
 
   try {
     const [quotesRaw, hoursRaw, nyseUpRaw, nasdaqUpRaw, nyseDownRaw, nasdaqDownRaw] =
@@ -435,15 +448,17 @@ async function loadMarketOverview(): Promise<MarketOverview | null> {
 
     const sessionInfo = detectSession(hours);
 
-    return {
+    const result: MarketOverview = {
       ...sessionInfo,
       indices,
       gainers,
       losers,
       fetchedAt: new Date().toISOString(),
     };
+    lastGoodMarket = result;
+    return result;
   } catch {
-    return null;
+    return lastGoodMarket;
   }
 }
 

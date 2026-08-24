@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 
+/** Fixed height so every primary/ghost button lines up identically across every
+ *  page header, regardless of icon or label length. */
+const BTN_HEIGHT = "h-9";
+
 export function PrimaryBtn({
   children,
   onClick,
@@ -16,7 +20,7 @@ export function PrimaryBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-[8px] bg-[var(--gf-accent)] px-3 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+      className={`inline-flex ${BTN_HEIGHT} items-center gap-1.5 rounded-none bg-garnet px-3.5 text-[14px] font-medium text-white transition-colors hover:bg-garnet-hover disabled:opacity-50`}
     >
       {children}
     </button>
@@ -39,7 +43,7 @@ export function GhostBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--gf-border)] bg-[var(--gf-panel)] px-3 py-2 text-[12.5px] text-zinc-300 transition hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+      className={`inline-flex ${BTN_HEIGHT} items-center gap-1.5 rounded-none border border-line bg-surface px-3.5 text-[14px] text-ink transition-colors hover:bg-paper-2 disabled:opacity-50`}
     >
       {children}
     </button>

@@ -5,51 +5,171 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* --------------------------------------------------------------------------
+   Display face — Helvetica Now Display, used for headings and figure numerals.
+   Full weight range now installed (Light/Regular/Medium/Bold), so headings
+   and stat values can use real bold instead of the single-weight-500 hack
+   this used to be pinned to. Dense UI text uses DM Sans.
+   -------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Helvetica Now Display";
+  src: url("/fonts/HelveticaNowDisplay-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Helvetica Now Display";
+  src: url("/fonts/HelveticaNowDisplay-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Helvetica Now Display";
+  src: url("/fonts/HelveticaNowDisplay-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Helvetica Now Display";
+  src: url("/fonts/HelveticaNowDisplay-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --font-dm-sans: "DM Sans Variable", "DM Sans", sans-serif;
-  --background: #090a0b;
-  --foreground: #f3f4f6;
-  --card: #111214;
-  --card-foreground: #f3f4f6;
-  --popover: #111214;
-  --popover-foreground: #f3f4f6;
-  --primary: #8e0604;
-  --primary-foreground: #ffffff;
-  --secondary: #1b1f24;
-  --secondary-foreground: #e4e7ec;
-  --muted: #13171b;
-  --muted-foreground: #9aa1ac;
-  --accent: #1b1f24;
-  --accent-foreground: #e4e7ec;
-  --destructive: #b42318;
-  --border: #262a2f;
-  --input: #232830;
-  --ring: #8e0604;
+  /* ---- Palette (prestonsch.com paper system, garnet accent) ---- */
+  --paper: #f2f1ea;
+  --paper-2: #e4e2d9;
+  --paper-3: #ebe9e1;
+  --surface: #ffffff;
+
+  --ink: #17181a;
+  --ink-2: #5c5e5a;
+  --ink-3: #8b8d86;
+
+  --line: rgba(23, 24, 26, 0.12);
+  --line-2: rgba(23, 24, 26, 0.22);
+  --line-3: rgba(23, 24, 26, 0.38);
+
+  --on-dark: #f2f1ea;
+  --on-dark-2: rgba(242, 241, 234, 0.62);
+  --on-dark-3: rgba(242, 241, 234, 0.42);
+  --on-dark-line: rgba(242, 241, 234, 0.16);
+
+  /* Garnet replaces the site's lime accent everywhere it appeared. */
+  --garnet: #8e0604;
+  --garnet-hover: #a80705;
+  --garnet-deep: #770503;
+  --garnet-soft: rgba(142, 6, 4, 0.08);
+  --garnet-line: rgba(142, 6, 4, 0.28);
+  --garnet-fg: #ffffff;
+
+  /* Data semantics. Garnet doubles as the loss color; gains read green so a
+     P&L column is still scannable at a glance. */
+  --pos: #1a6b45;
+  --pos-soft: rgba(26, 107, 69, 0.1);
+  --pos-line: rgba(26, 107, 69, 0.28);
+  --neg: #8e0604;
+  --neg-soft: rgba(142, 6, 4, 0.09);
+  --neg-line: rgba(142, 6, 4, 0.26);
+  --warn: #8a5a05;
+  --warn-soft: rgba(138, 90, 5, 0.1);
+  --warn-line: rgba(138, 90, 5, 0.26);
+  --info: #1f4e79;
+  --info-soft: rgba(31, 78, 121, 0.09);
+  --info-line: rgba(31, 78, 121, 0.24);
+
+  /* ---- shadcn bridge ---- */
+  --font-display: "Helvetica Now Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-dm-sans: "DM Sans Variable", "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--garnet);
+  --primary-foreground: var(--garnet-fg);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-3);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--paper-2);
+  --accent-foreground: var(--ink);
+  --destructive: var(--garnet);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--garnet);
+
+  /* Chart ramp: garnet-led, then neutral inks. */
   --chart-1: #8e0604;
-  --chart-2: #d1d5db;
-  --chart-3: #64748b;
-  --chart-4: #9ca3af;
-  --chart-5: #1f2937;
-  --radius: 0.5rem;
-  --panel: #111214;
-  --panel-soft: #181a1d;
-  --sidebar: #0d0f12;
-  --sidebar-foreground: #f3f4f6;
-  --sidebar-primary: #8e0604;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1d2127;
-  --sidebar-accent-foreground: #e4e7ec;
-  --sidebar-border: #262a2f;
-  --sidebar-ring: #8e0604;
-  --glass-bg: rgba(255, 255, 255, 0.045);
-  --glass-bg-soft: rgba(255, 255, 255, 0.03);
+  --chart-2: #17181a;
+  --chart-3: #8b8d86;
+  --chart-4: #c07472;
+  --chart-5: #5c5e5a;
+  --chart-6: #d8d5c8;
+
+  /* Square, editorial — the reference site uses no rounding at all. */
+  --radius: 0px;
+
+  --panel: var(--surface);
+  --panel-soft: var(--paper-3);
+  --sidebar: var(--ink);
+  --sidebar-foreground: var(--on-dark);
+  --sidebar-primary: var(--garnet);
+  --sidebar-primary-foreground: var(--garnet-fg);
+  --sidebar-accent: rgba(242, 241, 234, 0.08);
+  --sidebar-accent-foreground: var(--on-dark);
+  --sidebar-border: var(--on-dark-line);
+  --sidebar-ring: var(--garnet);
+
+  --maxw: 1600px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-dm-sans);
-  --font-heading: var(--font-dm-sans);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+
+  /* Semantic palette, addressable as Tailwind utilities. */
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-2: var(--on-dark-2);
+  --color-on-dark-3: var(--on-dark-3);
+  --color-on-dark-line: var(--on-dark-line);
+  --color-garnet: var(--garnet);
+  --color-garnet-hover: var(--garnet-hover);
+  --color-garnet-deep: var(--garnet-deep);
+  --color-garnet-soft: var(--garnet-soft);
+  --color-garnet-line: var(--garnet-line);
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-pos-line: var(--pos-line);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-neg-line: var(--neg-line);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -58,11 +178,12 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -79,103 +200,173 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Everything square. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  letter-spacing: -0.01em;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-dm-sans);
+  letter-spacing: -0.006em;
+  font-feature-settings: "tnum" 0;
 }
 
 /* Hide scrollbars everywhere while keeping scroll functional */
 * {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 *::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/WebKit */
+  display: none;
 }
 
 * {
-  border-color: var(--border);
+  border-color: var(--line);
+}
+
+/* --------------------------------------------------------------------------
+   Type scale — mirrors the reference site: tight negative tracking on display
+   type, wide positive tracking on small uppercase labels.
+   -------------------------------------------------------------------------- */
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.028em;
+}
+
+/* Helvetica Now Display now has its real weight range installed (Light 300,
+   Regular 400, Medium 500, Bold 700) — headings and figures use actual bold
+   rather than the single-weight-500 hack this used to be pinned to. */
+h1,
+h2,
+h3,
+h4,
+.display {
+  font-weight: 700;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.6875rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.032em;
+  color: var(--ink);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.014em;
+  color: var(--ink);
 }
 
 .caps-label,
 .caps {
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted-foreground);
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
 }
 
-/* Design-system token aliases */
-:root {
-  --gf-accent: var(--primary);
-  --gf-accent-fg: #f4c5c4;
-  --gf-panel: var(--panel);
-  --gf-border: var(--border);
+/* Figures: display face + tabular numerals so columns align. */
+.num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-weight: 500;
+  letter-spacing: -0.018em;
 }
 
+.stat-value {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.026em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   Surfaces — flat, hairline-ruled. No rounding, no glass, no drop shadow.
+   -------------------------------------------------------------------------- */
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 4px 16px rgba(0, 0, 0, 0.3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.panel-flat {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
 
 .glass-input {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
 
+.glass-input:focus-within {
+  border-color: var(--line-3);
+}
+
+/* Legacy hooks retained so the tinted-stat treatment stays a no-op rather
+   than reintroducing dark-theme glow. */
 .glass-stat {
   position: relative;
   overflow: hidden;
 }
-
 .glass-stat::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
   pointer-events: none;
-  filter: blur(8px);
 }
-
 .glass-stat-positive::after {
-  background: linear-gradient(
-    to top,
-    rgba(34, 197, 94, 0.06) 0%,
-    rgba(34, 197, 94, 0.02) 50%,
-    rgba(34, 197, 94, 0) 100%
-  );
+  background: linear-gradient(to top, var(--pos-soft), transparent 65%);
 }
-
 .glass-stat-negative::after {
-  background: linear-gradient(
-    to top,
-    rgba(142, 6, 4, 0.1) 0%,
-    rgba(142, 6, 4, 0.03) 50%,
-    rgba(142, 6, 4, 0) 100%
-  );
+  background: linear-gradient(to top, var(--neg-soft), transparent 65%);
 }
 
-.page-title {
-  font-size: 1.55rem;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: -0.02em;
+/* Dense data rows, Robinhood-style: hairline rules, no zebra, hover tint. */
+.data-row {
+  border-bottom: 1px solid var(--line);
+  transition: background-color 100ms linear;
 }
+.data-row:last-child {
+  border-bottom: 0;
+}
+.data-row:hover {
+  background: var(--paper-3);
+}
+
+.data-head {
+  background: var(--paper-3);
+  border-bottom: 1px solid var(--line-2);
+}
+
+/* Underline-on-hover link, as used throughout the reference site. */
+.rule-link {
+  border-bottom: 1px solid var(--line-2);
+  transition: border-color 120ms linear;
+}
+.rule-link:hover {
+  border-color: var(--ink);
+}
+
 
 @layer base {
   * {
@@ -186,5 +377,13 @@ body {
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.028em;
   }
 }

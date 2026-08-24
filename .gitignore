@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 certificatessupabase/.temp/
+
+# local tooling / reference docs, not part of the app
+.claude/
+*.zip
+.env.local.bak

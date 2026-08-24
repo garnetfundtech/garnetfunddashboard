@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountPositions } from "@/lib/schwab";
+import { loadValidTraderToken } from "@/lib/market-data";
 
 type SchwabPosition = {
   marketValue?: number;
@@ -59,17 +60,15 @@ export async function POST() {
     .single();
 
   try {
-    const { data: tokenRow } = await admin
-      .from("schwab_tokens")
-      .select("*")
-      .eq("id", "trader")
-      .single();
+    // Refreshes the token first when it's expiring or expired, rather than
+    // reading the raw stored value and failing against a stale one.
+    const accessToken = await loadValidTraderToken();
 
-    if (!tokenRow?.access_token) {
-      throw new Error("Missing Schwab token. Complete OAuth first.");
+    if (!accessToken) {
+      throw new Error("Missing or expired Schwab token. Complete OAuth first.");
     }
 
-    const accounts = await getAccountPositions(tokenRow.access_token);
+    const accounts = await getAccountPositions(accessToken);
     const capturedAt = new Date().toISOString();
     const normalized = normalizeSchwabAccounts(accounts);
     const positions: SchwabPosition[] = normalized.flatMap(

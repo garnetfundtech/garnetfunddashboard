@@ -32,11 +32,13 @@ export type RiskUnit = "%" | "beta" | "x" | "ratio" | "count" | "$" | "";
 
 /**
  * How the current value is scored against the limit:
- *  - abs-band  value magnitude should stay small   (|v| ≤ green → yellow → red)
+ *  - abs-band  value magnitude should stay small     (|v| ≤ green → yellow → red)
  *  - max       value should stay below a ceiling     (v ≤ green → yellow → red)
  *  - min       value should stay above a floor       (v ≥ green → yellow → red)
+ *  - range     value should stay inside a band       (rangeGreen[0..1] → yellow either side → red past rangeYellow)
+ *              e.g. gross exposure: green 135–165, yellow 165–175 or below 135, red beyond either.
  */
-export type RiskKind = "abs-band" | "max" | "min";
+export type RiskKind = "abs-band" | "max" | "min" | "range";
 
 export type RiskLimit = {
   id: string;
@@ -46,11 +48,23 @@ export type RiskLimit = {
   target: string;
   unit: RiskUnit;
   kind: RiskKind;
-  /** Boundary of the green (in-policy) zone. */
+  /** Boundary of the green (in-policy) zone. Unused (0) for kind "range" — use rangeGreen instead. */
   green: number;
-  /** Boundary of the yellow (watch) zone; beyond it is red (breach). */
+  /** Boundary of the yellow (watch) zone; beyond it is red (breach). Unused (0) for kind "range". */
   yellow: number;
+  /** kind "range" only: [low, high] of the green band, e.g. [135, 165]. */
+  rangeGreen?: [number, number];
+  /** kind "range" only: [low, high] of the yellow band; outside this is red. */
+  rangeYellow?: [number, number];
   cadence: RiskCadence;
+  /** Red always notifies. These four also notify on yellow because they drift
+   *  on their own and are slow to reverse — see the framework doc's
+   *  Notification Rules section. Every other item stays board-color-only
+   *  until red. */
+  notifyOnYellow?: boolean;
+  /** Whether a breach fires during market hours (item 5) or batches into the
+   *  end-of-day send (everything else). */
+  alertTiming?: "intraday" | "close";
   dataSource: RiskDataSource;
   /** "What kills the idea" — the rationale / backstop behind the number. */
   note?: string;
@@ -89,20 +103,25 @@ export const RISK_LIMITS: RiskLimit[] = [
     yellow: 10,
     cadence: "daily",
     dataSource: "live",
-    note: "Longs minus shorts. Won't sit at 0 — daily market moves push it around even when we don't touch anything. Outside ±10% → rebalance within 2 trading days.",
+    notifyOnYellow: true,
+    alertTiming: "close",
+    note: "Longs minus shorts. Won't sit at 0 — daily market moves push it around even when we don't touch anything. Outside ±10% → rebalance within 2 trading days. Red starts a 2-trading-day countdown; if it expires still red, the notification escalates.",
   },
   {
     id: "gross-exposure",
     group: "exposure",
     label: "Gross Exposure",
-    target: "≈150% (75/75) · hard cap 175%",
+    target: "135–165% (75/75) · hard cap 175%",
     unit: "%",
-    kind: "max",
-    green: 160,
-    yellow: 175,
+    kind: "range",
+    green: 0,
+    yellow: 0,
+    rangeGreen: [135, 165],
+    rangeYellow: [165, 175],
     cadence: "daily",
     dataSource: "live",
-    note: "Longs plus shorts. Target ~150% split 75% long / 75% short. Hard cap 175%.",
+    alertTiming: "close",
+    note: "Longs plus shorts. Target 135–165% split ~75% long / 75% short. Low gross (under 135%) is yellow, not red — it means we've quietly stopped deploying capital. Hard cap 175%.",
   },
   {
     id: "net-beta",
@@ -111,10 +130,12 @@ export const RISK_LIMITS: RiskLimit[] = [
     target: "−0.10 to +0.10",
     unit: "beta",
     kind: "abs-band",
-    green: 0.08,
+    green: 0.07,
     yellow: 0.1,
     cadence: "weekly",
     dataSource: "live",
+    notifyOnYellow: true,
+    alertTiming: "close",
     note: "Weekly run regression. Outside ±0.10 → bring the book back inside within 2 trading days.",
   },
 
@@ -165,11 +186,12 @@ export const RISK_LIMITS: RiskLimit[] = [
     target: "each sector within ±5%",
     unit: "%",
     kind: "abs-band",
-    green: 3.5,
+    green: 4,
     yellow: 5,
     cadence: "weekly",
     dataSource: "live",
-    note: "Each sector's long weight stays within ±5% of its short weight. Value shown is the widest sector gap.",
+    alertTiming: "close",
+    note: "Each sector's long weight stays within ±5% of its short weight, in percentage points of NAV. Value shown is the widest sector gap. Show the industry breakdown underneath — a sector can look balanced while one industry inside it is a concentrated bet.",
   },
 
   // ── Position Sizing ────────────────────────────────────────────────────
@@ -197,7 +219,23 @@ export const RISK_LIMITS: RiskLimit[] = [
     yellow: 3,
     cadence: "daily",
     dataSource: "live",
-    note: "Shorts cap at 3%; new shorts start at 2%. A short grows as it moves against you while the loss is uncapped, so the short book runs tighter.",
+    notifyOnYellow: true,
+    alertTiming: "close",
+    note: "Measured at market value, not cost. Shorts cap at 3%; new shorts start at 2% and flag red above that. A short grows as it moves against you while the loss is uncapped — a 3% short that doubles becomes a ~6% position having never been added to — so the short book runs tighter than the long book.",
+  },
+  {
+    id: "single-day-move",
+    group: "sizing",
+    label: "Single-Day Move",
+    target: "adverse move ≤ 6% · red past 10%",
+    unit: "%",
+    kind: "max",
+    green: 6,
+    yellow: 10,
+    cadence: "daily",
+    dataSource: "live",
+    alertTiming: "intraday",
+    note: "Close-to-close change. Adverse means down for a long, up for a short — a favorable move of any size is green, no notification. A 6% move is roughly three standard deviations for a typical large-cap (≈1.9% daily vol); 10% is roughly five. Red fires during the trading day, not the end-of-day batch. Value shown is the worst adverse move in the book.",
   },
   {
     id: "long-kill-trigger",
@@ -276,8 +314,10 @@ export const RISK_LIMITS: RiskLimit[] = [
     green: -5,
     yellow: -8,
     cadence: "daily",
-    dataSource: "manual",
-    note: "Fall 8% from the high → board/committee meeting before adding new risk. Tight on purpose — could mean our process is broken, not the market.",
+    dataSource: "live",
+    notifyOnYellow: true,
+    alertTiming: "close",
+    note: "Fall 8% from the high-water mark (which only ratchets upward) → no new risk until the committee meets. Tight on purpose — at 4–8% target annualised volatility, an 8% drawdown is a larger move than one standard deviation over a full year in a market-neutral book. Persistent, undismissable banner on red.",
   },
   {
     id: "var-95",
@@ -530,6 +570,19 @@ export const RISK_LIMITS: RiskLimit[] = [
     dataSource: "planned",
     note: "Quarterly: −20% crash, +15% melt-up, 30% squeeze on the largest short. Any scenario worse than −10% of NAV flags, like a covenant breach in the loan's downside case.",
   },
+  {
+    id: "stale-data",
+    group: "health",
+    label: "Stale Data Check",
+    target: "all prices current",
+    unit: "count",
+    kind: "max",
+    green: 24,
+    yellow: 24,
+    cadence: "daily",
+    dataSource: "live",
+    note: "Binary — no yellow state. Green while every price is current; red the moment any price is older than one trading day. Everything else on this board is only as trustworthy as this check: a green board built on a dead data feed is worse than no board, because it produces false confidence instead of none. Value shown is hours since the oldest price update.",
+  },
 ];
 
 // Metrics wired to live computation in Phase 2 (analytics engine + risk-live).
@@ -582,6 +635,19 @@ export function evaluateLimit(limit: RiskLimit, value: number | null | undefined
     case "min": {
       if (value >= limit.green) return "green";
       if (value >= limit.yellow) return "yellow";
+      return "red";
+    }
+    case "range": {
+      // Asymmetric by design (gross exposure is the only user today): below
+      // the green band is always yellow, uncapped — low gross means we've
+      // quietly stopped deploying capital, not a breach of anything, so
+      // there's no red floor on that side. Above green, yellow up to the
+      // ceiling, red past it.
+      const [gLow, gHigh] = limit.rangeGreen ?? [0, 0];
+      const yHigh = limit.rangeYellow?.[1] ?? gHigh;
+      if (value >= gLow && value <= gHigh) return "green";
+      if (value < gLow) return "yellow";
+      if (value <= yHigh) return "yellow";
       return "red";
     }
     default:

@@ -1,3 +1,4 @@
+import { ArrowUp, ArrowDown } from "lucide-react";
 import type { MarketOverview } from "@/lib/types";
 
 function fmtUsd(n: number) {
@@ -10,33 +11,24 @@ function fmtPct(n: number) {
 
 export function OverviewRail({ market }: { market: MarketOverview | null }) {
   return (
-    <aside className="flex h-full flex-col gap-2">
+    <aside className="flex h-full flex-col gap-3">
       {market?.indices?.map((idx) => {
         const positive = idx.change >= 0;
         return (
           <section
             key={idx.symbol}
-            className="panel relative flex flex-1 flex-col justify-center overflow-hidden p-2.5"
+            className="panel flex flex-1 flex-col justify-center overflow-hidden p-2.5"
           >
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: positive
-                  ? "linear-gradient(to top, rgba(52,211,153,0.05), transparent 70%)"
-                  : "linear-gradient(to top, rgba(251,113,133,0.05), transparent 70%)",
-              }}
-            />
-            <div className="relative">
-              <p className="caps text-[9.5px] text-zinc-500">
-                {idx.label} <span className="text-zinc-600">({idx.symbol})</span>
-              </p>
-              <p className="mt-0.5 text-[15px] font-semibold tabular-nums text-white">
-                {fmtUsd(idx.lastPrice)}
-              </p>
-              <p className={`mt-0.5 text-[11px] tabular-nums font-medium ${positive ? "text-emerald-400" : "text-rose-400"}`}>
-                {positive ? "▲" : "▼"} {Math.abs(idx.change).toFixed(2)} ({fmtPct(idx.pctChange)})
-              </p>
-            </div>
+            <p className="caps">
+              {idx.label} <span className="text-ink-3">({idx.symbol})</span>
+            </p>
+            <p className="stat-value mt-1 text-[19px] text-ink">
+              {fmtUsd(idx.lastPrice)}
+            </p>
+            <p className={`num mt-1 flex items-center gap-0.5 text-[13px] font-medium ${positive ? "text-pos" : "text-neg"}`}>
+              {positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+              {Math.abs(idx.change).toFixed(2)} ({fmtPct(idx.pctChange)})
+            </p>
           </section>
         );
       })}
@@ -48,11 +40,11 @@ export function OverviewRail({ market }: { market: MarketOverview | null }) {
             { label: "Nasdaq 100", symbol: "QQQ" },
             { label: "Russell 2000", symbol: "IWM" },
           ].map(({ label, symbol }) => (
-            <section key={symbol} className="panel flex flex-1 flex-col justify-center p-2.5 opacity-40">
-              <p className="caps text-[9.5px] text-zinc-500">
-                {label} <span className="text-zinc-600">({symbol})</span>
+            <section key={symbol} className="panel flex flex-1 flex-col justify-center p-2.5 opacity-50">
+              <p className="caps">
+                {label} <span className="text-ink-3">({symbol})</span>
               </p>
-              <p className="mt-0.5 text-[15px] font-semibold text-zinc-500">—</p>
+              <p className="stat-value mt-1 text-[19px] text-ink-3">—</p>
             </section>
           ))}
         </>

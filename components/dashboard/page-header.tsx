@@ -1,28 +1,23 @@
-import type { ReactNode } from "react";
+"use client";
 
+import type { ReactNode } from "react";
+import { useRegisterPageHeader } from "@/components/dashboard/page-header-context";
+
+/**
+ * Registers this page's title/meta/actions into the shared layout row (see
+ * page-header-context.tsx) instead of rendering its own header here — that
+ * row sits at the same height and shares the same border line as the
+ * sidebar's logo row, so every page's title lines up with it.
+ */
 export function PageHeader({
-  kicker,
   title,
-  subtitle,
+  meta,
   actions,
 }: {
-  kicker?: string;
   title: string;
-  subtitle?: string;
+  meta?: ReactNode;
   actions?: ReactNode;
 }) {
-  return (
-    <div className="flex items-end justify-between gap-4">
-      <div>
-        {kicker && (
-          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">{kicker}</p>
-        )}
-        <h1 className="text-[20px] font-semibold tracking-tight text-white whitespace-nowrap">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-[12px] text-zinc-400">{subtitle}</p>}
-      </div>
-      {actions && (
-        <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
-      )}
-    </div>
-  );
+  useRegisterPageHeader({ title, meta, actions });
+  return null;
 }

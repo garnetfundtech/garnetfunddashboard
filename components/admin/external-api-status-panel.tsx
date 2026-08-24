@@ -9,8 +9,8 @@ function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex h-1.5 w-1.5 rounded-full",
-        ok ? "bg-emerald-400" : "bg-red-400",
+        "inline-flex h-1.5 w-1.5 rounded-none",
+        ok ? "bg-pos" : "bg-neg",
       )}
     />
   );
@@ -20,8 +20,8 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-        ok ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400",
+        "inline-flex items-center gap-1.5 rounded-none px-2 py-0.5 text-xs font-medium",
+        ok ? "bg-pos-soft text-pos" : "bg-neg-soft text-neg",
       )}
     >
       <StatusDot ok={ok} />
@@ -96,22 +96,22 @@ export function ExternalApiStatusPanel({
     <section className="panel p-5 space-y-4">
       <div>
         <p className="caps-label">External integrations</p>
-        <h2 className="text-sm font-semibold text-white">API status</h2>
-        <p className="mt-1 text-xs text-zinc-500">
+        <h2 className="text-sm font-semibold text-ink">API status</h2>
+        <p className="mt-1 text-xs text-ink-3">
           Status checks are lightweight pings; “endpoints used” reflect what this dashboard calls for displayed data.
         </p>
       </div>
 
-      <div className="rounded-[10px] bg-white/[0.03] divide-y divide-white/[0.05]">
+      <div className="rounded-none bg-paper-3 divide-y divide-line">
         {rows.map((r) => (
           <div key={r.key} className="px-4 py-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white truncate">{r.label}</p>
-                <p className="text-[11px] text-zinc-500 truncate">{r.detail}</p>
+                <p className="text-sm font-semibold text-ink truncate">{r.label}</p>
+                <p className="text-[12.5px] text-ink-3 truncate">{r.detail}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-zinc-500">
+                <span className="text-[12.5px] text-ink-3">
                   {r.usedEndpoints.length} used / {r.totalOffered} offered
                 </span>
                 <StatusBadge ok={r.ok} label={r.ok ? "Connected" : "Disconnected"} />
@@ -125,9 +125,9 @@ export function ExternalApiStatusPanel({
                   <StatusBadge ok={traderOk} label="Trader" />
                   <StatusBadge ok={marketOk} label="API market data" />
                 </div>
-                <div className="text-[11px] text-zinc-500">
+                <div className="text-[12.5px] text-ink-3">
                   Last sync:{" "}
-                  <span className="text-zinc-400">
+                  <span className="text-ink-2">
                     {schwabDiagnostics.lastSync?.finishedAt ? fmt(schwabDiagnostics.lastSync.finishedAt) : "—"}
                   </span>
                 </div>
@@ -135,12 +135,12 @@ export function ExternalApiStatusPanel({
             ) : null}
 
             <details className="group">
-              <summary className="cursor-pointer select-none text-[11px] text-zinc-400 hover:text-white">
+              <summary className="cursor-pointer select-none text-[12.5px] text-ink-2 hover:text-ink">
                 Endpoints in use
               </summary>
-              <ul className="mt-2 space-y-1 text-[11px] text-zinc-400">
+              <ul className="mt-2 space-y-1 text-[12.5px] text-ink-2">
                 {r.usedEndpoints.map((e) => (
-                  <li key={e} className="font-mono text-zinc-500">
+                  <li key={e} className="font-mono text-ink-3">
                     {e}
                   </li>
                 ))}
@@ -148,9 +148,9 @@ export function ExternalApiStatusPanel({
 
               {r.key === "schwab" && schwabDiagnostics ? (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[11px] text-zinc-500">
+                  <div className="text-[12.5px] text-ink-3">
                     Refresh token:{" "}
-                    <span className={cn("tabular-nums", refreshExpired ? "text-rose-300" : "text-zinc-400")}>
+                    <span className={cn("tabular-nums", refreshExpired ? "text-neg" : "text-ink-2")}>
                       {refreshRemaining != null ? fmtRemaining(refreshRemaining) : "—"}
                     </span>
                   </div>
@@ -158,10 +158,10 @@ export function ExternalApiStatusPanel({
                     type="button"
                     onClick={() => void reauthSchwab()}
                     className={cn(
-                      "rounded-[8px] px-2.5 py-1.5 text-[11px] font-medium transition",
+                      "rounded-none px-2.5 py-1.5 text-[12.5px] font-medium transition",
                       refreshExpired
-                        ? "bg-rose-500/15 text-rose-300 animate-pulse hover:bg-rose-500/25"
-                        : "bg-white/[0.04] text-zinc-300 hover:bg-white/10",
+                        ? "bg-neg-soft text-neg animate-pulse hover:bg-neg-soft"
+                        : "bg-paper-2 text-ink hover:bg-paper-2",
                     )}
                   >
                     Refresh token

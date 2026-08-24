@@ -84,14 +84,14 @@ export function PdfThumbnail({
     // This naturally shows the document from the top — portrait pages show ~top half,
     // landscape/slide pages show ~top three-quarters depending on aspect ratio.
     return (
-      <div className="relative w-full overflow-hidden rounded-[10px]" style={{ aspectRatio: "16/9" }}>
+      <div className="relative w-full overflow-hidden rounded-none" style={{ aspectRatio: "16/9" }}>
         {status === "loading" && (
-          <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
+          <div className="absolute inset-0 flex items-center justify-center text-ink-3">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         )}
         {(!url || status === "error") && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-600">
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">
             No preview
           </div>
         )}
@@ -102,7 +102,7 @@ export function PdfThumbnail({
           aria-label={`${title} thumbnail`}
         />
         {ext && (
-          <div className="absolute bottom-3 right-3 rounded-[5px] bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 backdrop-blur-sm">
+          <div className="absolute bottom-3 right-3 rounded-none bg-ink/50 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink backdrop-blur-sm">
             {ext}
           </div>
         )}
@@ -112,14 +112,14 @@ export function PdfThumbnail({
 
   // Table mode (legacy)
   return (
-    <div className="glass-input relative aspect-video w-[132px] overflow-hidden rounded-[10px]">
+    <div className="glass-input relative aspect-video w-[132px] overflow-hidden rounded-none">
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
+        <div className="absolute inset-0 flex items-center justify-center text-ink-3">
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
       )}
       {(!url || status === "error") && (
-        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-zinc-500">
+        <div className="absolute inset-0 flex items-center justify-center text-[12.5px] text-ink-3">
           No preview
         </div>
       )}
@@ -127,7 +127,7 @@ export function PdfThumbnail({
         <canvas ref={canvasRef} className="max-h-full max-w-full" aria-label={`${title} thumbnail`} />
       </div>
       {ext && (
-        <div className="absolute bottom-1 right-1 rounded-[4px] bg-black/50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
+        <div className="absolute bottom-1 right-1 rounded-none bg-ink/70 px-1 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-ink-2">
           {ext}
         </div>
       )}

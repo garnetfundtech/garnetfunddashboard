@@ -1,4 +1,6 @@
 import { deleteUserAction } from "@/app/(dashboard)/admin/actions";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { AdminExportButton } from "@/components/admin/admin-export-button";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
@@ -33,9 +35,10 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-3">
+      <PageHeader title="Admin" meta={`${users.length} member${users.length === 1 ? "" : "s"}`} actions={<AdminExportButton users={users} />} />
       <section className="panel overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-white/5 text-zinc-400">
+          <thead className="bg-paper-2 text-ink-2">
             <tr>
               <th className="px-4 py-2.5 text-left font-medium">Name</th>
               <th className="px-4 py-2.5 text-left font-medium">Email</th>
@@ -46,9 +49,9 @@ export default async function AdminPage() {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="odd:bg-white/[0.015]">
-                <td className="px-4 py-3 text-white">{user.full_name || "—"}</td>
-                <td className="px-4 py-3 text-zinc-400">{user.email}</td>
+              <tr key={user.id} className="odd:bg-paper-3">
+                <td className="px-4 py-3 text-ink">{user.full_name || "—"}</td>
+                <td className="px-4 py-3 text-ink-2">{user.email}</td>
                 <td className="px-4 py-3">
                   <RoleSelect userId={user.id} currentRole={user.role} />
                 </td>
@@ -60,7 +63,7 @@ export default async function AdminPage() {
                     <input type="hidden" name="id" value={user.id} />
                     <button
                       type="submit"
-                      className="rounded-[6px] px-2.5 py-1.5 text-xs font-medium text-zinc-500 hover:bg-rose-500/15 hover:text-rose-400 transition-colors"
+                      className="rounded-none px-2.5 py-1.5 text-xs font-medium text-ink-3 hover:bg-neg-soft hover:text-neg transition-colors"
                     >
                       Delete
                     </button>

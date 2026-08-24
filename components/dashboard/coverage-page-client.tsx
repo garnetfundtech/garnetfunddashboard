@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
 import { StatusPill } from "@/components/dashboard/status-pill";
-import { PrimaryBtn } from "@/components/dashboard/buttons";
+import { PrimaryBtn, GhostBtn } from "@/components/dashboard/buttons";
+import { assignSectorAction } from "@/app/(dashboard)/admin/actions";
 import type { CoverageAnalyst } from "@/app/(dashboard)/coverage/page";
-import type { ResearchItem } from "@/lib/types";
+import type { ResearchItem, UserRole } from "@/lib/types";
 import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
 type SectorStatus = "covered" | "thin" | "gap" | "uncovered";
@@ -47,11 +48,16 @@ export function CoveragePageClient({
   analysts,
   research,
   sectors,
+  viewerRole,
 }: {
   analysts: CoverageAnalyst[];
   research: ResearchItem[];
   sectors: string[];
+  viewerRole: UserRole;
 }) {
+  const canAssign = viewerRole === "admin" || viewerRole === "developer" || viewerRole === "pm";
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const sectorMap = useMemo(() => {
     const map: Record<string, { analysts: CoverageAnalyst[]; tickers: string[] }> = {};
     for (const s of sectors) {
@@ -104,7 +110,7 @@ export function CoveragePageClient({
           Object.values(loadMap).reduce((s, n) => s + n, 0) /
           activeAnalysts.length
         ).toFixed(1)
-      : "—";
+      : "X.X";
 
   const kpiTiles = [
     {
@@ -139,21 +145,81 @@ export function CoveragePageClient({
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        kicker="Coverage"
         title="Sector Coverage"
-        subtitle="Analyst assignments, sector status, and research depth across the portfolio."
+        meta={`${covered} / ${sectors.length} sectors covered`}
         actions={
-          <PrimaryBtn>
-            <Plus className="h-3.5 w-3.5" />
-            Assign analyst
-          </PrimaryBtn>
+          canAssign ? (
+            <PrimaryBtn onClick={() => setAssignOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Assign analyst
+            </PrimaryBtn>
+          ) : undefined
         }
       />
+
+      {assignOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6">
+          <div className="w-full max-w-sm border border-line bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="panel-title">Assign analyst</h2>
+              <button type="button" onClick={() => setAssignOpen(false)} className="text-ink-3 hover:text-ink">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form
+              action={(fd) => {
+                startTransition(async () => {
+                  await assignSectorAction(fd);
+                  setAssignOpen(false);
+                });
+              }}
+              className="flex flex-col gap-3"
+            >
+              <label className="flex flex-col gap-1">
+                <span className="caps">Member</span>
+                <select
+                  name="id"
+                  required
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                >
+                  {analysts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} {a.sector ? `(currently ${a.sector})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="caps">Sector</span>
+                <select
+                  name="sector"
+                  required
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                >
+                  {sectors.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-center justify-end gap-1.5 pt-1">
+                <GhostBtn type="button" onClick={() => setAssignOpen(false)}>
+                  Cancel
+                </GhostBtn>
+                <PrimaryBtn type="submit" disabled={isPending}>
+                  {isPending ? "Assigning…" : "Assign"}
+                </PrimaryBtn>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-2"
+        className="grid gap-3"
         style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 0.9fr)" }}
       >
         {/* Left — Sectors × Analysts table */}
@@ -161,14 +227,12 @@ export function CoveragePageClient({
           title="Sectors"
           count={sectors.length}
           actions={
-            <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-[1px] text-[10px] text-zinc-400">
-              GICS 11
-            </span>
+            <StatusPill label="GICS 11" tone="neutral" dot={false} />
           }
         >
           <table className="w-full">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+              <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">
                 <th className="px-3 py-2 font-medium">Sector</th>
                 <th className="px-3 py-2 font-medium">Lead</th>
                 <th className="px-3 py-2 text-right font-medium">Analysts</th>
@@ -190,42 +254,37 @@ export function CoveragePageClient({
                 return (
                   <tr
                     key={sector}
-                    className="border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                    className="border-b border-line last:border-b-0 transition hover:bg-paper-3"
                   >
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          className="h-1.5 w-1.5 shrink-0 rounded-none"
                           style={{ background: color }}
                         />
-                        <span className="text-[12px] text-zinc-200">{sector}</span>
+                        <span className="text-[14px] text-ink">{sector}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-[12px] text-zinc-400">
+                    <td className="px-3 py-2 text-[14px] text-ink-2">
                       {lead ? (
-                        <span className="text-zinc-200">{lead.name}</span>
+                        <span className="text-ink">{lead.name}</span>
                       ) : (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-ink-3">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[12px] text-zinc-300">
+                    <td className="px-3 py-2 text-right tabular-nums text-[14px] text-ink">
                       {analystCount}
                     </td>
                     <td className="px-3 py-2">
                       {tickers.length === 0 ? (
-                        <span className="text-[12px] text-zinc-600">—</span>
+                        <span className="text-[14px] text-ink-3">—</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {tickers.slice(0, 6).map((t) => (
-                            <span
-                              key={t}
-                              className="rounded-[5px] border border-white/[0.06] bg-white/[0.03] px-1.5 py-[1px] text-[10.5px] font-medium text-zinc-200"
-                            >
-                              {t}
-                            </span>
+                            <StatusPill key={t} label={t} tone="neutral" dot={false} />
                           ))}
                           {tickers.length > 6 && (
-                            <span className="text-[10.5px] text-zinc-500">
+                            <span className="text-[12px] text-ink-3">
                               +{tickers.length - 6}
                             </span>
                           )}
@@ -247,15 +306,15 @@ export function CoveragePageClient({
 
         {/* Right — Analyst load card */}
         <div className="panel p-3">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+          <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
             Analyst Load
           </p>
-          <p className="mt-0.5 text-[13.5px] font-semibold text-white">
+          <p className="mt-0.5 text-[15px] font-semibold text-ink">
             Tickers per analyst
           </p>
           <div className="mt-3 space-y-1.5">
             {activeAnalysts.length === 0 && (
-              <p className="text-[11px] text-zinc-600">No analysts yet.</p>
+              <p className="text-[13px] text-ink-3">No analysts yet.</p>
             )}
             {activeAnalysts.map((a) => {
               const load = loadMap[a.id] ?? 0;
@@ -268,25 +327,25 @@ export function CoveragePageClient({
                 .join("");
               return (
                 <div key={a.id} className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-[9.5px] font-semibold text-zinc-200">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-none bg-paper-2 text-[12px] font-semibold text-ink">
                     {initials}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between">
-                      <span className="truncate text-[11.5px] text-zinc-200">
+                      <span className="truncate text-[13.5px] text-ink">
                         {a.name}
                       </span>
-                      <span className="ml-2 shrink-0 tabular-nums text-[10.5px] text-zinc-500">
+                      <span className="ml-2 shrink-0 tabular-nums text-[12px] text-ink-3">
                         {load} tickers
                       </span>
                     </div>
-                    <div className="mt-0.5 h-[3px] w-full rounded-full bg-white/[0.05]">
+                    <div className="mt-0.5 h-[3px] w-full rounded-none bg-paper-2">
                       <div
-                        className="h-full rounded-full transition-all"
+                        className="h-full rounded-none transition-all"
                         style={{
                           width: `${barPct}%`,
                           background:
-                            load > 0 ? "var(--gf-accent)" : "#3f3f46",
+                            load > 0 ? "var(--garnet)" : "var(--line-2)",
                         }}
                       />
                     </div>

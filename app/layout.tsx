@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("dark h-full antialiased", "font-sans")}
+      className={cn("h-full antialiased", "font-sans")}
     >
       <body className="min-h-full bg-background text-foreground font-sans">
         {children}

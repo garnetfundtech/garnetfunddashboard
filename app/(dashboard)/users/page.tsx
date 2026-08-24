@@ -2,8 +2,13 @@ import { requireRole } from "@/lib/auth";
 import { getFundUsers } from "@/lib/data";
 import { UsersTableClient } from "@/components/dashboard/users-table-client";
 
-export default async function UsersPage() {
-  await requireRole(["pm", "admin", "developer"]);
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ highlight?: string }>;
+}) {
+  const sp = await searchParams;
+  const profile = await requireRole(["pm", "admin", "developer"]);
   const users = await getFundUsers();
-  return <UsersTableClient users={users} />;
+  return <UsersTableClient users={users} viewerRole={profile.role} highlightId={sp.highlight ?? null} />;
 }

@@ -18,14 +18,14 @@ function usd(n: number) {
 
 function StatusDot({ ok }: { ok: boolean }) {
   return (
-    <span className={`inline-flex h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400" : "bg-red-400"}`} />
+    <span className={`inline-flex h-1.5 w-1.5 rounded-none ${ok ? "bg-pos" : "bg-neg"}`} />
   );
 }
 
 function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-      ok ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+    <span className={`inline-flex items-center gap-1.5 rounded-none px-2 py-0.5 text-xs font-medium ${
+      ok ? "bg-pos-soft text-pos" : "bg-neg-soft text-neg"
     }`}>
       <StatusDot ok={ok} />
       {label}
@@ -36,8 +36,8 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1 text-sm">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-right font-medium text-white">{value}</span>
+      <span className="text-ink-3">{label}</span>
+      <span className="text-right font-medium text-ink">{value}</span>
     </div>
   );
 }
@@ -72,22 +72,22 @@ export function SchwabDiagnosticPanel({
       <div className="flex items-center justify-between">
         <div>
           <p className="caps-label">Schwab Integration</p>
-          <h2 className="text-sm font-semibold text-white">API Health &amp; Account</h2>
+          <h2 className="text-sm font-semibold text-ink">API Health &amp; Account</h2>
         </div>
         <SchwabSyncButton />
       </div>
 
       {/* Token + account + market data + last sync — all in one panel */}
-      <div className="rounded-[10px] bg-white/[0.03] divide-y divide-white/[0.05]">
+      <div className="rounded-none bg-paper-3 divide-y divide-line">
 
         {/* ── OAuth Token ── */}
         <div className="px-4 py-3 space-y-0.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-zinc-400">OAuth Token</p>
+            <p className="text-xs font-semibold text-ink-2">OAuth Token</p>
             <StatusBadge
               ok={tokenHealthy}
               label={
-                !token.present      ? "No token — OAuth required"
+                !token.present      ? "No token, OAuth required"
                 : token.needsReauth ? "Needs re-auth"
                 : tokenExpired      ? "Expired"
                 : "Connected"
@@ -97,12 +97,12 @@ export function SchwabDiagnosticPanel({
           <Row label="Expires"        value={fmt(token.expiresAt)} />
           <Row label="Last refreshed" value={fmt(token.updatedAt)} />
           {!tokenHealthy && (
-            <p className="pt-1.5 text-xs text-zinc-500">
+            <p className="pt-1.5 text-xs text-ink-3">
               Re-authorize at{" "}
               <a
                 href="/api/schwab/auth-url?provider=trader"
                 target="_blank"
-                className="underline text-zinc-400 hover:text-white"
+                className="underline text-ink-2 hover:text-ink"
               >
                 /api/schwab/auth-url?provider=trader
               </a>
@@ -113,7 +113,7 @@ export function SchwabDiagnosticPanel({
         {/* ── Trader API (live account data) ── */}
         <div className="px-4 py-3 space-y-0.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-zinc-400">Trader API</p>
+            <p className="text-xs font-semibold text-ink-2">Trader API</p>
             <StatusBadge ok={traderOk} label={traderOk ? "Active" : "Unavailable"} />
           </div>
           {lv?.accountNumber && (
@@ -131,7 +131,7 @@ export function SchwabDiagnosticPanel({
         {/* ── Market Data API ── */}
         <div className="px-4 py-3 space-y-0.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-zinc-400">Market Data API</p>
+            <p className="text-xs font-semibold text-ink-2">Market Data API</p>
             <StatusBadge ok={marketOk} label={marketOk ? "Active" : "Unavailable"} />
           </div>
           {marketOk && (
@@ -145,18 +145,18 @@ export function SchwabDiagnosticPanel({
             </>
           )}
           {lv?.verifiedAt && (
-            <p className="pt-1 text-[10px] text-zinc-600">Verified {fmt(lv.verifiedAt)}</p>
+            <p className="pt-1 text-[11px] text-ink-3">Verified {fmt(lv.verifiedAt)}</p>
           )}
         </div>
 
         {/* ── Last Sync ── */}
         <div className="px-4 py-3 space-y-0.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-zinc-400">Last Sync</p>
+            <p className="text-xs font-semibold text-ink-2">Last Sync</p>
             {lastSync ? (
-              <StatusBadge ok={syncOk} label={syncOk ? "Completed" : (lastSync.level === "error" ? `Failed — ${lastSync.message ?? "error"}` : lastSync.status)} />
+              <StatusBadge ok={syncOk} label={syncOk ? "Completed" : (lastSync.level === "error" ? `Failed: ${lastSync.message ?? "error"}` : lastSync.status)} />
             ) : (
-              <span className="text-xs text-zinc-600">Never</span>
+              <span className="text-xs text-ink-3">Never</span>
             )}
           </div>
           {lastSync && (

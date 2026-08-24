@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Highlight } from "@/components/dashboard/highlight";
+import { StatusPill } from "@/components/dashboard/status-pill";
 
 export type OrderRow = {
   orderId: string;
@@ -116,7 +118,7 @@ export function OrdersTableClient({
       <section className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-xs">
-            <thead className="bg-white/5 text-zinc-400">
+            <thead className="bg-paper-2 text-ink-2">
               <tr>
                 {(
                   [
@@ -133,12 +135,14 @@ export function OrdersTableClient({
                       type="button"
                       onClick={() => toggleSort(key)}
                       className={cn(
-                        "inline-flex items-center gap-1 hover:text-white",
-                        sort?.key === key && "text-white",
+                        "inline-flex items-center gap-1 hover:text-ink",
+                        sort?.key === key && "text-ink",
                       )}
                     >
                       {label}
-                      {sort?.key === key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
+                      {sort?.key === key ? (
+                        sort.dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                      ) : null}
                     </button>
                   </th>
                 ))}
@@ -147,43 +151,40 @@ export function OrdersTableClient({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-ink-3">
                     Loading orders…
                   </td>
                 </tr>
               ) : err ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-rose-400">
+                  <td colSpan={6} className="px-3 py-8 text-center text-neg">
                     {err}
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-ink-3">
                     No orders placed at this time.
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-ink-3">
                     No orders found in the selected date range.
                   </td>
                 </tr>
               ) : (
                 filtered.map((r) => (
-                  <tr key={r.orderId} className="odd:bg-white/[0.015] text-zinc-200">
-                    <td className="px-3 py-2 font-semibold text-white">
+                  <tr key={r.orderId} className="odd:bg-paper-3 text-ink">
+                    <td className="px-3 py-2 font-semibold text-ink">
                       <Highlight text={r.ticker} query={query} />
                     </td>
                     <td className="px-3 py-2">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                          r.side === "BUY" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300",
-                        )}
-                      >
-                        <Highlight text={r.side} query={query} />
-                      </span>
+                      <StatusPill
+                        label={<Highlight text={r.side} query={query} />}
+                        tone={r.side === "BUY" ? "emerald" : "rose"}
+                        dot={false}
+                      />
                     </td>
                     <td className="px-3 py-2 tabular-nums">
                       <Highlight text={r.quantity.toLocaleString()} query={query} />
@@ -194,10 +195,10 @@ export function OrdersTableClient({
                         query={query}
                       />
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">
+                    <td className="px-3 py-2 text-ink-2">
                       <Highlight text={r.status} query={query} />
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">
+                    <td className="px-3 py-2 text-ink-2">
                       {r.timestamp ? <Highlight text={new Date(r.timestamp).toLocaleString()} query={query} /> : "—"}
                     </td>
                   </tr>

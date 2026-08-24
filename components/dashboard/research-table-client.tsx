@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Download, Filter, Minus, Plus, Printer, Trash2, X } from "lucide-react";
+import { Download, Minus, Plus, Printer, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
-import { GhostBtn } from "@/components/dashboard/buttons";
+import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { ResearchUploadModal } from "@/components/dashboard/research-upload-modal";
 import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
+import { signFile } from "@/lib/sign-client";
 import type { ResearchItem, UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import { deleteResearchAction, updateResearchAction } from "@/app/(dashboard)/research/actions";
@@ -23,12 +25,10 @@ function tagLabel(status: string): string {
   return "Macro";
 }
 
-function tagStyle(status: string) {
-  if (status === "became_position")
-    return "border-[var(--gf-accent)]/30 bg-[var(--gf-accent)]/10 text-[var(--gf-accent-fg)]";
-  if (status === "under_review")
-    return "border-amber-400/25 bg-amber-400/10 text-amber-400";
-  return "border-white/[0.08] bg-white/[0.04] text-zinc-400";
+function tagTone(status: string): Tone {
+  if (status === "became_position") return "accent";
+  if (status === "under_review") return "amber";
+  return "neutral";
 }
 
 function fmtDate(iso: string) {
@@ -45,16 +45,16 @@ function fmtDate(iso: string) {
 
 function roleColor(role: UserRole) {
   const map: Record<UserRole, string> = {
-    developer: "text-violet-400",
-    admin: "text-amber-400",
-    pm: "text-[var(--gf-accent-fg)]",
-    analyst: "text-sky-400",
+    developer: "text-info",
+    admin: "text-warn",
+    pm: "text-garnet",
+    analyst: "text-info",
   };
   return map[role];
 }
 
 const ACTION_BTN =
-  "flex w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10";
+  "flex w-full items-center justify-center gap-2 rounded-none bg-paper-2 px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-2";
 
 export function ResearchTableClient({
   items,
@@ -116,12 +116,23 @@ export function ResearchTableClient({
     });
   }
 
+  function loadFileUrls(item: ResearchItem) {
+    void signFile("research", item.id).then(({ viewUrl, downloadUrl }) => {
+      setOpened((current) =>
+        current && current.id === item.id
+          ? { ...current, viewUrl: viewUrl ?? undefined, downloadUrl: downloadUrl ?? undefined }
+          : current,
+      );
+    });
+  }
+
   useEffect(() => {
     if (!initialOpenId) return;
     const item = items.find((i) => i.id === initialOpenId);
     if (!item) return;
     startTransition(() => {
       setOpened(item);
+      loadFileUrls(item);
       if (initialMode === "edit" && canManage(item)) setEditing(item);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,6 +143,7 @@ export function ResearchTableClient({
     setTotalPages(null);
     setZoom(1);
     setOpened(item);
+    loadFileUrls(item);
   }
 
   function handleDelete(item: ResearchItem) {
@@ -154,7 +166,7 @@ export function ResearchTableClient({
       }),
     },
     { label: "Deep dives", value: String(deepDiveCount), sub: "Long-form theses" },
-    { label: "Total reads", value: "—", sub: "Across all reports" },
+    { label: "Total reads", value: "XX", sub: "Across all reports" },
     {
       label: "Contributing authors",
       value: String(authors),
@@ -167,24 +179,15 @@ export function ResearchTableClient({
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        kicker="Research"
         title="Research Archive"
-        subtitle="Pitch memos, deep dives, and earnings notes by analyst."
-        actions={
-          <>
-            <GhostBtn>
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-            </GhostBtn>
-            <ResearchUploadModal />
-          </>
-        }
+        meta={`${items.length} report${items.length === 1 ? "" : "s"}`}
+        actions={<ResearchUploadModal />}
       />
 
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-2"
+        className="grid gap-3"
         style={{
           gridTemplateColumns: "minmax(0, 1.7fr) minmax(260px, 0.8fr)",
         }}
@@ -205,7 +208,7 @@ export function ResearchTableClient({
         >
           <table className="w-full">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+              <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">
                 <th className="px-3 py-2 font-medium">Title</th>
                 <th className="px-3 py-2 font-medium">Ticker</th>
                 <th className="px-3 py-2 font-medium">Tag</th>
@@ -219,7 +222,7 @@ export function ResearchTableClient({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-3 py-12 text-center text-[11.5px] text-zinc-500"
+                    className="px-3 py-12 text-center text-[13.5px] text-ink-3"
                   >
                     No reports match this filter.
                   </td>
@@ -231,44 +234,32 @@ export function ResearchTableClient({
                 return (
                   <tr
                     key={item.id}
-                    className="cursor-pointer border-b border-white/[0.025] last:border-b-0 transition hover:bg-white/[0.02]"
+                    className="cursor-pointer border-b border-line last:border-b-0 transition hover:bg-paper-3"
                     onClick={() => handleRowClick(item)}
                   >
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="shrink-0 rounded-[4px] bg-rose-500/15 px-1 py-[1px] text-[8.5px] font-bold text-rose-300">
-                          PDF
-                        </span>
-                        <span className="line-clamp-1 text-[12px] font-medium text-white">
+                        <StatusPill label="PDF" tone="rose" dot={false} />
+                        <span className="line-clamp-1 text-[14px] font-medium text-ink">
                           {item.title}
                         </span>
-                        {isHeld && (
-                          <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-[1px] text-[9px] font-medium text-emerald-400">
-                            Held
-                          </span>
-                        )}
+                        {isHeld && <StatusPill label="Held" tone="emerald" dot={false} />}
                       </div>
                     </td>
                     <td className="px-3 py-2">
                       {sym ? (
-                        <span className="rounded-[5px] border border-white/[0.06] bg-white/[0.03] px-1.5 py-[1px] text-[10.5px] font-medium text-zinc-200">
-                          {sym}
-                        </span>
+                        <StatusPill label={sym} tone="neutral" dot={false} />
                       ) : (
-                        <span className="text-[12px] text-zinc-600">—</span>
+                        <span className="text-[14px] text-ink-3">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full border px-2 py-[1px] text-[10px] font-medium ${tagStyle(item.thesisStatus)}`}
-                      >
-                        {tagLabel(item.thesisStatus)}
-                      </span>
+                      <StatusPill label={tagLabel(item.thesisStatus)} tone={tagTone(item.thesisStatus)} />
                     </td>
-                    <td className={`px-3 py-2 text-[12px] ${roleColor(item.uploaderRole)}`}>
+                    <td className={`px-3 py-2 text-[14px] ${roleColor(item.uploaderRole)}`}>
                       {item.analystName ?? item.author}
                     </td>
-                    <td className="px-3 py-2 tabular-nums text-[12px] text-zinc-400">
+                    <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                       {fmtDate(item.updatedAt)}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -280,7 +271,7 @@ export function ResearchTableClient({
                             handleDelete(item);
                           }}
                           disabled={isPending}
-                          className="rounded p-1 text-zinc-500 hover:bg-white/[0.05] hover:text-rose-400"
+                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -295,10 +286,10 @@ export function ResearchTableClient({
 
         {/* Right — Top reports card */}
         <div className="panel p-3">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+          <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
             Most read
           </p>
-          <p className="mt-0.5 text-[13.5px] font-semibold text-white">
+          <p className="mt-0.5 text-[15px] font-semibold text-ink">
             Top reports this term
           </p>
           <ol className="mt-3 space-y-0.5">
@@ -307,16 +298,16 @@ export function ResearchTableClient({
                 <button
                   type="button"
                   onClick={() => handleRowClick(item)}
-                  className="flex w-full items-start gap-2 rounded-[6px] px-1.5 py-1 text-left hover:bg-white/[0.025]"
+                  className="flex w-full items-start gap-2 rounded-none px-1.5 py-1 text-left hover:bg-paper-3"
                 >
-                  <span className="mt-0.5 w-4 shrink-0 text-right tabular-nums text-[10px] text-zinc-500">
+                  <span className="mt-0.5 w-4 shrink-0 text-right tabular-nums text-[11px] text-ink-3">
                     {i + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-[11.5px] font-medium text-white">
+                    <p className="truncate text-[13.5px] font-medium text-ink">
                       {item.title}
                     </p>
-                    <p className="text-[10px] text-zinc-500">
+                    <p className="text-[11px] text-ink-3">
                       {item.analystName ?? item.author}
                     </p>
                   </div>
@@ -329,7 +320,7 @@ export function ResearchTableClient({
 
       {/* PDF viewer modal */}
       {opened && (
-        <div className="fixed inset-0 z-50 flex bg-black/85 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-w-0 flex-1 flex-col p-4">
             <PdfViewer
               url={opened.viewUrl}
@@ -339,54 +330,54 @@ export function ResearchTableClient({
             />
           </div>
           <div className="flex w-[min(380px,100vw)] shrink-0 flex-col p-4 pl-0">
-            <div className="panel flex flex-1 flex-col min-h-0 overflow-hidden rounded-[16px]">
+            <div className="panel flex flex-1 flex-col min-h-0 overflow-hidden rounded-none">
               <div className="flex-1 space-y-4 overflow-y-auto p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     {opened.ticker && opened.ticker !== "—" && (
-                      <p className="caps-label text-zinc-300">
+                      <p className="caps-label text-ink">
                         {opened.ticker.toUpperCase()}
                       </p>
                     )}
-                    <h2 className="mt-0.5 text-base font-semibold leading-snug text-white">
+                    <h2 className="mt-0.5 text-base font-semibold leading-snug text-ink">
                       {opened.title}
                     </h2>
                   </div>
                   <button
                     onClick={() => setOpened(null)}
-                    className="mt-0.5 shrink-0 rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                    className="mt-0.5 shrink-0 rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-zinc-500">Analyst</dt>
-                    <dd className="font-medium text-white">
+                    <dt className="text-ink-3">Analyst</dt>
+                    <dd className="font-medium text-ink">
                       {opened.analystName ?? opened.author}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt className="text-zinc-500">Role</dt>
+                    <dt className="text-ink-3">Role</dt>
                     <dd className={`font-medium capitalize ${roleColor(opened.uploaderRole)}`}>
                       {opened.uploaderRole}
                     </dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-zinc-500">Date</dt>
-                    <dd className="text-zinc-300">{fmtDate(opened.updatedAt)}</dd>
+                    <dt className="text-ink-3">Date</dt>
+                    <dd className="text-ink">{fmtDate(opened.updatedAt)}</dd>
                   </div>
                   {totalPages !== null && (
                     <div className="flex justify-between">
-                      <dt className="text-zinc-500">Pages</dt>
-                      <dd className="tabular-nums text-zinc-300">
+                      <dt className="text-ink-3">Pages</dt>
+                      <dd className="tabular-nums text-ink">
                         {currentPage} of {totalPages}
                       </dd>
                     </div>
                   )}
                 </dl>
               </div>
-              <div className="shrink-0 space-y-2 border-t border-white/[0.06] p-5 pt-4">
+              <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
                 <div className="flex w-full gap-1">
                   <button
                     type="button"
@@ -397,7 +388,7 @@ export function ResearchTableClient({
                   >
                     <Minus className="h-4 w-4" />
                   </button>
-                  <span className="flex flex-1 items-center justify-center rounded-[10px] bg-white/[0.06] px-3 py-2.5 text-sm tabular-nums text-zinc-300">
+                  <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
                     {Math.round(zoom * 100)}%
                   </span>
                   <button
@@ -429,7 +420,7 @@ export function ResearchTableClient({
                       Download
                     </Link>
                   ) : (
-                    <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-600">
+                    <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-none bg-paper-3 px-3 py-2.5 text-sm text-ink-3">
                       <Download className="h-4 w-4" />
                       Download
                     </div>
@@ -448,7 +439,7 @@ export function ResearchTableClient({
                     type="button"
                     onClick={() => handleDelete(opened)}
                     disabled={isPending}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-rose-500/10 px-3 py-2.5 text-sm font-medium text-rose-400 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-2 rounded-none bg-neg-soft px-3 py-2.5 text-sm font-medium text-neg transition-colors hover:bg-neg-soft disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete
@@ -462,16 +453,16 @@ export function ResearchTableClient({
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6 backdrop-blur-md">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-6 backdrop-blur-md">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="caps-label">Research</p>
-                <h2 className="text-base font-semibold text-white">Edit</h2>
+                <h2 className="text-base font-semibold text-ink">Edit</h2>
               </div>
               <button
                 onClick={() => setEditing(null)}
-                className="rounded-[8px] p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -492,32 +483,32 @@ export function ResearchTableClient({
               <input
                 name="title"
                 defaultValue={editing.title}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
                 placeholder="Title"
                 required
               />
               <input
                 name="ticker"
                 defaultValue={editing.ticker === "—" ? "" : editing.ticker}
-                className="glass-input w-full px-3 py-2.5 text-sm uppercase text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm uppercase text-ink outline-none placeholder:text-ink-3"
                 placeholder="Ticker"
               />
               <input
                 name="sector"
                 defaultValue={editing.sector ?? ""}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
                 placeholder="Sector tag"
               />
               <input
                 name="analystName"
                 defaultValue={editing.analystName ?? ""}
-                className="glass-input w-full px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+                className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
                 placeholder="Analyst name"
               />
               <div className="flex gap-3">
                 <button
                   type="button"
-                  className="glass-input flex-1 px-3 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-white/10"
+                  className="glass-input flex-1 px-3 py-2.5 text-sm text-ink transition-colors hover:bg-paper-2"
                   onClick={() =>
                     setEditing((prev) =>
                       prev ? { ...prev, downloadEnabled: !prev.downloadEnabled } : prev,
@@ -536,17 +527,13 @@ export function ResearchTableClient({
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  className="rounded-[10px] px-4 py-2 text-sm text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                  className="rounded-none px-4 py-2 text-sm text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--gf-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
-                >
+                <PrimaryBtn type="submit" disabled={isPending}>
                   Save
-                </button>
+                </PrimaryBtn>
               </div>
             </form>
           </div>

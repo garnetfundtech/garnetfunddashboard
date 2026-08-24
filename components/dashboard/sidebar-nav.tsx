@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ChartLine,
   ClipboardList,
+  ShieldAlert,
   FolderKanban,
   FolderTree,
   Gauge,
@@ -21,9 +22,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/dashboard/logo-mark";
+import { AvatarInitials } from "@/components/dashboard/avatar-initials";
+import { SchwabStatus } from "@/components/dashboard/schwab-status";
 import type { UserRole } from "@/lib/types";
 import { logoutAction } from "@/app/(auth)/login/actions";
 import { getSidebarNavItems } from "@/lib/nav-access";
+import { useClickOutside } from "@/lib/use-click-outside";
 
 const ICONS = {
   "/home": ChartLine,
@@ -37,6 +41,7 @@ const ICONS = {
   "/alerts": Bell,
   "/watchlist": Bookmark,
   "/earnings": CalendarDays,
+  "/risk-admin": ShieldAlert,
 } as const;
 
 export function SidebarNav({
@@ -48,26 +53,19 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const initials = useMemo(
-    () =>
-      fullName
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join(""),
-    [fullName],
-  );
+  const menuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(menuRef, isMenuOpen, () => setIsMenuOpen(false));
 
   const items = getSidebarNavItems(role);
 
   return (
-    <aside className="panel flex h-full w-[176px] flex-col bg-[#08090a] px-2.5 py-3">
-      <div className="flex items-center gap-2.5 px-2 py-1">
+    <aside className="flex h-full w-[184px] flex-col border-r border-line bg-surface px-0 py-0">
+      <div className="flex h-[49px] shrink-0 items-center gap-2.5 border-b border-line px-3">
         <LogoMark />
-        <span className="text-[13px] font-semibold tracking-tight text-white">Garnet Fund</span>
+        <span className="display text-[15px] text-ink">Garnet Fund</span>
       </div>
-      <nav className="mt-5 flex flex-col gap-0.5">
+
+      <nav className="mt-2 flex flex-col px-2">
         {items.map((item) => {
           const active = pathname === item.href;
           const Icon = ICONS[item.href as keyof typeof ICONS] ?? ChartLine;
@@ -77,43 +75,49 @@ export function SidebarNav({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] text-zinc-400 transition hover:bg-zinc-900/70 hover:text-white",
-                active && "bg-white/[0.045] text-white",
+                "relative flex items-center gap-2.5 px-2.5 py-[7px] text-[14px] text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink",
+                active && "bg-paper-2 text-ink",
               )}
             >
-              <Icon className="h-[15px] w-[15px] shrink-0" />
+              {active && (
+                <span className="absolute inset-y-0 left-0 w-[2px] bg-garnet" aria-hidden />
+              )}
+              <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.75} />
               <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto space-y-1.5 pt-2">
+      <div ref={menuRef} className="mt-auto px-2 pb-2">
+        <div className="mb-1.5 px-0.5">
+          <SchwabStatus />
+        </div>
         {isMenuOpen ? (
-          <div className="rounded-[9px] bg-white/[0.03] p-1">
+          <div className="mb-1 border border-line">
             {role === "developer" || role === "admin" ? (
               <Link
                 href="/admin"
-                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
+                className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"
               >
-                <Shield className="h-3.5 w-3.5 shrink-0" />
+                <Shield className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span>Admin</span>
               </Link>
             ) : (
               <Link
                 href="/onboarding"
-                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-zinc-300 hover:bg-zinc-800/70"
+                className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"
               >
-                <Settings className="h-3.5 w-3.5 shrink-0" />
+                <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span>Settings</span>
               </Link>
             )}
             <form action={logoutAction}>
               <button
                 type="submit"
-                className="mt-1 flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-xs text-zinc-300 hover:bg-[#8e060420] hover:text-[#f4c5c4]"
+                className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13.5px] text-ink-2 hover:bg-garnet hover:text-white"
               >
-                <LogOut className="h-3.5 w-3.5 shrink-0" />
+                <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span>Sign out</span>
               </button>
             </form>
@@ -122,12 +126,10 @@ export function SidebarNav({
         <button
           type="button"
           onClick={() => setIsMenuOpen((value) => !value)}
-          className="glass-input flex w-full items-center gap-2.5 rounded-[9px] px-2 py-2 hover:bg-white/[0.06]"
+          className="flex w-full items-center gap-2.5 border border-line px-2 py-2 text-left transition-colors hover:bg-paper-2"
         >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-xs font-semibold text-zinc-200">
-            {initials || "U"}
-          </div>
-          <span className="truncate text-[12px] text-zinc-400">{fullName}</span>
+          <AvatarInitials fullName={fullName} size={26} />
+          <span className="truncate text-[13.5px] text-ink-2">{fullName}</span>
         </button>
       </div>
     </aside>

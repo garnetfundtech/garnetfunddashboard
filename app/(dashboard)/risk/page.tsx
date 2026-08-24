@@ -11,11 +11,7 @@ export default async function RiskPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <PageHeader
-        kicker="Risk"
-        title="Risk Monitor"
-        subtitle="Net / gross / beta up top, every limit red · yellow · green. The fund's status in ten seconds."
-      />
+      <PageHeader title="Risk Monitor" />
       <RiskMonitor model={model} />
     </div>
   );

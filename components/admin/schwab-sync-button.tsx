@@ -21,7 +21,7 @@ export function SchwabSyncButton() {
       }
     } catch {
       setState("error");
-      setMessage("Network error — could not reach sync endpoint.");
+      setMessage("Network error: could not reach sync endpoint.");
     }
   }
 
@@ -30,12 +30,12 @@ export function SchwabSyncButton() {
       <button
         onClick={runSync}
         disabled={state === "loading"}
-        className="rounded-[10px] bg-[#8e0604] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded-none bg-garnet px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
       >
         {state === "loading" ? "Syncing…" : "Sync Now"}
       </button>
       {message && (
-        <span className={`text-xs ${state === "error" ? "text-red-400" : "text-emerald-400"}`}>
+        <span className={`text-xs ${state === "error" ? "text-neg" : "text-pos"}`}>
           {message}
         </span>
       )}

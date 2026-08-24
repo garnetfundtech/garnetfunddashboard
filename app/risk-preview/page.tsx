@@ -14,12 +14,9 @@ export default function RiskPreviewPage() {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="mx-auto max-w-[1440px]">
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500">Garnet Fund · Risk</p>
-          <h1 className="text-[20px] font-semibold tracking-tight text-white">Risk Monitor — Sample Preview</h1>
-          <p className="mt-0.5 text-[12px] text-zinc-400">
-            Illustrative long/short book. No login or live data required — mirrors the in-app /risk page.
-          </p>
+        <div className="mb-3 flex items-baseline justify-between gap-4 border-b border-line pb-2.5">
+          <h1 className="page-title">Risk Monitor (Sample Preview)</h1>
+          <span className="text-[13.5px] text-ink-3">No login required</span>
         </div>
         <RiskMonitor model={model} />
       </div>

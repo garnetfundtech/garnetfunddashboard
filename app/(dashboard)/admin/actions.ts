@@ -83,6 +83,7 @@ export async function assignSectorAction(formData: FormData) {
   await admin.from("user_profiles").update({ coverage_sector: sector }).eq("id", id);
 
   revalidatePath("/admin");
+  revalidatePath("/coverage");
 }
 
 export async function deleteUserAction(formData: FormData) {
