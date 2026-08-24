@@ -9,6 +9,11 @@ import { loadValidTraderToken } from "@/lib/market-data";
  * primary key makes this safe to call repeatedly — an incremental sync and a
  * full backfill are the same operation, just with a different `days` value.
  *
+ * Note the window filters on Schwab's *entered* time, not fill time, so the
+ * nightly sync window has to be comfortably wider than the longest order that
+ * might sit working before it fills — otherwise a GTC order entered outside
+ * the window fills and is never picked up.
+ *
  * Returns null when there's no valid Schwab session to sync from.
  */
 export async function syncOrderHistory(days: number): Promise<{ synced: number } | null> {
@@ -24,17 +29,22 @@ export async function syncOrderHistory(days: number): Promise<{ synced: number }
   if (orders.length === 0) return { synced: 0 };
 
   const admin = createAdminClient();
-  const rows = orders
-    .filter((o) => o.timestamp)
-    .map((o) => ({
-      order_id: o.orderId,
-      ticker: o.ticker,
-      side: o.side,
-      quantity: o.quantity,
-      fill_price: o.fillPrice,
-      status: o.status,
-      order_time: o.timestamp,
-    }));
+  // Long backfills are fetched in chunked windows, so the same order can come
+  // back twice at a chunk boundary. Postgres rejects an upsert batch that hits
+  // the same conflict key twice, so collapse duplicates before sending.
+  const byId = new Map<string, NormalizedOrderRow>();
+  for (const o of orders) {
+    if (o.timestamp) byId.set(o.orderId, o);
+  }
+  const rows = [...byId.values()].map((o) => ({
+    order_id: o.orderId,
+    ticker: o.ticker,
+    side: o.side,
+    quantity: o.quantity,
+    fill_price: o.fillPrice,
+    status: o.status,
+    order_time: o.timestamp,
+  }));
 
   const { error } = await admin.from("order_history").upsert(rows, { onConflict: "order_id" });
   if (error) throw error;

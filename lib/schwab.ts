@@ -125,19 +125,34 @@ export async function getAccountNumbers(accessToken: string) {
   return response.json() as Promise<{ accountNumber: string; hashValue: string }[]>;
 }
 
+/**
+ * Schwab silently returns an empty array (HTTP 200, no error) when the
+ * requested window is longer than a year, so anything wider has to be walked
+ * in sub-year chunks rather than asked for in one call.
+ */
+const SCHWAB_ORDER_WINDOW_DAYS = 350;
+
 export async function getAccountOrders(accessToken: string, accountHash: string, days = 30) {
-  const to = new Date();
-  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const params = new URLSearchParams({
-    fromEnteredTime: from.toISOString().split(".")[0] + "Z",
-    toEnteredTime: to.toISOString().split(".")[0] + "Z",
-  });
-  const response = await fetch(
-    `${SCHWAB_TRADER_BASE}/accounts/${accountHash}/orders?${params}`,
-    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" },
-  );
-  if (!response.ok) throw new Error(`Orders request failed: ${response.status}`);
-  return response.json();
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const stamp = (ms: number) => new Date(ms).toISOString().split(".")[0] + "Z";
+
+  const all: unknown[] = [];
+  for (let offset = 0; offset < days; offset += SCHWAB_ORDER_WINDOW_DAYS) {
+    const chunkDays = Math.min(SCHWAB_ORDER_WINDOW_DAYS, days - offset);
+    const params = new URLSearchParams({
+      fromEnteredTime: stamp(now - (offset + chunkDays) * dayMs),
+      toEnteredTime: stamp(now - offset * dayMs),
+    });
+    const response = await fetch(
+      `${SCHWAB_TRADER_BASE}/accounts/${accountHash}/orders?${params}`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" },
+    );
+    if (!response.ok) throw new Error(`Orders request failed: ${response.status}`);
+    const page = await response.json();
+    if (Array.isArray(page)) all.push(...page);
+  }
+  return all;
 }
 
 // ── Market Data API ──────────────────────────────────────────────────────────
