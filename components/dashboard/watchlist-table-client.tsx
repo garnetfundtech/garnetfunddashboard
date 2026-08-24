@@ -65,8 +65,10 @@ export function WatchlistTableClient({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>("ticker");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const DEFAULT_SORT_KEY: SortKey = "ticker";
+  const DEFAULT_SORT_DIR: SortDir = "asc";
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
+  const [sortDir, setSortDir] = useState<SortDir | null>(DEFAULT_SORT_DIR);
   const [pending, startTransition] = useTransition();
   const [newTicker, setNewTicker] = useState("");
 
@@ -86,29 +88,36 @@ export function WatchlistTableClient({
     });
   }, [rows, quotes]);
 
+  const activeKey = sortDir ? sortKey : DEFAULT_SORT_KEY;
+  const activeDir = sortDir ?? DEFAULT_SORT_DIR;
   const sorted = useMemo(() => {
-    const mul = sortDir === "asc" ? 1 : -1;
+    const mul = activeDir === "asc" ? 1 : -1;
     return [...merged].sort((a, b) => {
-      if (sortKey === "ticker") return a.ticker.localeCompare(b.ticker) * mul;
-      if (sortKey === "price") return ((a.price ?? 0) - (b.price ?? 0)) * mul;
-      if (sortKey === "changePct")
+      if (activeKey === "ticker") return a.ticker.localeCompare(b.ticker) * mul;
+      if (activeKey === "price") return ((a.price ?? 0) - (b.price ?? 0)) * mul;
+      if (activeKey === "changePct")
         return ((a.changePct ?? 0) - (b.changePct ?? 0)) * mul;
-      if (sortKey === "adder") return a.adderName.localeCompare(b.adderName) * mul;
+      if (activeKey === "adder") return a.adderName.localeCompare(b.adderName) * mul;
       return 0;
     });
-  }, [merged, sortKey, sortDir]);
+  }, [merged, activeKey, activeDir]);
 
+  // Click cycle per column: first click sorts descending (or ascending for
+  // name-like columns), second click flips it, third click turns sorting off
+  // and falls back to the default sort.
   function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
+    if (sortKey !== key) {
       setSortKey(key);
       setSortDir(key === "ticker" || key === "adder" ? "asc" : "desc");
+      return;
     }
+    const first = key === "ticker" || key === "adder" ? "asc" : "desc";
+    const second = first === "asc" ? "desc" : "asc";
+    setSortDir((d) => (d === first ? second : d === second ? null : first));
   }
 
   function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return null;
+    if (sortKey !== col || sortDir == null) return null;
     return sortDir === "asc" ? (
       <ChevronUp className="ml-0.5 inline h-2.5 w-2.5" />
     ) : (

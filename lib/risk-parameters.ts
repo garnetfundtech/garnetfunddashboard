@@ -71,11 +71,11 @@ export type RiskLimit = {
 };
 
 export const RISK_GROUPS: { id: RiskGroup; label: string; blurb: string }[] = [
-  { id: "exposure", label: "Exposure & Neutrality", blurb: "Net / gross / beta — the daily glance. Drifts every day even when we don't trade." },
+  { id: "exposure", label: "Exposure & Neutrality", blurb: "Net, gross, and beta. Checked daily since they drift even without a trade." },
   { id: "factor", label: "Factor & Sector", blurb: "Style loadings and sector long-vs-short balance." },
-  { id: "sizing", label: "Position Sizing", blurb: "Asymmetric by design — the short book runs tighter across the board." },
+  { id: "sizing", label: "Position Sizing", blurb: "Shorts are capped tighter than longs on purpose." },
   { id: "drawdown", label: "Drawdown & VaR", blurb: "Backstops that force a committee conversation before new risk." },
-  { id: "performance", label: "Performance", blurb: "The scorecard — reviewed monthly against T-bills, not the market." },
+  { id: "performance", label: "Performance", blurb: "The scorecard, reviewed monthly against T-bills rather than the market." },
   { id: "health", label: "Health Checks", blurb: "Plumbing that keeps the book tradable and diversified." },
 ];
 
@@ -105,7 +105,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     dataSource: "live",
     notifyOnYellow: true,
     alertTiming: "close",
-    note: "Longs minus shorts. Won't sit at 0 — daily market moves push it around even when we don't touch anything. Outside ±10% → rebalance within 2 trading days. Red starts a 2-trading-day countdown; if it expires still red, the notification escalates.",
+    note: "Longs minus shorts. Won't sit at 0, since daily market moves push it around even when we don't touch anything. Outside ±10%: rebalance within 2 trading days. Red starts a 2-trading-day countdown; if it expires still red, the notification escalates.",
   },
   {
     id: "gross-exposure",
@@ -121,7 +121,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     cadence: "daily",
     dataSource: "live",
     alertTiming: "close",
-    note: "Longs plus shorts. Target 135–165% split ~75% long / 75% short. Low gross (under 135%) is yellow, not red — it means we've quietly stopped deploying capital. Hard cap 175%.",
+    note: "Longs plus shorts. Target 135–165%, split roughly 75% long and 75% short. Low gross (under 135%) is yellow, not red, since it just means we've quietly stopped deploying capital. Hard cap 175%.",
   },
   {
     id: "net-beta",
@@ -191,7 +191,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     cadence: "weekly",
     dataSource: "live",
     alertTiming: "close",
-    note: "Each sector's long weight stays within ±5% of its short weight, in percentage points of NAV. Value shown is the widest sector gap. Show the industry breakdown underneath — a sector can look balanced while one industry inside it is a concentrated bet.",
+    note: "Each sector's long weight stays within ±5% of its short weight, in percentage points of NAV. Value shown is the widest sector gap. The industry breakdown underneath matters too: a sector can look balanced while one industry inside it is a concentrated bet.",
   },
 
   // ── Position Sizing ────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     dataSource: "live",
     notifyOnYellow: true,
     alertTiming: "close",
-    note: "Measured at market value, not cost. Shorts cap at 3%; new shorts start at 2% and flag red above that. A short grows as it moves against you while the loss is uncapped — a 3% short that doubles becomes a ~6% position having never been added to — so the short book runs tighter than the long book.",
+    note: "Measured at market value, not cost. Shorts cap at 3%; new shorts start at 2% and flag red above that. A short grows as it moves against you while the loss is uncapped, so a 3% short that doubles becomes a ~6% position having never been added to. That's why the short book runs tighter than the long book.",
   },
   {
     id: "single-day-move",
@@ -235,7 +235,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     cadence: "daily",
     dataSource: "live",
     alertTiming: "intraday",
-    note: "Close-to-close change. Adverse means down for a long, up for a short — a favorable move of any size is green, no notification. A 6% move is roughly three standard deviations for a typical large-cap (≈1.9% daily vol); 10% is roughly five. Red fires during the trading day, not the end-of-day batch. Value shown is the worst adverse move in the book.",
+    note: "Close-to-close change. Adverse means down for a long, up for a short; a favorable move of any size is green, with no notification. A 6% move is roughly three standard deviations for a typical large-cap (≈1.9% daily vol); 10% is roughly five. Red fires during the trading day, not the end-of-day batch. Value shown is the worst adverse move in the book.",
   },
   {
     id: "long-kill-trigger",
@@ -317,7 +317,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     dataSource: "live",
     notifyOnYellow: true,
     alertTiming: "close",
-    note: "Fall 8% from the high-water mark (which only ratchets upward) → no new risk until the committee meets. Tight on purpose — at 4–8% target annualised volatility, an 8% drawdown is a larger move than one standard deviation over a full year in a market-neutral book. Persistent, undismissable banner on red.",
+    note: "Fall 8% from the high-water mark (which only ratchets upward) and no new risk gets added until the committee meets. That's tight on purpose: at 4–8% target annualised volatility, an 8% drawdown is a larger move than one standard deviation over a full year in a market-neutral book. Persistent, undismissable banner on red.",
   },
   {
     id: "var-95",
@@ -358,7 +358,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     yellow: 0.5,
     cadence: "monthly",
     dataSource: "live",
-    note: "The scorecard. Judged vs T-bills, not the market — up 6% while the market is down 20% is the same job as up 6% while it's up 20%.",
+    note: "The scorecard. Judged against T-bills, not the market: up 6% while the market is down 20% is the same job as up 6% while it's up 20%.",
   },
   {
     id: "sortino",
@@ -423,7 +423,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     yellow: 0,
     cadence: "quarterly",
     dataSource: "planned",
-    note: "Each side positive over the trailing two quarters. Most books earn on one side — knowing which is how we get better.",
+    note: "Each side positive over the trailing two quarters. Most books earn on one side, and knowing which one is how we get better.",
   },
   {
     id: "hit-rate",
@@ -495,7 +495,7 @@ export const RISK_LIMITS: RiskLimit[] = [
   {
     id: "avg-correlation-long",
     group: "health",
-    label: "Avg Pairwise Corr — Long",
+    label: "Avg Pairwise Corr (Long)",
     target: "< 0.40",
     unit: "ratio",
     kind: "max",
@@ -508,7 +508,7 @@ export const RISK_LIMITS: RiskLimit[] = [
   {
     id: "avg-correlation-short",
     group: "health",
-    label: "Avg Pairwise Corr — Short",
+    label: "Avg Pairwise Corr (Short)",
     target: "< 0.40",
     unit: "ratio",
     kind: "max",
@@ -521,7 +521,7 @@ export const RISK_LIMITS: RiskLimit[] = [
   {
     id: "effective-bets-long",
     group: "health",
-    label: "Effective Bets — Long",
+    label: "Effective Bets (Long)",
     target: "> 12 per side",
     unit: "count",
     kind: "min",
@@ -534,7 +534,7 @@ export const RISK_LIMITS: RiskLimit[] = [
   {
     id: "effective-bets-short",
     group: "health",
-    label: "Effective Bets — Short",
+    label: "Effective Bets (Short)",
     target: "> 12 per side",
     unit: "count",
     kind: "min",
@@ -581,7 +581,7 @@ export const RISK_LIMITS: RiskLimit[] = [
     yellow: 24,
     cadence: "daily",
     dataSource: "live",
-    note: "Binary — no yellow state. Green while every price is current; red the moment any price is older than one trading day. Everything else on this board is only as trustworthy as this check: a green board built on a dead data feed is worse than no board, because it produces false confidence instead of none. Value shown is hours since the oldest price update.",
+    note: "Binary, with no yellow state. Green while every price is current; red the moment any price is older than one trading day. Everything else on this board is only as trustworthy as this check: a green board built on a dead data feed is worse than no board, because it produces false confidence instead of none. Value shown is hours since the oldest price update.",
   },
 ];
 
