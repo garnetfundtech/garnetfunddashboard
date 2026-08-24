@@ -7,6 +7,7 @@ export function TableShell({
   actions,
   footer,
   children,
+  className = "",
 }: {
   kicker?: string;
   title: string;
@@ -14,9 +15,10 @@ export function TableShell({
   actions?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="panel flex flex-col overflow-hidden">
+    <div className={`panel flex flex-col overflow-hidden ${className}`}>
       <div className="flex items-center justify-between gap-2 border-b border-line-2 bg-paper-3 px-3 py-2">
         <div className="flex items-baseline gap-2">
           {kicker && <span className="caps text-[11px]">{kicker}</span>}

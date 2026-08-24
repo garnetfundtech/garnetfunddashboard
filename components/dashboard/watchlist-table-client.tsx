@@ -141,7 +141,7 @@ export function WatchlistTableClient({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="On the Radar"
         meta={`${sorted.length} ticker${sorted.length === 1 ? "" : "s"}`}
@@ -164,6 +164,7 @@ export function WatchlistTableClient({
       <TableShell
         title="Watchlist"
         count={sorted.length}
+        className="min-h-0 flex-1"
         actions={
           <StatusPill label="Sortable" tone="neutral" dot={false} />
         }

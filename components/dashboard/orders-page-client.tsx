@@ -8,7 +8,7 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { GhostBtn } from "@/components/dashboard/buttons";
-import { downloadCsv } from "@/lib/csv-client";
+import { downloadXlsx } from "@/lib/xlsx-client";
 import type { OrderRow } from "@/components/dashboard/orders-table-client";
 
 type StatusFilter = "All" | "Filled" | "Cancelled";
@@ -158,7 +158,7 @@ export function OrdersPageClient() {
   void setQuery;
 
   function exportCsv() {
-    downloadCsv(
+    downloadXlsx(
       ["Order ID", "Side", "Ticker", "Quantity", "Fill Price", "Status", "Time"],
       filtered.map((o) => [o.orderId, o.side, o.ticker, o.quantity, o.fillPrice, o.status, o.timestamp]),
       "garnet-fund-trade-history.csv",
@@ -189,7 +189,7 @@ export function OrdersPageClient() {
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Trade History"
         meta={`${orders.length} order${orders.length === 1 ? "" : "s"}`}
@@ -212,6 +212,7 @@ export function OrdersPageClient() {
       <TableShell
         title="Orders"
         count={filtered.length}
+        className="min-h-0 flex-1"
         actions={
           <FilterTabs
             options={["All", "Filled", "Cancelled"] as StatusFilter[]}

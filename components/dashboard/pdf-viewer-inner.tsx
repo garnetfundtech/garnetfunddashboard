@@ -59,15 +59,18 @@ export function PdfViewer({ url, scale = 1, onLoadTotalPages, onPageChange }: Pd
     return () => container.removeEventListener("scroll", updateCurrentPage);
   }, []);
 
+  const spinner = (
+    <div className="flex h-full min-h-[300px] items-center justify-center">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-line-2 border-t-ink-3" />
+    </div>
+  );
+
   if (!url) {
     // Every file has a URL — this only shows for the moment between opening
     // the viewer and the on-demand signed URL arriving, so it should read as
-    // "loading," not as though nothing were selected.
-    return (
-      <div className="panel flex h-[640px] items-center justify-center">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-line-2 border-t-ink-3" />
-      </div>
-    );
+    // "loading," not as though nothing were selected. Same wrapper as the
+    // loaded state below so the panel doesn't resize once the PDF appears.
+    return <div className="panel flex h-full flex-col overflow-hidden rounded-none p-0">{spinner}</div>;
   }
 
   return (
@@ -76,7 +79,7 @@ export function PdfViewer({ url, scale = 1, onLoadTotalPages, onPageChange }: Pd
         <div className="mx-auto w-fit">
           <Document
             file={url}
-            loading={<div className="text-xs text-ink-3">Loading…</div>}
+            loading={spinner}
             error={<div className="text-xs text-neg">Could not load PDF</div>}
             onLoadSuccess={({ numPages: n }) => {
               setNumPages(n);

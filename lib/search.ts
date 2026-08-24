@@ -1,4 +1,12 @@
 import { getFundUsers, getResearchItems, getResourcesWithUrls, getWatchlistRows } from "@/lib/data";
+import type { UserRole } from "@/lib/types";
+
+const ROLE_SEARCH_TERMS: Record<UserRole, string> = {
+  analyst: "analyst",
+  pm: "pm lead",
+  admin: "admin",
+  developer: "developer dev",
+};
 
 export type SearchItemType = "user" | "research" | "resource" | "watchlist";
 
@@ -37,7 +45,7 @@ export async function getSearchIndex(): Promise<SearchItem[]> {
       type: "user",
       label: u.fullName,
       subtitle: "User",
-      searchable: u.fullName,
+      searchable: [u.fullName, ROLE_SEARCH_TERMS[u.role]].filter(Boolean).join(" "),
       href: `/users?highlight=${u.id}`,
     });
   }

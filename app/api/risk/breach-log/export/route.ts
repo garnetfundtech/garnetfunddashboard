@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { buildXlsxBuffer } from "@/lib/xlsx-export";
 
-function csvEscape(v: unknown): string {
-  const s = v == null ? "" : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-/** CSV export of the full breach log — the audit trail the fund's bylaws require. */
+/** Excel export of the full breach log — the audit trail the fund's bylaws require. */
 export async function GET() {
   await requireRole(["admin", "developer", "pm"]);
 
@@ -44,12 +40,12 @@ export async function GET() {
     r.decided_by,
   ]);
 
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\r\n");
+  const buffer = buildXlsxBuffer(header, rows, "Breach Log");
 
-  return new NextResponse(csv, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="garnet-fund-breach-log.csv"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="garnet-fund-breach-log.xlsx"`,
     },
   });
 }

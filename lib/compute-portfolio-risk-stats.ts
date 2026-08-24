@@ -37,14 +37,21 @@ export async function enrichPositionsWithSectors(positions: LivePosition[]): Pro
   if (!process.env.FMP_API_KEY || !positions.length) return positions;
   const enriched = await Promise.all(
     positions.map(async (p) => {
-      // Skip tickers already carrying a real sector so a second enrichment pass
-      // (e.g. home page + risk stats) doesn't re-hit FMP.
-      if (p.sector && p.sector !== "Unknown") return p;
+      const needsName = !p.name || p.name.toUpperCase() === p.ticker.toUpperCase();
+      const needsSector = !p.sector || p.sector === "Unknown";
+      // Schwab's own description field is missing for some position types
+      // (small/DRIP-originated lots), which left `name` falling back to the
+      // ticker — fill both name and sector from the same profile call.
+      if (!needsName && !needsSector) return p;
       try {
         const prof = await fetchProfile(p.ticker);
-        return { ...p, sector: prof?.sector ?? p.sector ?? "Unknown" };
+        return {
+          ...p,
+          name: needsName ? (prof?.companyName ?? p.name) : p.name,
+          sector: needsSector ? (prof?.sector ?? p.sector ?? "Unknown") : p.sector,
+        };
       } catch {
-        return { ...p, sector: p.sector ?? "Unknown" };
+        return p;
       }
     }),
   );

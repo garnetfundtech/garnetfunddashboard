@@ -198,7 +198,7 @@ export function AlertsPageClient({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Price & Condition Alerts"
         meta={`${alerts.length} alert${alerts.length === 1 ? "" : "s"}`}
@@ -215,7 +215,7 @@ export function AlertsPageClient({
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-3"
+        className="grid min-h-0 flex-1 gap-3"
         style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 0.9fr)" }}
       >
         {/* Left — Conditions table */}
@@ -324,14 +324,14 @@ export function AlertsPageClient({
         </TableShell>
 
         {/* Right — Recently triggered card */}
-        <div className="panel p-3">
+        <div className="panel flex h-full min-h-0 flex-col p-3">
           <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
             Recently triggered
           </p>
           <p className="mt-0.5 text-[15px] font-semibold text-ink">
             Last 7 days
           </p>
-          <ul className="mt-3 space-y-0.5">
+          <ul className="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {recentTriggered.length === 0 && (
               <li className="text-[13px] text-ink-3">No triggered alerts.</li>
             )}

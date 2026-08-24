@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Download, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
@@ -9,7 +9,8 @@ import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { AvatarInitials } from "@/components/dashboard/avatar-initials";
 import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
-import { downloadCsv } from "@/lib/csv-client";
+import { downloadXlsx } from "@/lib/xlsx-client";
+import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
 import type { FundUser, UserRole } from "@/lib/types";
 
 type RoleFilter = "All" | "Analyst" | "Lead" | "Admin" | "Faculty";
@@ -53,6 +54,8 @@ export function UsersTableClient({
   highlightId?: string | null;
 }) {
   const canInvite = viewerRole === "admin" || viewerRole === "developer";
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [highlighted, setHighlighted] = useState<string | null>(highlightId ?? null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -100,7 +103,7 @@ export function UsersTableClient({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Fund Members"
         meta={`${users.length} member${users.length === 1 ? "" : "s"}`}
@@ -108,7 +111,7 @@ export function UsersTableClient({
           <>
             <GhostBtn
               onClick={() =>
-                downloadCsv(
+                downloadXlsx(
                   ["Name", "Role", "Online", "Last Seen"],
                   filtered.map((u) => [u.fullName, ROLE_LABEL[u.role] ?? u.role, u.isOnline ? "Yes" : "No", u.lastSeenAt ?? ""]),
                   "garnet-fund-roster.csv",
@@ -119,7 +122,7 @@ export function UsersTableClient({
               Roster
             </GhostBtn>
             {canInvite && (
-              <PrimaryBtn>
+              <PrimaryBtn onClick={() => setInviteOpen(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Invite
               </PrimaryBtn>
@@ -128,12 +131,84 @@ export function UsersTableClient({
         }
       />
 
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6">
+          <div className="w-full max-w-sm border border-line bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="panel-title">Invite member</h2>
+              <button type="button" onClick={() => setInviteOpen(false)} className="text-ink-3 hover:text-ink">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form
+              action={(fd) => {
+                startTransition(async () => {
+                  await inviteUserAction(fd);
+                  setInviteOpen(false);
+                });
+              }}
+              className="flex flex-col gap-3"
+            >
+              <div className="flex gap-2">
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="caps">First name</span>
+                  <input
+                    name="firstName"
+                    required
+                    className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="caps">Last name</span>
+                  <input
+                    name="lastName"
+                    required
+                    className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="caps">Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="caps">Role</span>
+                <select
+                  name="role"
+                  defaultValue="analyst"
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                >
+                  <option value="analyst">Analyst</option>
+                  <option value="pm">Lead</option>
+                  <option value="admin">Admin</option>
+                  <option value="developer">Developer</option>
+                </select>
+              </label>
+              <div className="flex items-center justify-end gap-1.5 pt-1">
+                <GhostBtn type="button" onClick={() => setInviteOpen(false)}>
+                  Cancel
+                </GhostBtn>
+                <PrimaryBtn type="submit" disabled={isPending}>
+                  {isPending ? "Sending…" : "Send invite"}
+                </PrimaryBtn>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <KpiRow tiles={kpiTiles} />
 
       <TableShell
         kicker="Directory"
         title="Members"
         count={filtered.length}
+        className="min-h-0 flex-1"
         actions={
           <FilterTabs
             options={["All", "Analyst", "Lead", "Admin", "Faculty"] as RoleFilter[]}

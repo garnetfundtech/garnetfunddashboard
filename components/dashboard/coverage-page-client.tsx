@@ -58,13 +58,13 @@ export function CoveragePageClient({
   const canAssign = viewerRole === "admin" || viewerRole === "developer" || viewerRole === "pm";
   const [assignOpen, setAssignOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Coverage is a sector assignment, not a role — anyone with a coverage
+  // sector set (analyst, pm, admin, developer) counts toward that sector.
   const sectorMap = useMemo(() => {
     const map: Record<string, { analysts: CoverageAnalyst[]; tickers: string[] }> = {};
     for (const s of sectors) {
       const sAnalysts = analysts.filter(
-        (a) =>
-          a.sector?.toLowerCase() === s.toLowerCase() &&
-          (a.role === "analyst" || a.role === "pm"),
+        (a) => a.sector?.toLowerCase() === s.toLowerCase(),
       );
       const sResearch = research.filter(
         (r) => r.sector?.toLowerCase() === s.toLowerCase(),
@@ -82,9 +82,8 @@ export function CoveragePageClient({
     return map;
   }, [analysts, research, sectors]);
 
-  const activeAnalysts = analysts.filter(
-    (a) => a.role === "analyst" || a.role === "pm",
-  );
+  // Every user shows up here with what they cover, regardless of role.
+  const activeAnalysts = analysts;
   const covered = sectors.filter((s) => {
     const st = sectorStatus(s, analysts, sectorMap[s]?.tickers ?? []);
     return st === "covered" || st === "thin";
@@ -119,9 +118,9 @@ export function CoveragePageClient({
       sub: `${gaps + uncovered} need attention`,
     },
     {
-      label: "Analysts",
+      label: "Team members",
       value: String(activeAnalysts.length),
-      sub: "Active this term",
+      sub: "Covering a sector",
     },
     {
       label: "Coverage gaps",
@@ -143,7 +142,7 @@ export function CoveragePageClient({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Sector Coverage"
         meta={`${covered} / ${sectors.length} sectors covered`}
@@ -219,16 +218,13 @@ export function CoveragePageClient({
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-3"
+        className="grid min-h-0 flex-1 gap-3"
         style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 0.9fr)" }}
       >
         {/* Left — Sectors × Analysts table */}
         <TableShell
           title="Sectors"
           count={sectors.length}
-          actions={
-            <StatusPill label="GICS 11" tone="neutral" dot={false} />
-          }
         >
           <table className="w-full">
             <thead>
@@ -247,7 +243,7 @@ export function CoveragePageClient({
                   tickers: [],
                 };
                 const status = sectorStatus(sector, analysts, tickers);
-                const lead = sAnalysts.find((a) => a.role === "pm");
+                const leads = sAnalysts.filter((a) => a.role !== "analyst");
                 const analystCount = sAnalysts.length;
                 const color = SECTOR_COLORS[sector] ?? SECTOR_FALLBACK_COLOR;
 
@@ -266,8 +262,8 @@ export function CoveragePageClient({
                       </div>
                     </td>
                     <td className="px-3 py-2 text-[14px] text-ink-2">
-                      {lead ? (
-                        <span className="text-ink">{lead.name}</span>
+                      {leads.length > 0 ? (
+                        <span className="text-ink">{leads.map((a) => a.name).join(", ")}</span>
                       ) : (
                         <span className="text-ink-3">—</span>
                       )}
@@ -305,16 +301,16 @@ export function CoveragePageClient({
         </TableShell>
 
         {/* Right — Analyst load card */}
-        <div className="panel p-3">
+        <div className="panel flex h-full min-h-0 flex-col p-3">
           <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
-            Analyst Load
+            User Load
           </p>
           <p className="mt-0.5 text-[15px] font-semibold text-ink">
-            Tickers per analyst
+            Tickers per user
           </p>
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
             {activeAnalysts.length === 0 && (
-              <p className="text-[13px] text-ink-3">No analysts yet.</p>
+              <p className="text-[13px] text-ink-3">No users yet.</p>
             )}
             {activeAnalysts.map((a) => {
               const load = loadMap[a.id] ?? 0;
@@ -334,6 +330,9 @@ export function CoveragePageClient({
                     <div className="flex items-baseline justify-between">
                       <span className="truncate text-[13.5px] text-ink">
                         {a.name}
+                        <span className="ml-1.5 text-[12px] text-ink-3">
+                          {a.sector ?? "Unassigned"}
+                        </span>
                       </span>
                       <span className="ml-2 shrink-0 tabular-nums text-[12px] text-ink-3">
                         {load} tickers

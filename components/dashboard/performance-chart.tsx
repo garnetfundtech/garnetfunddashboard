@@ -162,13 +162,17 @@ export function PerformanceChart({
       hasAnimatedRef.current = true;
       setIsFirstPaint(false);
 
-      for (const r of RANGES) {
-        if (cancelled) return;
-        if (r === "YTD" || cacheRef.current.has(r)) continue;
-        await fetchOneRange(r).then((result) => {
-          if (!cancelled && result) cacheRef.current.set(r, result);
-        });
-      }
+      // Fire every remaining range at once instead of one-at-a-time — a
+      // sequential loop left later ranges uncached for many seconds, so a
+      // click on, say, 1Y before its turn came up still fell through to a
+      // slow live fetch. Concurrent requests get the whole cache warm fast.
+      await Promise.all(
+        RANGES.filter((r) => r !== "YTD" && !cacheRef.current.has(r)).map((r) =>
+          fetchOneRange(r).then((result) => {
+            if (!cancelled && result) cacheRef.current.set(r, result);
+          }),
+        ),
+      );
     }
 
     void seedAndPrefetch();

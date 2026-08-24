@@ -151,7 +151,7 @@ export function RiskAdminClient({ limits, breachLog }: { limits: RiskLimit[]; br
         actions={
           <GhostBtn onClick={() => window.open("/api/risk/breach-log/export", "_blank")}>
             <Download className="h-3.5 w-3.5" />
-            Export CSV
+            Export Excel
           </GhostBtn>
         }
       />
@@ -174,7 +174,7 @@ export function RiskAdminClient({ limits, breachLog }: { limits: RiskLimit[]; br
         </table>
       </TableShell>
 
-      <TableShell title="Breach Log" count={breachLog.length} footer="Every red, permanently — the audit trail for the bylaws.">
+      <TableShell title="Breach Log" count={breachLog.length} footer="Every red is logged permanently: the audit trail for the bylaws.">
         <table className="w-full">
           <thead>
             <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">

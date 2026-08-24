@@ -1,6 +1,10 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
+import { StatusPill } from "@/components/dashboard/status-pill";
 import { InfoTooltip } from "@/components/ui/tooltip";
+import { useClickOutside } from "@/lib/use-click-outside";
 import type {
   RiskModel,
   EvaluatedRow,
@@ -9,7 +13,7 @@ import type {
   VarView,
   StressScenarioView,
 } from "@/lib/risk-engine";
-import type { RiskStatus, RiskDataSource } from "@/lib/risk-parameters";
+import type { RiskStatus } from "@/lib/risk-parameters";
 import { CADENCE_LABEL } from "@/lib/risk-parameters";
 
 const STATUS_TEXT: Record<RiskStatus, string> = {
@@ -31,13 +35,6 @@ const STATUS_LABEL: Record<RiskStatus, string> = {
   yellow: "Watch",
   red: "Breach",
   na: "No data",
-};
-
-const SOURCE_LABEL: Record<RiskDataSource, string> = {
-  live: "Live",
-  sample: "Sample",
-  manual: "Manual",
-  planned: "Phase 2",
 };
 
 function fmtCompact(n: number): string {
@@ -200,7 +197,7 @@ function VarPanel({ v }: { v: VarView | null }) {
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-wider text-ink-3">
-              Neutrality (VaR ÷ long-only VaR)
+              Hedge ratio
             </span>
             <span className={cn("text-[12.5px] font-semibold tabular-nums", STATUS_TEXT[ratioTone])}>
               {(ratio * 100).toFixed(0)}%
@@ -247,9 +244,12 @@ function StressPanel({ scenarios, worst }: { scenarios: StressScenarioView[]; wo
           const flagged = s.pnlPct < -10;
           return (
             <div key={s.key} className="flex items-center gap-2">
-              <div className="w-[130px] shrink-0">
-                <p className="truncate text-[12.5px] text-ink">{s.label}</p>
-                <p className="truncate text-[12px] text-ink-3">{s.description}</p>
+              <div className="flex w-[150px] shrink-0 items-start gap-1">
+                <div className="min-w-0">
+                  <p className="truncate text-[12.5px] text-ink">{s.label}</p>
+                  <p className="truncate text-[12px] text-ink-3">{s.description}</p>
+                </div>
+                <InfoTooltip text={`${s.label}: ${s.description}`} />
               </div>
               {/* center baseline: losses extend left (red), gains right (green) */}
               <div className="flex flex-1 items-center">
@@ -309,9 +309,6 @@ function LimitRow({ row }: { row: EvaluatedRow }) {
       <td className="hidden py-1.5 pr-2 text-[12px] text-ink-3 md:table-cell">
         {CADENCE_LABEL[row.limit.cadence]}
       </td>
-      <td className="hidden py-1.5 pr-2 lg:table-cell">
-        <SourceTag source={row.limit.dataSource} />
-      </td>
       <td className="py-1.5 text-right">
         <span className="inline-flex items-center gap-1.5">
           <span className={cn("h-1.5 w-1.5 rounded-none", STATUS_DOT[row.status])} />
@@ -322,12 +319,6 @@ function LimitRow({ row }: { row: EvaluatedRow }) {
       </td>
     </tr>
   );
-}
-
-function SourceTag({ source }: { source: RiskDataSource }) {
-  const tone: Tone =
-    source === "live" ? "emerald" : source === "sample" ? "blue" : source === "manual" ? "neutral" : "amber";
-  return <StatusPill label={SOURCE_LABEL[source]} tone={tone} dot={false} />;
 }
 
 function LimitGroup({
@@ -352,7 +343,6 @@ function LimitGroup({
             <th className="py-1 pr-2 text-right text-[12px] font-medium uppercase tracking-wider text-ink-3">Current</th>
             <th className="hidden py-1 pr-2 text-[12px] font-medium uppercase tracking-wider text-ink-3 sm:table-cell">Target</th>
             <th className="hidden py-1 pr-2 text-[12px] font-medium uppercase tracking-wider text-ink-3 md:table-cell">Cadence</th>
-            <th className="hidden py-1 pr-2 text-[12px] font-medium uppercase tracking-wider text-ink-3 lg:table-cell">Source</th>
             <th className="py-1 text-right text-[12px] font-medium uppercase tracking-wider text-ink-3">Status</th>
           </tr>
         </thead>
@@ -393,6 +383,7 @@ function BreachBanner({ breaches }: { breaches: EvaluatedRow[] }) {
 // ── Root ──────────────────────────────────────────────────────────────────
 
 export function RiskMonitor({ model }: { model: RiskModel }) {
+  const allRows = model.groups.flatMap((g) => g.rows);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -407,10 +398,10 @@ export function RiskMonitor({ model }: { model: RiskModel }) {
           )}
         </div>
         <div className="flex items-center gap-3 text-[12.5px] tabular-nums">
-          <LegendCount dot="bg-pos" n={model.counts.green} label="in policy" />
-          <LegendCount dot="bg-warn" n={model.counts.yellow} label="watch" />
-          <LegendCount dot="bg-neg" n={model.counts.red} label="breach" />
-          <LegendCount dot="bg-ink-3" n={model.counts.na} label="pending" />
+          <LegendCount dot="bg-pos" n={model.counts.green} label="in policy" status="green" rows={allRows} />
+          <LegendCount dot="bg-warn" n={model.counts.yellow} label="watch" status="yellow" rows={allRows} />
+          <LegendCount dot="bg-neg" n={model.counts.red} label="breach" status="red" rows={allRows} />
+          <LegendCount dot="bg-ink-3" n={model.counts.na} label="pending" status="na" rows={allRows} />
         </div>
       </div>
 
@@ -429,20 +420,18 @@ export function RiskMonitor({ model }: { model: RiskModel }) {
         <HeadlineTile row={model.headline.beta} caption="Weekly regression vs S&P 500" />
       </div>
 
-      {/* Books + sector balance */}
-      <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1.6fr]">
+      {/* Books, sector balance, VaR, and stress tests — one row so nothing
+          is left stranded with empty space beside it. */}
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
+      >
         <BookCard book={model.longBook} title="Long Book" />
         <BookCard book={model.shortBook} title="Short Book" />
         <SectorBalance rows={model.sectorBalance.slice(0, 8)} />
+        <VarPanel v={model.varView} />
+        <StressPanel scenarios={model.stress} worst={model.worstStress} />
       </div>
-
-      {/* Risk analytics: VaR / CVaR + stress tests */}
-      {(model.varView || model.stress.length > 0) && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <VarPanel v={model.varView} />
-          <StressPanel scenarios={model.stress} worst={model.worstStress} />
-        </div>
-      )}
 
       {/* Full limits table */}
       <div className="grid gap-3 xl:grid-cols-2">
@@ -454,12 +443,55 @@ export function RiskMonitor({ model }: { model: RiskModel }) {
   );
 }
 
-function LegendCount({ dot, n, label }: { dot: string; n: number; label: string }) {
+function LegendCount({
+  dot,
+  n,
+  label,
+  status,
+  rows,
+}: {
+  dot: string;
+  n: number;
+  label: string;
+  status: RiskStatus;
+  rows: EvaluatedRow[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useClickOutside(ref, open, () => setOpen(false));
+  const matches = rows.filter((r) => r.status === status);
+
   return (
-    <span className="inline-flex items-center gap-1.5 text-ink-2">
-      <span className={cn("h-1.5 w-1.5 rounded-none", dot)} />
-      <span className="font-semibold text-ink">{n}</span>
-      <span className="hidden text-ink-3 md:inline">{label}</span>
+    <span
+      ref={ref}
+      className="relative inline-flex items-center gap-1.5 text-ink-2"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="inline-flex items-center gap-1.5"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={cn("h-1.5 w-1.5 rounded-none", dot)} />
+        <span className="font-semibold text-ink">{n}</span>
+        <span className="hidden text-ink-3 md:inline">{label}</span>
+      </button>
+      {open && n > 0 && (
+        <div className="absolute right-0 top-full z-20 mt-1.5 w-72 border border-line-2 bg-surface py-1.5 shadow-[0_2px_8px_rgba(23,24,26,0.12)]">
+          <p className="border-b border-line px-3 pb-1.5 text-[11px] uppercase tracking-wider text-ink-3">
+            {label} · {n}
+          </p>
+          <ul className="max-h-64 overflow-y-auto">
+            {matches.map((r) => (
+              <li key={r.limit.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px]">
+                <span className="text-ink">{r.limit.label}</span>
+                <span className={cn("tabular-nums font-medium", STATUS_TEXT[r.status])}>{r.display}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </span>
   );
 }

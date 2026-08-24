@@ -199,7 +199,7 @@ export function TeamFilesClient({
     breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : sector;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Team Workspace"
         meta={`${files.length} file${files.length === 1 ? "" : "s"} in ${locationLabel}`}
@@ -226,9 +226,9 @@ export function TeamFilesClient({
 
       <KpiRow tiles={kpiTiles} />
 
-      <div className="grid gap-3" style={{ gridTemplateColumns: "196px minmax(0,1fr)" }}>
+      <div className="grid min-h-0 flex-1 gap-3" style={{ gridTemplateColumns: "196px minmax(0,1fr)" }}>
         {/* Team rail */}
-        <div className="panel flex flex-col overflow-hidden">
+        <div className="panel flex h-full min-h-0 flex-col overflow-hidden">
           <div className="border-b border-line px-3 py-2">
             <span className="text-[15px] font-semibold text-ink">Teams</span>
           </div>
@@ -440,7 +440,7 @@ export function TeamFilesClient({
       {/* ── File preview ──────────────────────────────────────────────────── */}
       {opened && isPdf(opened) && (
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 flex-col p-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
             <PdfViewer
               url={opened.viewUrl}
               scale={zoom}

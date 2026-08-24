@@ -22,8 +22,8 @@ function colorClass(n: number) {
 type SortKey = keyof LivePosition;
 type SortDir = "asc" | "desc";
 
-function SortIcon({ sortKey, k, sortDir }: { sortKey: SortKey; k: SortKey; sortDir: SortDir }) {
-  if (sortKey !== k) return null;
+function SortIcon({ sortKey, k, sortDir }: { sortKey: SortKey; k: SortKey; sortDir: SortDir | null }) {
+  if (sortKey !== k || sortDir == null) return null;
   return sortDir === "asc" ? <ChevronUp className="inline h-2.5 w-2.5" /> : <ChevronDown className="inline h-2.5 w-2.5" />;
 }
 
@@ -35,8 +35,10 @@ export function HoldingsTable({
   purchaseDates?: Record<string, string>;
 }) {
   const positions = livePositions ?? [];
-  const [sortKey, setSortKey] = useState<SortKey>("weight");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const DEFAULT_SORT_KEY: SortKey = "weight";
+  const DEFAULT_SORT_DIR: SortDir = "desc";
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
+  const [sortDir, setSortDir] = useState<SortDir | null>(DEFAULT_SORT_DIR);
   const [sectorFilter, setSectorFilter] = useState("All");
 
   const sectors = ["All", ...new Set(positions.map((p) => p.sector ?? "Unknown").filter(Boolean))];
@@ -45,19 +47,24 @@ export function HoldingsTable({
     sectorFilter === "All" || (p.sector ?? "Unknown") === sectorFilter,
   );
 
+  const activeKey = sortDir ? sortKey : DEFAULT_SORT_KEY;
+  const activeDir = sortDir ?? DEFAULT_SORT_DIR;
   const sorted = [...filtered].sort((a, b) => {
-    const av = a[sortKey] as number | string;
-    const bv = b[sortKey] as number | string;
+    const av = a[activeKey] as number | string;
+    const bv = b[activeKey] as number | string;
     const cmp = typeof av === "string" ? (av as string).localeCompare(bv as string) : ((av as number) - (bv as number));
-    return sortDir === "asc" ? cmp : -cmp;
+    return activeDir === "asc" ? cmp : -cmp;
   });
 
+  // Click cycle per column: down arrow (desc) -> up arrow (asc) -> off, back
+  // to the default sort.
   function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
+    if (sortKey !== key) {
       setSortKey(key);
-      setSortDir(["ticker", "name", "sector"].includes(key) ? "asc" : "desc");
+      setSortDir("desc");
+      return;
     }
+    setSortDir((d) => (d === "desc" ? "asc" : d === "asc" ? null : "desc"));
   }
 
   const thCls = "px-3 py-1.5 font-medium cursor-pointer hover:text-ink transition-colors select-none";
@@ -91,6 +98,12 @@ export function HoldingsTable({
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[980px] table-fixed text-[12px]">
+          <colgroup>
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
+          </colgroup>
           <thead className="bg-paper-3 text-left text-ink-3">
             <tr>
               <th className={thCls} onClick={() => handleSort("ticker")}>Ticker <SortIcon sortKey={sortKey} k="ticker" sortDir={sortDir} /></th>
@@ -123,11 +136,11 @@ export function HoldingsTable({
                 return (
                   <tr key={pos.ticker} className="border-b border-line text-ink transition hover:bg-paper-3 last:border-b-0">
                     <td className="px-3 py-1 font-semibold text-ink">{pos.ticker}</td>
-                    <td className="max-w-[120px] truncate px-3 py-1 text-ink">{pos.name}</td>
-                    <td className="px-3 py-1">
-                      <span className="inline-flex items-center gap-1.5 text-ink-2">
+                    <td className="truncate overflow-hidden px-3 py-1 text-ink">{pos.name}</td>
+                    <td className="px-3 py-1 overflow-hidden">
+                      <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
                         <span className="h-1.5 w-1.5 rounded-none shrink-0" style={{ background: sectorColor }} />
-                        <span className="whitespace-nowrap">{pos.sector ?? "—"}</span>
+                        <span className="truncate">{pos.sector ?? "—"}</span>
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-1 tabular-nums text-ink-2">{fmtDate(purchaseDates[pos.ticker])}</td>

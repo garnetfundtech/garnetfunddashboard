@@ -177,7 +177,7 @@ export function ResearchTableClient({
   const topReports = useMemo(() => [...items].slice(0, 6), [items]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Research Archive"
         meta={`${items.length} report${items.length === 1 ? "" : "s"}`}
@@ -187,7 +187,7 @@ export function ResearchTableClient({
       <KpiRow tiles={kpiTiles} />
 
       <div
-        className="grid gap-3"
+        className="grid min-h-0 flex-1 gap-3"
         style={{
           gridTemplateColumns: "minmax(0, 1.7fr) minmax(260px, 0.8fr)",
         }}
@@ -285,14 +285,14 @@ export function ResearchTableClient({
         </TableShell>
 
         {/* Right — Top reports card */}
-        <div className="panel p-3">
+        <div className="panel flex h-full min-h-0 flex-col p-3">
           <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
             Most read
           </p>
           <p className="mt-0.5 text-[15px] font-semibold text-ink">
             Top reports this term
           </p>
-          <ol className="mt-3 space-y-0.5">
+          <ol className="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {topReports.map((item, i) => (
               <li key={item.id}>
                 <button
@@ -321,7 +321,7 @@ export function ResearchTableClient({
       {/* PDF viewer modal */}
       {opened && (
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 flex-col p-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
             <PdfViewer
               url={opened.viewUrl}
               scale={zoom}

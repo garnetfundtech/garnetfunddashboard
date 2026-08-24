@@ -180,7 +180,7 @@ export function ResourcesTableClient({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Resource Library"
         meta={`${resources.length} file${resources.length === 1 ? "" : "s"}`}
@@ -192,6 +192,7 @@ export function ResourcesTableClient({
       <TableShell
         title="Library"
         count={filtered.length}
+        className="min-h-0 flex-1"
         actions={
           <FilterTabs
             options={filterOptions}
@@ -265,7 +266,7 @@ export function ResourcesTableClient({
       {/* PDF viewer modal */}
       {opened && (
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 flex-col p-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
             <PdfViewer
               url={opened.viewUrl}
               scale={zoom}
