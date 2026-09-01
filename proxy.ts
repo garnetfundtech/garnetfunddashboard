@@ -16,6 +16,7 @@ export const config = {
     "/files/:path*",
     "/admin/:path*",
     "/onboarding",
+    "/settings",
     "/set-password",
     "/pending",
     "/login",

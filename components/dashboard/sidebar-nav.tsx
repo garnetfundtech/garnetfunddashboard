@@ -95,7 +95,7 @@ export function SidebarNav({
         </div>
         {isMenuOpen ? (
           <div className="mb-1 border border-line">
-            {role === "developer" || role === "admin" ? (
+            {(role === "developer" || role === "admin") && (
               <Link
                 href="/admin"
                 className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"
@@ -103,15 +103,14 @@ export function SidebarNav({
                 <Shield className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span>Admin</span>
               </Link>
-            ) : (
-              <Link
-                href="/onboarding"
-                className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"
-              >
-                <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                <span>Settings</span>
-              </Link>
             )}
+            <Link
+              href="/settings"
+              className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"
+            >
+              <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              <span>Settings</span>
+            </Link>
             <form action={logoutAction}>
               <button
                 type="submit"
