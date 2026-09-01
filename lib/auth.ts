@@ -62,15 +62,26 @@ export const getCurrentProfile = cache(async () => {
     // RLS only lets developers/admins write profiles, so this repair has to go
     // through the service role — with the user's client it fails silently and
     // the row never appears for an admin to approve.
-    await createAdminClient().from("user_profiles").upsert({
-      id: user.id,
-      email: user.email ?? "",
-      full_name: fallbackFullName,
-      first_name: firstName,
-      last_name: lastName,
-      role: "analyst",
-      status: "pending",
-    });
+    //
+    // ignoreDuplicates makes this INSERT ... ON CONFLICT DO NOTHING. A plain
+    // upsert overwrites, and this branch is also reached when a row exists but
+    // could not be read (a transient error, or a cached null) — which silently
+    // reset that user's role to analyst and status to pending. An admin could
+    // lose admin to a blip. Repair may create a missing row, never rewrite one.
+    await createAdminClient()
+      .from("user_profiles")
+      .upsert(
+        {
+          id: user.id,
+          email: user.email ?? "",
+          full_name: fallbackFullName,
+          first_name: firstName,
+          last_name: lastName,
+          role: "analyst",
+          status: "pending",
+        },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
 
     return {
       id: user.id,
