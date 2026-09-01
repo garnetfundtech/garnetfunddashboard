@@ -46,3 +46,12 @@ certificatessupabase/.temp/
 .claude/
 *.zip
 .env.local.bak
+
+# Roster invite queue — contains member emails, never commit.
+invite-queue.json
+
+# Member roster — personal emails and phone numbers, never commit.
+Tech Logins.xlsx
+
+# Supabase CLI scratch state.
+supabase/.temp/

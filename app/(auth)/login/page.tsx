@@ -1,7 +1,13 @@
 import { LoginForm } from "@/app/(auth)/login/login-form";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="panel w-full max-w-md space-y-6 p-6">
@@ -19,6 +25,11 @@ export default function LoginPage() {
             </p>
           </div>
         )}
+        {error ? (
+          <div className="rounded-none border border-neg-line bg-neg-soft px-3 py-2.5 text-[13.5px] text-neg">
+            {error}
+          </div>
+        ) : null}
         <LoginForm />
       </div>
     </div>

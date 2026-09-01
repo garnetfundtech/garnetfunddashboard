@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import type { UserRole } from "@/lib/types";
+import type { ApprovalStatus, UserRole } from "@/lib/types";
 
 export type Profile = {
   id: string;
@@ -14,6 +14,7 @@ export type Profile = {
   last_name: string | null;
   role: UserRole;
   coverage_sector: string | null;
+  status: ApprovalStatus;
 };
 
 /**
@@ -26,7 +27,7 @@ const getCachedProfileRow = unstable_cache(
     const admin = createAdminClient();
     const { data } = await admin
       .from("user_profiles")
-      .select("id,email,full_name,first_name,last_name,role,coverage_sector")
+      .select("id,email,full_name,first_name,last_name,role,coverage_sector,status")
       .eq("id", userId)
       .maybeSingle();
     return (data as Profile | null) ?? null;
@@ -58,13 +59,17 @@ export const getCurrentProfile = cache(async () => {
     const metadataFullName = (user.user_metadata?.full_name as string | undefined) ?? null;
     const fallbackFullName = metadataFullName || fallbackFromParts || null;
 
-    await supabase.from("user_profiles").upsert({
+    // RLS only lets developers/admins write profiles, so this repair has to go
+    // through the service role — with the user's client it fails silently and
+    // the row never appears for an admin to approve.
+    await createAdminClient().from("user_profiles").upsert({
       id: user.id,
       email: user.email ?? "",
       full_name: fallbackFullName,
       first_name: firstName,
       last_name: lastName,
       role: "analyst",
+      status: "pending",
     });
 
     return {
@@ -75,6 +80,7 @@ export const getCurrentProfile = cache(async () => {
       last_name: lastName,
       role: "analyst" as const,
       coverage_sector: null,
+      status: "pending" as const,
     };
   }
 
@@ -91,8 +97,24 @@ export async function requireProfile() {
   return profile;
 }
 
-export async function requireRole(allowed: UserRole[]) {
+/**
+ * Session + an admin who has actually let this person in.
+ *
+ * Kept separate from requireProfile() because /pending itself needs a profile
+ * without being approved — routing that page through this would loop.
+ */
+export async function requireApprovedProfile() {
   const profile = await requireProfile();
+
+  if (profile.status !== "approved") {
+    redirect("/pending");
+  }
+
+  return profile;
+}
+
+export async function requireRole(allowed: UserRole[]) {
+  const profile = await requireApprovedProfile();
 
   if (!allowed.includes(profile.role)) {
     redirect("/home");

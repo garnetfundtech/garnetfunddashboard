@@ -2,14 +2,14 @@ import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { PresenceHeartbeat } from "@/components/dashboard/presence-heartbeat";
 import { DashboardTopRow } from "@/components/dashboard/dashboard-top-row";
 import { PageHeaderProvider } from "@/components/dashboard/page-header-context";
-import { requireProfile } from "@/lib/auth";
+import { requireApprovedProfile } from "@/lib/auth";
 import { getSearchIndex } from "@/lib/search";
 import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const profile = await requireProfile();
+  const profile = await requireApprovedProfile();
   if (!profile.first_name || !profile.last_name) {
     redirect("/onboarding");
   }

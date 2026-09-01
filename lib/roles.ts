@@ -1,6 +1,9 @@
 import type { UserRole } from "@/lib/types";
 
 const ROLE_RANK: Record<UserRole, number> = {
+  // Faculty sit alongside analysts rather than above them: advisors observe
+  // the fund, they don't moderate students' research or files.
+  faculty: 0,
   analyst: 0,
   pm: 1,
   admin: 2,

@@ -2,6 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isUscEmail, ACCEPTED_DOMAINS_LABEL } from "@/lib/usc-email";
+import { normalizeClassYear } from "@/lib/class-years";
 
 export type LoginState = {
   error?: string;
@@ -41,13 +44,14 @@ export async function signupAction(_: LoginState, formData: FormData): Promise<L
   if (!firstName || !lastName) {
     return { error: "Enter first and last name." };
   }
-  if (!email.endsWith("@email.sc.edu")) {
-    return { error: "You must sign up with your USC email address (@email.sc.edu)." };
+  if (!isUscEmail(email)) {
+    return { error: `Sign up with your USC email address (${ACCEPTED_DOMAINS_LABEL}).` };
   }
   if (password.length < 8) {
     return { error: "Password must be at least 8 characters." };
   }
 
+  const classYear = normalizeClassYear(String(formData.get("classYear") ?? ""));
   const supabase = await createClient();
   const fullName = `${firstName} ${lastName}`.trim();
 
@@ -68,19 +72,26 @@ export async function signupAction(_: LoginState, formData: FormData): Promise<L
   }
 
   if (data.user?.id) {
-    await supabase.from("user_profiles").upsert({
+    // Service role: RLS reserves profile writes for developers/admins, and a
+    // brand-new signup is neither. Status is 'pending' until an admin approves.
+    await createAdminClient().from("user_profiles").upsert({
       id: data.user.id,
       email,
       first_name: firstName,
       last_name: lastName,
       full_name: fullName,
       role: "analyst",
+      class_year: classYear,
+      status: "pending",
     });
   }
 
   if (data.session) {
-    redirect("/home");
+    redirect("/pending");
   }
 
-  return { success: "Account created. Check your email to confirm sign up." };
+  return {
+    success:
+      "Account created. Confirm your email, then an admin will review your access request.",
+  };
 }

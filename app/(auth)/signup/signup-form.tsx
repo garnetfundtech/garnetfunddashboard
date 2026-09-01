@@ -5,6 +5,7 @@ import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signupAction, type LoginState } from "@/app/(auth)/login/actions";
+import { CLASS_YEARS } from "@/lib/class-years";
 
 const initialState: LoginState = {};
 
@@ -37,7 +38,22 @@ export function SignupForm() {
         placeholder="yourname@email.sc.edu"
         required
       />
-      <p className="text-xs text-ink-3">Use your USC email (@email.sc.edu)</p>
+      <p className="text-xs text-ink-3">
+        Use your USC email — students @email.sc.edu, faculty @moore.sc.edu
+      </p>
+
+      <select
+        name="classYear"
+        defaultValue=""
+        className="glass-input w-full px-3 py-2 text-sm outline-none"
+      >
+        <option value="">Class year (faculty can leave blank)</option>
+        {CLASS_YEARS.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
 
       <input
         name="password"
@@ -46,6 +62,10 @@ export function SignupForm() {
         placeholder="Create password"
         required
       />
+
+      <p className="text-xs text-ink-3">
+        New accounts are reviewed by an admin before you get access.
+      </p>
 
       {state.error ? <p className="text-sm text-neg">{state.error}</p> : null}
       {state.success ? <p className="text-sm text-pos">{state.success}</p> : null}

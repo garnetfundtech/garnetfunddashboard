@@ -10,8 +10,15 @@ export function AdminExportButton({ users }: { users: AdminUser[] }) {
     <GhostBtn
       onClick={() =>
         downloadXlsx(
-          ["Name", "Email", "Role", "Coverage Sector", "Created At"],
-          users.map((u) => [u.full_name ?? "", u.email, u.role, u.coverage_sector ?? "", u.created_at]),
+          ["Name", "Email", "Role", "Year", "Coverage Sector", "Created At"],
+          users.map((u) => [
+            u.full_name ?? "",
+            u.email,
+            u.role,
+            u.class_year ?? "",
+            u.coverage_sector ?? "",
+            u.created_at,
+          ]),
           "garnet-fund-members.csv",
         )
       }

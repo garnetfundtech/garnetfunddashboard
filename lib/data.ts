@@ -7,7 +7,9 @@ import {
   fetchBenchmarkHistory,
 } from "@/lib/market-data";
 import { getCachedPortfolioPerformance } from "@/lib/portfolio-performance";
+import { normalizeClassYear } from "@/lib/class-years";
 import type {
+  ApprovalStatus,
   FundUser,
   PitchRow,
   PitchStage,
@@ -134,6 +136,8 @@ export type AdminUser = {
   full_name: string | null;
   role: UserRole;
   coverage_sector: string | null;
+  class_year: string | null;
+  status: ApprovalStatus;
   created_at: string;
 };
 
@@ -141,7 +145,7 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("id,email,full_name,role,coverage_sector,created_at")
+    .select("id,email,full_name,role,coverage_sector,class_year,status,created_at")
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];
@@ -265,7 +269,8 @@ export async function getFundUsers(): Promise<FundUser[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("id,full_name,first_name,last_name,role,user_presence(last_seen_at)")
+    .select("id,full_name,first_name,last_name,role,class_year,user_presence(last_seen_at)")
+    .eq("status", "approved")
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];
@@ -283,6 +288,7 @@ export async function getFundUsers(): Promise<FundUser[]> {
       id: user.id,
       fullName: user.full_name || fallbackName,
       role: user.role as UserRole,
+      classYear: normalizeClassYear(user.class_year as string | null),
       isOnline: Boolean(lastSeenAt && now - lastSeenMs <= activeWindowMs),
       lastSeenAt,
     };

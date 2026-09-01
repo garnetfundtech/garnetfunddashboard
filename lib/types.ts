@@ -1,4 +1,9 @@
-export type UserRole = "developer" | "admin" | "pm" | "analyst";
+import type { ClassYear } from "@/lib/class-years";
+
+export type UserRole = "developer" | "admin" | "pm" | "analyst" | "faculty";
+
+/** Whether a self-signed-up account has been let in by an admin yet. */
+export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 export type PitchStage =
   | "idea"
@@ -147,6 +152,7 @@ export type FundUser = {
   id: string;
   fullName: string;
   role: UserRole;
+  classYear: ClassYear | null;
   isOnline: boolean;
   lastSeenAt: string | null;
 };

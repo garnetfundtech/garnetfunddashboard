@@ -1,4 +1,4 @@
-import { deleteUserAction } from "@/app/(dashboard)/admin/actions";
+import { approveUserAction, deleteUserAction, rejectUserAction } from "@/app/(dashboard)/admin/actions";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AdminExportButton } from "@/components/admin/admin-export-button";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
@@ -6,6 +6,8 @@ import { requireRole } from "@/lib/auth";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
 import { RoleSelect } from "@/components/admin/role-select";
 import { SectorSelect } from "@/components/admin/sector-select";
+import { ClassYearSelect } from "@/components/admin/class-year-select";
+import { CLASS_YEARS } from "@/lib/class-years";
 import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
 import { getExternalApiStatus } from "@/lib/external-api-status";
 
@@ -33,9 +35,88 @@ export default async function AdminPage() {
       }
     : null;
 
+  // Pending signups are the one thing on this page that needs acting on, so
+  // they sit above the roster rather than inside it.
+  const pending = users.filter((u) => u.status === "pending");
+  const decided = users.filter((u) => u.status !== "pending");
+
   return (
     <div className="space-y-3">
-      <PageHeader title="Admin" meta={`${users.length} member${users.length === 1 ? "" : "s"}`} actions={<AdminExportButton users={users} />} />
+      <PageHeader
+        title="Admin"
+        meta={
+          pending.length > 0
+            ? `${pending.length} awaiting approval · ${decided.length} member${decided.length === 1 ? "" : "s"}`
+            : `${decided.length} member${decided.length === 1 ? "" : "s"}`
+        }
+        actions={<AdminExportButton users={users} />}
+      />
+
+      <section className="panel overflow-hidden">
+        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+          <h2 className="panel-title">Pending approvals</h2>
+          <span className="text-xs text-ink-3">{pending.length}</span>
+        </div>
+        {pending.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[13.5px] text-ink-3">
+            No one is waiting for access.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-paper-2 text-ink-2">
+              <tr>
+                <th className="px-4 py-2.5 text-left font-medium">Name</th>
+                <th className="px-4 py-2.5 text-left font-medium">Email</th>
+                <th className="px-4 py-2.5 text-left font-medium w-[130px]">Role</th>
+                <th className="px-4 py-2.5 text-left font-medium w-[130px]">Year</th>
+                <th className="px-4 py-2.5 text-left font-medium w-[170px]">Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map((user) => (
+                <tr key={user.id} className="odd:bg-paper-3">
+                  <td className="px-4 py-3 text-ink">{user.full_name || "—"}</td>
+                  <td className="px-4 py-3 text-ink-2">{user.email}</td>
+                  <td className="px-4 py-3" colSpan={3}>
+                    <form action={approveUserAction} className="flex items-center gap-1.5">
+                      <input type="hidden" name="id" value={user.id} />
+                      <select
+                        name="role"
+                        defaultValue={user.role}
+                        className="rounded-none border border-line bg-surface px-2 py-1.5 text-xs text-ink outline-none"
+                      >
+                        <option value="analyst">Analyst</option>
+                        <option value="faculty">Faculty</option>
+                        <option value="pm">Lead</option>
+                        <option value="admin">Admin</option>
+                        <option value="developer">Developer</option>
+                      </select>
+                      <select
+                        name="classYear"
+                        defaultValue={user.class_year ?? ""}
+                        className="rounded-none border border-line bg-surface px-2 py-1.5 text-xs text-ink outline-none"
+                      >
+                        <option value="">No year</option>
+                        {CLASS_YEARS.map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="rounded-none bg-garnet px-2.5 py-1.5 text-xs font-medium text-white hover:bg-garnet-hover"
+                      >
+                        Approve
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
       <section className="panel overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper-2 text-ink-2">
@@ -43,12 +124,14 @@ export default async function AdminPage() {
               <th className="px-4 py-2.5 text-left font-medium">Name</th>
               <th className="px-4 py-2.5 text-left font-medium">Email</th>
               <th className="px-4 py-2.5 text-left font-medium w-[130px]">Role</th>
+              <th className="px-4 py-2.5 text-left font-medium w-[130px]">Year</th>
               <th className="px-4 py-2.5 text-left font-medium w-[180px]">Coverage Sector</th>
+              <th className="px-4 py-2.5 text-left font-medium w-[100px]">Status</th>
               <th className="px-4 py-2.5 text-left font-medium w-[60px]"></th>
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {decided.map((user) => (
               <tr key={user.id} className="odd:bg-paper-3">
                 <td className="px-4 py-3 text-ink">{user.full_name || "—"}</td>
                 <td className="px-4 py-3 text-ink-2">{user.email}</td>
@@ -56,7 +139,17 @@ export default async function AdminPage() {
                   <RoleSelect userId={user.id} currentRole={user.role} />
                 </td>
                 <td className="px-4 py-3">
+                  <ClassYearSelect userId={user.id} currentYear={user.class_year ?? null} />
+                </td>
+                <td className="px-4 py-3">
                   <SectorSelect userId={user.id} currentSector={user.coverage_sector ?? null} />
+                </td>
+                <td className="px-4 py-3">
+                  {user.status === "rejected" ? (
+                    <span className="text-xs font-medium text-neg">Declined</span>
+                  ) : (
+                    <span className="text-xs text-ink-3">Approved</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <form action={deleteUserAction}>
@@ -68,6 +161,17 @@ export default async function AdminPage() {
                       Delete
                     </button>
                   </form>
+                  {user.status === "approved" && (
+                    <form action={rejectUserAction}>
+                      <input type="hidden" name="id" value={user.id} />
+                      <button
+                        type="submit"
+                        className="rounded-none px-2.5 py-1.5 text-xs font-medium text-ink-3 hover:text-warn transition-colors"
+                      >
+                        Revoke
+                      </button>
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}

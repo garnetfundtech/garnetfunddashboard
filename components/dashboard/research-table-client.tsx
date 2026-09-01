@@ -49,6 +49,7 @@ function roleColor(role: UserRole) {
     admin: "text-warn",
     pm: "text-garnet",
     analyst: "text-info",
+    faculty: "text-ink-2",
   };
   return map[role];
 }

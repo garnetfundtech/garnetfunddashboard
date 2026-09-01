@@ -11,12 +11,14 @@ import { AvatarInitials } from "@/components/dashboard/avatar-initials";
 import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
 import { downloadXlsx } from "@/lib/xlsx-client";
 import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
+import { CLASS_YEARS } from "@/lib/class-years";
 import type { FundUser, UserRole } from "@/lib/types";
 
 type RoleFilter = "All" | "Analyst" | "Lead" | "Admin" | "Faculty";
 
 const ROLE_TONE: Record<UserRole, Tone> = {
   analyst: "blue",
+  faculty: "neutral",
   pm: "accent",
   admin: "amber",
   developer: "neutral",
@@ -24,6 +26,7 @@ const ROLE_TONE: Record<UserRole, Tone> = {
 
 const ROLE_LABEL: Record<UserRole, string> = {
   analyst: "Analyst",
+  faculty: "Faculty",
   pm: "Lead",
   admin: "Admin",
   developer: "Dev",
@@ -55,6 +58,7 @@ export function UsersTableClient({
 }) {
   const canInvite = viewerRole === "admin" || viewerRole === "developer";
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [highlighted, setHighlighted] = useState<string | null>(highlightId ?? null);
@@ -78,7 +82,7 @@ export function UsersTableClient({
       if (roleFilter === "Analyst") return u.role === "analyst";
       if (roleFilter === "Lead") return u.role === "pm";
       if (roleFilter === "Admin") return u.role === "admin";
-      if (roleFilter === "Faculty") return false;
+      if (roleFilter === "Faculty") return u.role === "faculty";
       return true;
     });
   }, [users, roleFilter]);
@@ -112,8 +116,14 @@ export function UsersTableClient({
             <GhostBtn
               onClick={() =>
                 downloadXlsx(
-                  ["Name", "Role", "Online", "Last Seen"],
-                  filtered.map((u) => [u.fullName, ROLE_LABEL[u.role] ?? u.role, u.isOnline ? "Yes" : "No", u.lastSeenAt ?? ""]),
+                  ["Name", "Role", "Year", "Online", "Last Seen"],
+                  filtered.map((u) => [
+                    u.fullName,
+                    ROLE_LABEL[u.role] ?? u.role,
+                    u.classYear ?? "",
+                    u.isOnline ? "Yes" : "No",
+                    u.lastSeenAt ?? "",
+                  ]),
                   "garnet-fund-roster.csv",
                 )
               }
@@ -136,15 +146,27 @@ export function UsersTableClient({
           <div className="w-full max-w-sm border border-line bg-surface p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="panel-title">Invite member</h2>
-              <button type="button" onClick={() => setInviteOpen(false)} className="text-ink-3 hover:text-ink">
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteError(null);
+                  setInviteOpen(false);
+                }}
+                className="text-ink-3 hover:text-ink"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <form
               action={(fd) => {
                 startTransition(async () => {
-                  await inviteUserAction(fd);
-                  setInviteOpen(false);
+                  const result = await inviteUserAction(fd);
+                  if (result.ok) {
+                    setInviteError(null);
+                    setInviteOpen(false);
+                  } else {
+                    setInviteError(result.error ?? "Invite failed.");
+                  }
                 });
               }}
               className="flex flex-col gap-3"
@@ -184,13 +206,36 @@ export function UsersTableClient({
                   className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
                 >
                   <option value="analyst">Analyst</option>
+                  <option value="faculty">Faculty</option>
                   <option value="pm">Lead</option>
                   <option value="admin">Admin</option>
                   <option value="developer">Developer</option>
                 </select>
               </label>
+              <label className="flex flex-col gap-1">
+                <span className="caps">Year</span>
+                <select
+                  name="classYear"
+                  defaultValue=""
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                >
+                  <option value="">Unset</option>
+                  {CLASS_YEARS.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {inviteError ? <p className="text-[13px] text-neg">{inviteError}</p> : null}
               <div className="flex items-center justify-end gap-1.5 pt-1">
-                <GhostBtn type="button" onClick={() => setInviteOpen(false)}>
+                <GhostBtn
+                  type="button"
+                  onClick={() => {
+                    setInviteError(null);
+                    setInviteOpen(false);
+                  }}
+                >
                   Cancel
                 </GhostBtn>
                 <PrimaryBtn type="submit" disabled={isPending}>
@@ -222,6 +267,7 @@ export function UsersTableClient({
             <tr className="text-left text-[12px] uppercase tracking-wider text-ink-3">
               <th className="px-3 py-2 font-medium">Member</th>
               <th className="px-3 py-2 font-medium">Role</th>
+              <th className="px-3 py-2 font-medium">Year</th>
               <th className="px-3 py-2 font-medium">Joined</th>
               <th className="px-3 py-2 text-right font-medium">Last active</th>
             </tr>
@@ -229,7 +275,7 @@ export function UsersTableClient({
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
+                <td colSpan={5} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
                   No members match this filter.
                 </td>
               </tr>
@@ -259,6 +305,7 @@ export function UsersTableClient({
                     </div>
                   </td>
                   <td className="px-3 py-2">{rolePill(user.role)}</td>
+                  <td className="px-3 py-2 text-[14px] text-ink-2">{user.classYear ?? "—"}</td>
                   <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">—</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[14px]">
                     {user.isOnline ? (
