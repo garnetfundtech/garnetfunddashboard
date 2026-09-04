@@ -19,6 +19,14 @@ export const dynamic = "force-dynamic";
  *
  * §6 also notes that intraday refresh, where the broker offers it, is
  * desirable "for the stop-loss and 10% cap checks only" — which is this.
+ *
+ * Cadence, honestly: on Vercel's Hobby plan a cron may run at most once a day,
+ * and fires anywhere inside the hour it is scheduled for. So this is one sweep
+ * near midday rather than the continuous watch §4.4's "immediately on
+ * detection" describes. A stop that fills after this run is caught by the
+ * close-of-day snapshot instead — same episode, same single email, just later.
+ * Closing that gap means a Pro plan, where the schedule can drop to minutes;
+ * nothing in this route needs to change for that, only vercel.json.
  */
 export async function POST(request: NextRequest) {
   const secret = process.env.CRON_SECRET;

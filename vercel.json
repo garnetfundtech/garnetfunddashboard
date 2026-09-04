@@ -1,16 +1,16 @@
 {
   "crons": [
     {
+      "path": "/api/risk/intraday-check",
+      "schedule": "0 17 * * 1-5"
+    },
+    {
       "path": "/api/risk/snapshot",
       "schedule": "30 21 * * 1-5"
     },
     {
       "path": "/api/schwab/orders/sync?days=45",
       "schedule": "35 21 * * 1-5"
-    },
-    {
-      "path": "/api/risk/intraday-check",
-      "schedule": "0 14-20 * * 1-5"
     }
   ]
 }
