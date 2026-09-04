@@ -155,6 +155,85 @@ export async function getAccountOrders(accessToken: string, accountHash: string,
   return all;
 }
 
+/**
+ * Schwab rejects an order query whose date range exceeds this, which is why
+ * getAccountOrders() chunks.
+ */
+export const SCHWAB_MAX_ORDER_WINDOW_DAYS = 350;
+
+/**
+ * The statuses a resting order can sit in. The risk dashboard has to treat all
+ * of them as "a stop is present", because a GTC stop is WORKING during the
+ * session, PENDING_ACTIVATION or QUEUED outside it, and
+ * AWAITING_STOP_CONDITION while its trigger is unmet. Missing one would report
+ * a live stop as absent and mail the President about it.
+ */
+export const RESTING_ORDER_STATUSES = [
+  "WORKING",
+  "QUEUED",
+  "ACCEPTED",
+  "PENDING_ACTIVATION",
+  "AWAITING_CONDITION",
+  "AWAITING_STOP_CONDITION",
+  "AWAITING_PARENT_ORDER",
+  "NEW",
+] as const;
+
+/**
+ * Orders over a wide window, fetched one status at a time and in parallel.
+ *
+ * This exists because an *unfiltered* query over the same window is
+ * pathologically slow at Schwab's end — measured at 16-34 seconds to return
+ * four orders totalling 4KB, so it is latency rather than payload. The same
+ * window filtered by status comes back in about half a second, and the nine
+ * statuses the risk board needs run concurrently in under two.
+ *
+ * The wide window is not optional: a resting GTC stop placed at approval can
+ * be months old, and a short window would report it missing — the one false
+ * positive the stop check must never produce, because it notifies immediately.
+ */
+export async function getOrdersByStatus(
+  accessToken: string,
+  accountHash: string,
+  days: number,
+  statuses: readonly string[],
+): Promise<unknown[]> {
+  const capped = Math.min(days, SCHWAB_MAX_ORDER_WINDOW_DAYS);
+  const stamp = (ms: number) => new Date(ms).toISOString().split(".")[0] + "Z";
+  const from = stamp(Date.now() - capped * 24 * 60 * 60 * 1000);
+  const to = stamp(Date.now());
+
+  const pages = await Promise.all(
+    statuses.map(async (status) => {
+      const params = new URLSearchParams({ fromEnteredTime: from, toEnteredTime: to, status });
+      const response = await fetch(`${SCHWAB_TRADER_BASE}/accounts/${accountHash}/orders?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+      // One status failing must not lose the other eight: a partial view is
+      // still better than none, and the caller reports the feed as degraded.
+      if (!response.ok) return [] as unknown[];
+      const body = await response.json();
+      return Array.isArray(body) ? (body as unknown[]) : [];
+    }),
+  );
+
+  // An order can legitimately appear under two statuses across concurrent
+  // requests if it transitions mid-fetch, so dedupe on the broker's own id.
+  const seen = new Set<string>();
+  const out: unknown[] = [];
+  for (const page of pages) {
+    for (const order of page) {
+      const id = (order as Record<string, unknown>).orderId;
+      const key = id == null ? JSON.stringify(order) : String(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(order);
+    }
+  }
+  return out;
+}
+
 // ── Market Data API ──────────────────────────────────────────────────────────
 
 export async function getQuotes(accessToken: string, symbols: string[]) {

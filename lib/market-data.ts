@@ -8,6 +8,9 @@ import {
   getAccountPositions,
   getAccountNumbers,
   getAccountOrders,
+  getOrdersByStatus,
+  RESTING_ORDER_STATUSES,
+  SCHWAB_MAX_ORDER_WINDOW_DAYS,
   getQuotes,
   getPriceHistory,
   getMarketMovers,
@@ -213,10 +216,20 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 
     // Pulled as discrete fields per risk spec §3.2. Undefined stays null so a
     // broker that simply omits the field reads as "unknown" on the dashboard
-    // rather than as a clean zero debit.
+    // rather than as a clean zero debit — with one exception: a CASH account
+    // cannot carry a margin debit at all, so reporting zero there is a fact
+    // about the account structure, not an assumption about a missing field.
+    const accountType = String(sec.type ?? "").toUpperCase();
     const rawMargin = balances.marginBalance ?? aggBalance.marginBalance;
-    const marginBalance = rawMargin == null || !Number.isFinite(Number(rawMargin)) ? null : Number(rawMargin);
-    const rawAvailable = balances.availableFunds ?? balances.buyingPower;
+    const marginBalance =
+      rawMargin != null && Number.isFinite(Number(rawMargin))
+        ? Number(rawMargin)
+        : accountType === "CASH"
+          ? 0
+          : null;
+    // Schwab reports availableFunds/buyingPower only on margin accounts; a
+    // cash account states the same thing as cashAvailableForTrading.
+    const rawAvailable = balances.availableFunds ?? balances.buyingPower ?? balances.cashAvailableForTrading;
     const availableFunds =
       rawAvailable == null || !Number.isFinite(Number(rawAvailable)) ? null : Number(rawAvailable);
     const longMarketValue = Number(balances.longMarketValue ?? 0);
@@ -271,7 +284,12 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
         return {
           ticker: String(inst.symbol),
           name: String(inst.description ?? inst.symbol),
-          assetType: String(inst.type ?? "EQUITY"),
+          // Schwab's field is `assetType`; `type` does not exist on the
+          // instrument, so reading it silently classified every position —
+          // bonds and options included — as EQUITY. The risk board tags teams
+          // off this, so a Treasury was landing in the Equities book and its
+          // sector cap.
+          assetType: String(inst.assetType ?? inst.type ?? "EQUITY"),
           optionMultiplier: Number.isFinite(rawMultiplier) ? rawMultiplier : undefined,
           underlyingSymbol: inst.underlyingSymbol != null ? String(inst.underlyingSymbol) : undefined,
           putCall: rawPutCall === "PUT" || rawPutCall === "CALL" ? rawPutCall : undefined,
@@ -343,6 +361,34 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 export const fetchPortfolioSummary = unstable_cache(loadPortfolioSummary, ["portfolio-summary-v1"], {
   revalidate: 30,
   tags: ["schwab-portfolio"],
+});
+
+/**
+ * Every order the risk board needs: resting ones for the stop-order check, and
+ * filled ones for stop-execution detection and the trading-calendar breach.
+ *
+ * Status-filtered and parallel — see getOrdersByStatus for why an unfiltered
+ * wide window is unusable here.
+ */
+async function loadRiskOrders(): Promise<unknown[] | null> {
+  const token = await loadValidTraderToken();
+  const accountHash = await getTraderAccountHash();
+  if (!token || !accountHash) return null;
+  try {
+    return await getOrdersByStatus(token, accountHash, SCHWAB_MAX_ORDER_WINDOW_DAYS, [
+      ...RESTING_ORDER_STATUSES,
+      "FILLED",
+    ]);
+  } catch {
+    // null, not [] — an empty array would read as "no stop exists anywhere"
+    // and turn every position red.
+    return null;
+  }
+}
+
+export const fetchRiskOrders = unstable_cache(loadRiskOrders, ["risk-orders-v1"], {
+  revalidate: 120,
+  tags: ["schwab-orders"],
 });
 
 // ── Market overview ───────────────────────────────────────────────────────────

@@ -27,8 +27,8 @@
  */
 import { unstable_cache } from "next/cache";
 import {
-  fetchAccountOrders,
   fetchPortfolioSummary,
+  fetchRiskOrders,
   loadValidTraderToken,
 } from "@/lib/market-data";
 import { getOptionGreeks, getPriceHistory } from "@/lib/schwab";
@@ -65,12 +65,12 @@ import {
 } from "@/lib/risk-engine";
 
 /**
- * How far back to read orders. A resting GTC stop placed at approval can be
- * months old, and a 30-day window would report it missing — which is the one
- * false positive this check must never produce, because it notifies the
- * President immediately.
+ * How far back the order feed reaches — Schwab's own per-request maximum. A
+ * resting GTC stop placed at approval can be months old, and a short window
+ * would report it missing, which is the one false positive this check must
+ * never produce because it notifies the President immediately.
  */
-const ORDER_WINDOW_DAYS = 400;
+const ORDER_WINDOW_DAYS = 350;
 
 /** Enough daily history for the §6 250-day VaR lookback, with slack. */
 const PRICE_HISTORY = { periodType: "year" as const, period: 2, frequencyType: "daily" as const, frequency: 1 };
@@ -251,7 +251,21 @@ type VarSet = {
   observations: number;
   /** Symbols with no usable price history — their VaR share stays unscored. */
   missing: string[];
+  /** Share of gross exposure that a return series was actually found for. */
+  coveragePct: number;
 };
+
+/**
+ * How much of the book must be priced before Fund VaR means anything.
+ *
+ * Position VaR share divides by Fund VaR, so a book where only a sliver is
+ * priced produces a denominator covering that sliver — and a $5 holding reads
+ * as 100% of the fund's risk, which is a red alert about nothing. Below this
+ * threshold Fund VaR is reported as unavailable and every VaR share goes
+ * unscored, which is the §3 rule against silent approximation applied to the
+ * denominator rather than the inputs.
+ */
+const MIN_VAR_COVERAGE_PCT = 80;
 
 async function computeVar(
   token: string | null,
@@ -259,7 +273,9 @@ async function computeVar(
   nav: number,
   lookbackDays: number,
 ): Promise<VarSet> {
-  const empty: VarSet = { fundDollars: null, fundPct: null, perSymbol: new Map(), observations: 0, missing: [] };
+  const empty: VarSet = {
+    fundDollars: null, fundPct: null, perSymbol: new Map(), observations: 0, missing: [], coveragePct: 0,
+  };
   if (!token || nav <= 0) return empty;
 
   const priced = positions.filter((p) => p.assetClass !== "Cash").slice(0, MAX_VAR_SYMBOLS);
@@ -303,6 +319,7 @@ async function computeVar(
 
   if (!seriesFor.size) return { ...empty, missing };
 
+
   // Standalone position VaR: the position's own dollar exposure moved by its
   // own 5th-percentile day.
   const perSymbol = new Map<string, number>();
@@ -316,7 +333,9 @@ async function computeVar(
   // Fund VaR: current weights applied to the aligned history, per §6.
   const length = Math.min(...[...seriesFor.values()].map((r) => r.length));
   const observations = Number.isFinite(length) ? length : 0;
-  if (observations < 30) return { fundDollars: null, fundPct: null, perSymbol, observations, missing };
+  if (observations < 30) {
+    return { fundDollars: null, fundPct: null, perSymbol, observations, missing, coveragePct: 0 };
+  }
 
   const portfolioReturns: number[] = [];
   for (let i = 0; i < observations; i++) {
@@ -330,10 +349,18 @@ async function computeVar(
     portfolioReturns.push(pnl / nav);
   }
 
+  const grossAll = priced.reduce((sum, p) => sum + Math.abs(p.exposure), 0);
+  const grossPriced = priced
+    .filter((p) => seriesFor.has(p.symbol))
+    .reduce((sum, p) => sum + Math.abs(p.exposure), 0);
+  const coveragePct = grossAll > 0 ? (grossPriced / grossAll) * 100 : 0;
+
   const q = historicalVaR(portfolioReturns, 0.95);
-  if (q == null) return { fundDollars: null, fundPct: null, perSymbol, observations, missing };
+  if (q == null || coveragePct < MIN_VAR_COVERAGE_PCT) {
+    return { fundDollars: null, fundPct: null, perSymbol, observations, missing, coveragePct };
+  }
   const pct = Math.abs(q) * 100;
-  return { fundDollars: (pct / 100) * nav, fundPct: pct, perSymbol, observations, missing };
+  return { fundDollars: (pct / 100) * nav, fundPct: pct, perSymbol, observations, missing, coveragePct };
 }
 
 // ── Trading calendar (§4.1, Gov. VIII.c) ──────────────────────────────────
@@ -397,7 +424,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     .map((p) => p.ticker);
 
   const [rawOrders, greeks, approvals, navSeries, tbill, entryDates, thetaAvg] = await Promise.all([
-    fetchAccountOrders(ORDER_WINDOW_DAYS).catch(() => null),
+    fetchRiskOrders().catch(() => null),
     token && optionSymbols.length ? getOptionGreeks(token, optionSymbols).catch(() => ({})) : Promise.resolve({}),
     getOpenApprovals(),
     getNavSeries(),
@@ -476,8 +503,8 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
   // Positive means a credit, which is not a breach.
   const marginDebit =
     portfolio.marginBalance == null ? null : portfolio.marginBalance < 0 ? Math.abs(portfolio.marginBalance) : 0;
-  const cashPct =
-    portfolio.availableFunds != null && nav > 0 ? (portfolio.availableFunds / nav) * 100 : exposure.cashPct;
+  const cashSource = portfolio.availableFunds ?? portfolio.cashAvailable ?? null;
+  const cashPct = cashSource != null && nav > 0 ? (cashSource / nav) * 100 : null;
 
   const values: MonitorValueMap = {
     "gross-exposure": exposure.grossPct,
@@ -505,7 +532,10 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     "sector-concentration": topSector ? `${topSector.sector} · net ${topSector.netPct.toFixed(1)}%` : null,
     "equities-allocation": `Target ${cfg(config, "equities_target") ?? 75}% · Alternatives ${exposure.alternativesPct.toFixed(1)}%`,
     "annualized-volatility": vol.value == null ? null : `${vol.observations} observations`,
-    "cash-available": portfolio.availableFunds != null ? "Excess liquidity from broker" : "Derived from cash positions",
+    "cash-available": portfolio.availableFunds != null ? "Excess liquidity from broker" : "Cash available to trade, from broker",
+    "position-var": varSet.fundDollars == null && varSet.missing.length
+      ? `Unavailable: price history covers ${varSet.coveragePct.toFixed(0)}% of gross exposure (${varSet.missing.join(", ")} unpriced).`
+      : null,
   };
 
   const degraded: Record<string, string | null> = {
@@ -556,7 +586,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       label: "Schwab orders",
       ok: orders != null,
       asOf: orders != null ? asOf : null,
-      note: orders == null ? "Unavailable — stop-order checks cannot be confirmed." : `${ORDER_WINDOW_DAYS}-day window.`,
+      note: orders == null ? "Unavailable — stop-order checks cannot be confirmed." : `${ORDER_WINDOW_DAYS}-day window, by status.`,
     },
     {
       label: "Option greeks",
