@@ -14,11 +14,12 @@ import { inviteUserAction } from "@/app/(dashboard)/admin/actions";
 import { CLASS_YEARS } from "@/lib/class-years";
 import type { FundUser, UserRole } from "@/lib/types";
 
-type RoleFilter = "All" | "Analyst" | "Lead" | "Admin" | "Faculty";
+type RoleFilter = "All" | "Analyst" | "Lead" | "Risk" | "Admin" | "Faculty";
 
 const ROLE_TONE: Record<UserRole, Tone> = {
   analyst: "blue",
   faculty: "neutral",
+  risk_manager: "rose",
   pm: "accent",
   admin: "amber",
   developer: "neutral",
@@ -27,6 +28,7 @@ const ROLE_TONE: Record<UserRole, Tone> = {
 const ROLE_LABEL: Record<UserRole, string> = {
   analyst: "Analyst",
   faculty: "Faculty",
+  risk_manager: "Risk Manager",
   pm: "Lead",
   admin: "Admin",
   developer: "Dev",
@@ -81,6 +83,7 @@ export function UsersTableClient({
       if (roleFilter === "All") return true;
       if (roleFilter === "Analyst") return u.role === "analyst";
       if (roleFilter === "Lead") return u.role === "pm";
+      if (roleFilter === "Risk") return u.role === "risk_manager";
       if (roleFilter === "Admin") return u.role === "admin";
       if (roleFilter === "Faculty") return u.role === "faculty";
       return true;
@@ -207,6 +210,7 @@ export function UsersTableClient({
                 >
                   <option value="analyst">Analyst</option>
                   <option value="faculty">Faculty</option>
+                  <option value="risk_manager">Risk Manager</option>
                   <option value="pm">Lead</option>
                   <option value="admin">Admin</option>
                   <option value="developer">Developer</option>
@@ -256,7 +260,7 @@ export function UsersTableClient({
         className="min-h-0 flex-1"
         actions={
           <FilterTabs
-            options={["All", "Analyst", "Lead", "Admin", "Faculty"] as RoleFilter[]}
+            options={["All", "Analyst", "Lead", "Risk", "Admin", "Faculty"] as RoleFilter[]}
             value={roleFilter}
             onChange={setRoleFilter}
           />

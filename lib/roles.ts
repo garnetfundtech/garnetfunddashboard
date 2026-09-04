@@ -5,6 +5,10 @@ const ROLE_RANK: Record<UserRole, number> = {
   // the fund, they don't moderate students' research or files.
   faculty: 0,
   analyst: 0,
+  // The Risk Manager sits level with the PMs: a peer on the Investment
+  // Committee [Gov. III.b] whose authority is over limits and approvals, not
+  // over the PMs' research or files.
+  risk_manager: 1,
   pm: 1,
   admin: 2,
   developer: 3,

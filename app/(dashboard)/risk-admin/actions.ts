@@ -1,53 +1,73 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { updateThreshold, type ThresholdField } from "@/lib/risk-thresholds";
+import { requireApprovedProfile } from "@/lib/auth";
+import { isRiskManager } from "@/lib/nav-access";
+import { updateRiskConfig, type ConfigKey } from "@/lib/risk-config";
 
 /**
- * Threshold edits. Per the spec: only the risk manager (admin/developer)
- * touches these, and every change is logged with old value, new value, who,
- * and when — updateThreshold() writes that audit row in the same call.
+ * §7: "The Risk Manager holds sole edit rights, and every change must be
+ * logged with a timestamp and a reason (this feeds the Decision Log)."
  *
- * Red is editable here for now. The framework doc's intent is for red lines
- * to become committee-ratified and immovable without a vote once that
- * process exists — this UI is the seam where that gate gets added later.
+ * The reason is enforced in updateRiskConfig rather than here, so it holds for
+ * every caller — including a future API or import script — not only this form.
  */
-export async function updateThresholdAction(formData: FormData) {
-  const profile = await requireRole(["admin", "developer"]);
-
-  const limitId = String(formData.get("limitId") ?? "");
-  const field = String(formData.get("field") ?? "") as ThresholdField;
-  const raw = String(formData.get("value") ?? "");
-  if (!limitId || !field || !raw) return;
-
-  let value: number | [number, number];
-  if (field === "rangeGreen" || field === "rangeYellow") {
-    const [low, high] = raw.split(",").map(Number);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    value = [low, high];
-  } else {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return;
-    value = n;
+async function requireRiskManager() {
+  const profile = await requireApprovedProfile();
+  if (!isRiskManager(profile.role)) {
+    throw new Error("Only the Risk Manager can change a risk limit.");
   }
-
-  await updateThreshold({ limitId, field, value, changedBy: profile.id });
-  revalidatePath("/risk-admin");
+  return profile;
 }
 
-export async function resolveBreachAction(formData: FormData) {
-  const profile = await requireRole(["admin", "developer", "pm"]);
-  const id = String(formData.get("id") ?? "");
-  const note = String(formData.get("note") ?? "").trim();
-  if (!id) return;
+export async function saveConfigAction(formData: FormData) {
+  const profile = await requireRiskManager();
+  const key = String(formData.get("key") ?? "") as ConfigKey;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!key || !reason) return;
 
-  const admin = createAdminClient();
-  await admin
-    .from("risk_breach_log")
-    .update({ resolved_at: new Date().toISOString(), note: note || null, decided_by: profile.id })
-    .eq("id", id);
+  // A blank value deliberately unsets the limit — that is how a parameter goes
+  // back to PENDING when the Committee withdraws a number.
+  const raw = String(formData.get("value") ?? "").trim();
+  const numValue = raw === "" ? null : Number(raw);
+  if (numValue != null && !Number.isFinite(numValue)) return;
 
+  await updateRiskConfig({ key, numValue, reason, changedBy: profile.id });
   revalidatePath("/risk-admin");
+  revalidatePath("/risk");
+}
+
+export async function saveBlackoutAction(formData: FormData) {
+  const profile = await requireRiskManager();
+  const start = String(formData.get("start") ?? "").trim();
+  const end = String(formData.get("end") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return;
+  // Both dates or neither: a half-open window would silently stop detecting
+  // blackout trades while still looking configured.
+  if ((start && !end) || (!start && end)) return;
+  if (start && end && start > end) return;
+
+  await updateRiskConfig({
+    key: "blackout",
+    jsonValue: start && end ? { start, end } : null,
+    reason,
+    changedBy: profile.id,
+  });
+  revalidatePath("/risk-admin");
+  revalidatePath("/risk");
+}
+
+export async function saveCoverageSectorsAction(formData: FormData) {
+  const profile = await requireRiskManager();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const sectors = String(formData.get("sectors") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!reason || !sectors.length) return;
+
+  await updateRiskConfig({ key: "coverage_sectors", jsonValue: sectors, reason, changedBy: profile.id });
+  revalidatePath("/risk-admin");
+  revalidatePath("/risk");
 }

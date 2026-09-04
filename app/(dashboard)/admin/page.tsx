@@ -87,6 +87,7 @@ export default async function AdminPage() {
                       >
                         <option value="analyst">Analyst</option>
                         <option value="faculty">Faculty</option>
+                        <option value="risk_manager">Risk Manager</option>
                         <option value="pm">Lead</option>
                         <option value="admin">Admin</option>
                         <option value="developer">Developer</option>

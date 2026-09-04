@@ -90,7 +90,7 @@ export async function inviteUserAction(formData: FormData): Promise<InviteResult
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
   const roleRaw = String(formData.get("role") ?? "analyst");
-  const allowed: UserRole[] = ["analyst", "faculty", "pm", "admin", "developer"];
+  const allowed: UserRole[] = ["analyst", "faculty", "risk_manager", "pm", "admin", "developer"];
   const role = (allowed.includes(roleRaw as UserRole) ? roleRaw : "analyst") as UserRole;
   const classYear = normalizeClassYear(String(formData.get("classYear") ?? ""));
 
@@ -114,7 +114,7 @@ export async function updateUserRoleAction(formData: FormData) {
 
   const id = String(formData.get("id") ?? "");
   const roleRaw = String(formData.get("role") ?? "analyst");
-  const allowed: UserRole[] = ["analyst", "faculty", "pm", "admin", "developer"];
+  const allowed: UserRole[] = ["analyst", "faculty", "risk_manager", "pm", "admin", "developer"];
   const role = (allowed.includes(roleRaw as UserRole) ? roleRaw : "analyst") as UserRole;
   if (!id) return;
 
@@ -169,7 +169,7 @@ export async function approveUserAction(formData: FormData) {
   if (!id) return;
 
   const roleRaw = String(formData.get("role") ?? "analyst");
-  const allowed: UserRole[] = ["analyst", "faculty", "pm", "admin", "developer"];
+  const allowed: UserRole[] = ["analyst", "faculty", "risk_manager", "pm", "admin", "developer"];
   const role = (allowed.includes(roleRaw as UserRole) ? roleRaw : "analyst") as UserRole;
   const classYear = normalizeClassYear(String(formData.get("classYear") ?? ""));
 

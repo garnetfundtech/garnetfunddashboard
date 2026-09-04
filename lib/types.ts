@@ -1,6 +1,6 @@
 import type { ClassYear } from "@/lib/class-years";
 
-export type UserRole = "developer" | "admin" | "pm" | "analyst" | "faculty";
+export type UserRole = "developer" | "admin" | "pm" | "risk_manager" | "analyst" | "faculty";
 
 /** Whether a self-signed-up account has been let in by an admin yet. */
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -92,6 +92,13 @@ export type LivePosition = {
   sector?: string;
   /** "long" or "short" — derived from Schwab long/short quantity. Defaults to long. */
   side?: "long" | "short";
+  /** Options only, straight from the broker's instrument block. Absent for
+   *  every other asset class; never inferred. [Risk spec §3.1] */
+  optionMultiplier?: number;
+  underlyingSymbol?: string;
+  putCall?: "PUT" | "CALL";
+  /** Fixed income only: individual debt securities are held to maturity. */
+  maturityDate?: string;
 };
 
 export type PortfolioSummary = {
@@ -111,6 +118,13 @@ export type PortfolioSummary = {
   positions: LivePosition[];
   accountNumber: string | null;
   verifiedAt: string;
+  /** Pulled explicitly as a discrete broker field rather than derived from the
+   *  cash balance, because any debit is a red alert [Risk spec §3.2, §4.1].
+   *  null means the broker did not report it — which must read as "unknown",
+   *  never as zero. */
+  marginBalance: number | null;
+  /** Excess liquidity, the leading indicator for a debit balance. */
+  availableFunds: number | null;
 };
 
 export type BenchmarkCandle = { date: string; value: number };

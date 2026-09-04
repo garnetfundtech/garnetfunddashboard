@@ -38,10 +38,25 @@ const ADMIN_ONLY = new Set<string>([
   ROUTES.users,
 ]);
 
+/**
+ * The Risk Manager's own seat. Spec §6 Access: "Risk Manager: full access and
+ * edit rights on limits and position entry." A risk_manager is not a PM, so
+ * PM_EXTRA alone would lock them out of the very page that holds the config
+ * table they are supposed to be the only person editing.
+ */
+export function isRiskManager(role: UserRole): boolean {
+  return role === "risk_manager" || role === "admin" || role === "developer";
+}
+
+/** Read-only on both risk tabs but no edit rights: President, PMs [Spec §6]. */
+export function canReadRiskReporting(role: UserRole): boolean {
+  return role !== "analyst";
+}
+
 export function getSidebarNavItems(role: UserRole): { href: string; label: string }[] {
   const all: { href: string; label: string }[] = [
     { href: ROUTES.home, label: "Home" },
-    { href: ROUTES.risk, label: "Risk Monitor" },
+    { href: ROUTES.risk, label: "Risk" },
     { href: ROUTES.coverage, label: "Coverage" },
     { href: ROUTES.research, label: "Research" },
     { href: ROUTES.resources, label: "Resources" },
@@ -57,7 +72,7 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
   return all.filter((item) => {
     if (ANALYST_PATHS.has(item.href)) return true;
     if (PM_EXTRA.has(item.href)) {
-      return role === "pm" || role === "admin" || role === "developer";
+      return role === "pm" || isRiskManager(role);
     }
     if (ADMIN_ONLY.has(item.href)) {
       return role === "admin" || role === "developer";
@@ -76,7 +91,7 @@ export function canAccessDashboardPath(role: UserRole, pathname: string): boolea
   }
   if (ANALYST_PATHS.has(base)) return true;
   if (PM_EXTRA.has(base)) {
-    return role === "pm" || role === "admin" || role === "developer";
+    return role === "pm" || isRiskManager(role);
   }
   return false;
 }

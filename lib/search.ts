@@ -4,6 +4,7 @@ import type { UserRole } from "@/lib/types";
 const ROLE_SEARCH_TERMS: Record<UserRole, string> = {
   analyst: "analyst",
   faculty: "faculty advisor professor",
+  risk_manager: "risk manager risk",
   pm: "pm lead",
   admin: "admin",
   developer: "developer dev",

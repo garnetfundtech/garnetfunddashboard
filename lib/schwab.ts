@@ -192,7 +192,76 @@ export type SchwabQuoteResponse = {
     divYield?: number;
     marketCap?: number;
   };
+  /** Option symbols only. Schwab returns per-contract greeks in the quote
+   *  block and the contract terms in `reference`; both are absent for every
+   *  other asset type. */
+  reference?: {
+    contractType?: "P" | "C";
+    expirationDay?: number;
+    expirationMonth?: number;
+    expirationYear?: number;
+    strikePrice?: number;
+    underlying?: string;
+    multiplier?: number;
+  };
 };
+
+export type SchwabOptionGreeks = {
+  delta: number | null;
+  theta: number | null;
+  vega: number | null;
+  expiry: string | null;
+  strike: number | null;
+  putCall: "PUT" | "CALL" | null;
+  multiplier: number | null;
+};
+
+const num = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Per-contract greeks for a set of option symbols, from the quotes endpoint.
+ *
+ * A symbol whose greeks the feed omits is returned with nulls rather than
+ * dropped: the risk dashboard has to be able to say "this contract's theta is
+ * unavailable" instead of quietly summing the ones it does have and calling
+ * that the book's net theta.
+ */
+export async function getOptionGreeks(
+  accessToken: string,
+  optionSymbols: string[],
+): Promise<Record<string, SchwabOptionGreeks>> {
+  if (!optionSymbols.length) return {};
+  const params = new URLSearchParams({ symbols: optionSymbols.join(","), fields: "quote,reference" });
+  const response = await fetch(`${SCHWAB_MARKET_BASE}/quotes?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    next: { revalidate: 300 },
+  });
+  if (!response.ok) throw new Error(`Option quotes request failed: ${response.status}`);
+  const body = (await response.json()) as Record<string, Record<string, unknown>>;
+
+  const out: Record<string, SchwabOptionGreeks> = {};
+  for (const [symbol, row] of Object.entries(body)) {
+    const quote = (row.quote ?? {}) as Record<string, unknown>;
+    const ref = (row.reference ?? {}) as Record<string, unknown>;
+    const y = num(ref.expirationYear);
+    const m = num(ref.expirationMonth);
+    const d = num(ref.expirationDay);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    out[symbol] = {
+      delta: num(quote.delta),
+      theta: num(quote.theta),
+      vega: num(quote.vega),
+      expiry: y != null && m != null && d != null ? `${y}-${pad(m)}-${pad(d)}` : null,
+      strike: num(ref.strikePrice),
+      putCall: ref.contractType === "P" ? "PUT" : ref.contractType === "C" ? "CALL" : null,
+      multiplier: num(ref.multiplier),
+    };
+  }
+  return out;
+}
 
 export type PriceCandle = {
   open: number;

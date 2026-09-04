@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/risk/intraday-check",
-      "schedule": "0 20 * * 1-5"
+      "schedule": "0 14-20 * * 1-5"
     }
   ]
 }

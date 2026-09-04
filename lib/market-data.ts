@@ -210,6 +210,15 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     const aggBalance = first.aggregatedBalance ?? {};
 
     const cashAvailable = Number(balances.cashAvailableForTrading ?? 0);
+
+    // Pulled as discrete fields per risk spec §3.2. Undefined stays null so a
+    // broker that simply omits the field reads as "unknown" on the dashboard
+    // rather than as a clean zero debit.
+    const rawMargin = balances.marginBalance ?? aggBalance.marginBalance;
+    const marginBalance = rawMargin == null || !Number.isFinite(Number(rawMargin)) ? null : Number(rawMargin);
+    const rawAvailable = balances.availableFunds ?? balances.buyingPower;
+    const availableFunds =
+      rawAvailable == null || !Number.isFinite(Number(rawAvailable)) ? null : Number(rawAvailable);
     const longMarketValue = Number(balances.longMarketValue ?? 0);
     // Schwab's liquidationValue from securitiesAccount.currentBalances sometimes
     // reflects only the long market value and omits uninvested cash. Use the
@@ -252,10 +261,21 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
         // carry a negative marketValue and therefore a negative weight.
         const weight = liquidationValue > 0 ? (marketValue / liquidationValue) * 100 : 0;
 
+        // Option and bond specifics come straight off the instrument block.
+        // Anything the broker does not report stays undefined rather than
+        // being guessed — the risk spec forbids silent approximation, and a
+        // contract multiplier we invented would misstate exposure.
+        const rawMultiplier = Number(inst.optionMultiplier ?? NaN);
+        const rawPutCall = inst.putCall != null ? String(inst.putCall).toUpperCase() : null;
+
         return {
           ticker: String(inst.symbol),
           name: String(inst.description ?? inst.symbol),
           assetType: String(inst.type ?? "EQUITY"),
+          optionMultiplier: Number.isFinite(rawMultiplier) ? rawMultiplier : undefined,
+          underlyingSymbol: inst.underlyingSymbol != null ? String(inst.underlyingSymbol) : undefined,
+          putCall: rawPutCall === "PUT" || rawPutCall === "CALL" ? rawPutCall : undefined,
+          maturityDate: inst.maturityDate != null ? String(inst.maturityDate) : undefined,
           quantity,
           avgCost,
           currentPrice,
@@ -305,6 +325,8 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       positions,
       accountNumber: String(sec.accountNumber ?? ""),
       verifiedAt: new Date().toISOString(),
+      marginBalance,
+      availableFunds,
     };
     lastGoodPortfolio = result;
     return result;

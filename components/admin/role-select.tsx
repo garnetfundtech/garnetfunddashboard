@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import type { UserRole } from "@/lib/types";
 import { updateUserRoleAction } from "@/app/(dashboard)/admin/actions";
 
-const ROLES: UserRole[] = ["analyst", "faculty", "pm", "admin", "developer"];
+const ROLES: UserRole[] = ["analyst", "faculty", "risk_manager", "pm", "admin", "developer"];
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);

@@ -1,155 +1,360 @@
 /**
- * Episode tracking and the breach log — the two backend pieces the risk
- * alert spec calls "the most important rule in the document" and "the audit
- * trail for the bylaws."
+ * The alert log (§4.3) and the notification rules (§4.4).
  *
- * One notification per episode, not per check: an item notifies when it
- * enters a state, then goes silent until it returns to green and resets.
- * Escalating yellow → red on the same item sends one more, because that's
- * genuinely new information. Every red also writes a permanent breach-log
- * row with a drift-vs-trade classification, worked out by diffing today's
- * position snapshot against the prior day's.
+ * The rule the whole module exists to enforce: alerts are episodes, not
+ * checks. An episode opens when a metric crosses into yellow or red and closes
+ * when it returns to green. One row per episode. A metric that stays red for
+ * ten days generates one row, not ten — and one email, not ten.
+ *
+ * Yellow opens an episode so drift is visible as it builds, and notifies
+ * nobody. Red is the only state that sends anything. A metric that escalates
+ * yellow → red keeps the same episode row (it never returned to green) but
+ * does notify at the moment it turns red, because that is genuinely new.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { RiskModel, EvaluatedRow } from "@/lib/risk-engine";
-import { sendNotification } from "@/lib/notify";
-
-// Items that notify on yellow, not just red — they drift on their own and
-// are slow to reverse, so the warning has to come before the breach.
-const NOTIFY_ON_YELLOW = new Set(["max-short-weight", "net-beta", "net-exposure", "drawdown-from-high"]);
-
-const INTRADAY_ITEMS = new Set(["single-day-move"]);
-
-// Net exposure's red state carries a 2-trading-day rebalance countdown per
-// the spec. Approximated in calendar days — a holiday-aware trading
-// calendar is a reasonable follow-up, not a blocker for this to work.
-const COUNTDOWN_ITEMS = new Set(["net-exposure"]);
-const COUNTDOWN_DAYS = 2;
+import { sendCloseOfDayBatch, sendImmediate, type AlertMessage } from "@/lib/notify";
+import {
+  MONITORS_BY_ID,
+  POSITION_RULES_BY_ID,
+  type NotifyTier,
+  type RiskStatus,
+} from "@/lib/risk-parameters";
+import { describePositionLimit, type RiskModel } from "@/lib/risk-engine";
 
 type EpisodeRow = {
-  limit_id: string;
-  status: string;
-  entered_at: string;
-  last_notified_at: string | null;
-  countdown_expires_at: string | null;
+  id: string;
+  monitor_id: string;
+  subject: string | null;
+  status: "yellow" | "red";
+  opened_at: string;
+  value_at_trigger: number | null;
+  peak_value: number | null;
+  notified_at: string | null;
 };
 
-async function classifyDriftOrTrade(): Promise<"drift" | "trade" | "unknown"> {
-  try {
-    const admin = createAdminClient();
-    const { data } = await admin
-      .from("risk_snapshots")
-      .select("captured_on, positions")
-      .not("positions", "is", null)
-      .order("captured_on", { ascending: false })
-      .limit(2);
-
-    if (!data || data.length < 2) return "unknown";
-    const [today, yesterday] = data as { captured_on: string; positions: { ticker: string; quantity: number }[] }[];
-
-    const yQty = new Map(yesterday.positions.map((p) => [p.ticker, p.quantity]));
-    for (const p of today.positions) {
-      const prior = yQty.get(p.ticker);
-      if (prior == null || Math.abs(prior - p.quantity) > 1e-6) return "trade";
-    }
-    // Any ticker that vanished entirely was also a trade (a full exit).
-    const tQty = new Set(today.positions.map((p) => p.ticker));
-    for (const ticker of yQty.keys()) {
-      if (!tQty.has(ticker)) return "trade";
-    }
-    return "drift";
-  } catch {
-    return "unknown";
-  }
-}
+/** One evaluated reading, flattened out of the model. */
+type Reading = {
+  monitorId: string;
+  label: string;
+  subject: string | null;
+  status: RiskStatus;
+  value: number | null;
+  display: string;
+  limitText: string;
+  tier: NotifyTier;
+  timing: "intraday" | "close";
+  source: string;
+};
 
 /**
- * Runs episode transition detection over every row in today's model, fires
- * notifications for genuinely new episodes, and logs every red to the
- * breach log. Call once per day (from the snapshot cron) for the
- * close-of-day batch; call more often intraday if a fast single-day-move
- * check is wired up separately.
+ * Every scored reading on the board: the §4.1 limit strip plus every §4.2 rule
+ * on every position. Rules whose status is "na" are skipped entirely — an
+ * unscored monitor has no episode to open or close.
+ */
+export function readingsFrom(model: RiskModel): Reading[] {
+  const out: Reading[] = [];
+
+  for (const group of model.monitors) {
+    for (const row of group.rows) {
+      if (row.status === "na") continue;
+      out.push({
+        monitorId: row.monitor.id,
+        label: row.monitor.label,
+        subject: null,
+        status: row.status,
+        value: row.value,
+        display: row.display,
+        limitText: row.limitText,
+        tier: row.monitor.notify,
+        timing: row.monitor.timing,
+        source: row.monitor.source,
+      });
+    }
+  }
+
+  for (const position of model.positions) {
+    for (const result of Object.values(position.rules)) {
+      if (result.status === "na") continue;
+      const rule = POSITION_RULES_BY_ID[result.id];
+      if (!rule) continue;
+      out.push({
+        monitorId: result.id,
+        label: rule.label,
+        subject: position.position.symbol,
+        status: result.status,
+        value: result.value,
+        display: result.display,
+        limitText: describePositionLimit(result.id, position, model.config),
+        tier: rule.notify,
+        timing: rule.timing,
+        source: rule.source,
+      });
+    }
+  }
+
+  return out;
+}
+
+const key = (monitorId: string, subject: string | null) => `${monitorId}::${subject ?? ""}`;
+
+export type EpisodeResult = {
+  opened: number;
+  closed: number;
+  escalated: number;
+  notified: number;
+  /** Roles the §4.4 table names but that have no configured address. */
+  unresolvedRecipients: string[];
+};
+
+/**
+ * Runs episode transitions over the model and fires the notifications §4.4
+ * allows.
+ *
+ * Call once at the close for the full board, and more often intraday with
+ * `onlyTiming: "intraday"` for the limits that cannot wait — the stop-loss,
+ * the stop-order check, the position caps, the trading calendar, and the
+ * margin debit.
  */
 export async function evaluateEpisodes(
   model: RiskModel,
-  opts: { onlyItemIds?: string[] } = {},
-): Promise<{ notified: number; logged: number }> {
+  opts: { onlyTiming?: "intraday" | "close"; closeOfDay?: boolean } = {},
+): Promise<EpisodeResult> {
   const admin = createAdminClient();
-  let allRows: EvaluatedRow[] = model.groups.flatMap((g) => g.rows);
-  if (opts.onlyItemIds) {
-    const only = new Set(opts.onlyItemIds);
-    allRows = allRows.filter((r) => only.has(r.limit.id));
+  const result: EpisodeResult = { opened: 0, closed: 0, escalated: 0, notified: 0, unresolvedRecipients: [] };
+
+  let readings = readingsFrom(model);
+  if (opts.onlyTiming) readings = readings.filter((r) => r.timing === opts.onlyTiming);
+  if (!readings.length) return result;
+
+  const { data: openRows } = await admin
+    .from("risk_alert_episodes")
+    .select("id, monitor_id, subject, status, opened_at, value_at_trigger, peak_value, notified_at")
+    .is("closed_at", null);
+
+  const open = new Map<string, EpisodeRow>(
+    ((openRows ?? []) as EpisodeRow[]).map((r) => [key(r.monitor_id, r.subject), r]),
+  );
+
+  const batched: AlertMessage[] = [];
+  const unresolved = new Set<string>();
+
+  for (const reading of readings) {
+    const k = key(reading.monitorId, reading.subject);
+    const existing = open.get(k);
+
+    // ── Back to green: close the episode, notify no one ──────────────────
+    if (reading.status === "green") {
+      if (existing) {
+        await admin
+          .from("risk_alert_episodes")
+          .update({ closed_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        result.closed++;
+      }
+      open.delete(k);
+      continue;
+    }
+
+    const isRed = reading.status === "red";
+    // "Peak excursion" is the worst reading seen, which for a floor breach
+    // (net exposure below 20%, P&L below the stop) is the most negative.
+    const nextPeak = (() => {
+      if (reading.value == null) return existing?.peak_value ?? null;
+      if (existing?.peak_value == null) return reading.value;
+      return Math.abs(reading.value) > Math.abs(existing.peak_value) ? reading.value : existing.peak_value;
+    })();
+
+    // ── New episode ──────────────────────────────────────────────────────
+    if (!existing) {
+      const shouldNotify = isRed && reading.tier !== "none";
+      const { data: inserted } = await admin
+        .from("risk_alert_episodes")
+        .insert({
+          monitor_id: reading.monitorId,
+          monitor_label: reading.label,
+          subject: reading.subject,
+          status: reading.status,
+          value_at_trigger: reading.value,
+          threshold: reading.limitText,
+          peak_value: reading.value,
+        })
+        .select("id")
+        .maybeSingle();
+      result.opened++;
+
+      if (shouldNotify) {
+        const alert = toAlert(reading);
+        if (reading.timing === "intraday") {
+          const send = await sendImmediate(alert);
+          send.unresolved.forEach((r) => unresolved.add(r));
+          await markNotified(admin, inserted?.id ?? null, send.recipients);
+          result.notified++;
+        } else {
+          batched.push(alert);
+          await markNotified(admin, inserted?.id ?? null, []);
+        }
+      }
+      continue;
+    }
+
+    // ── Escalation inside an open episode: yellow → red ──────────────────
+    if (isRed && existing.status === "yellow") {
+      await admin
+        .from("risk_alert_episodes")
+        .update({ status: "red", value_at_trigger: reading.value, peak_value: nextPeak })
+        .eq("id", existing.id);
+      result.escalated++;
+
+      if (reading.tier !== "none") {
+        const alert = toAlert(reading);
+        if (reading.timing === "intraday") {
+          const send = await sendImmediate(alert);
+          send.unresolved.forEach((r) => unresolved.add(r));
+          await markNotified(admin, existing.id, send.recipients);
+          result.notified++;
+        } else {
+          batched.push(alert);
+          await markNotified(admin, existing.id, []);
+        }
+      }
+      continue;
+    }
+
+    // ── Still open at the same tier: track the excursion, send nothing ───
+    if (nextPeak !== existing.peak_value) {
+      await admin.from("risk_alert_episodes").update({ peak_value: nextPeak }).eq("id", existing.id);
+    }
   }
 
-  const { data: episodeRows } = await admin.from("risk_episodes").select("*");
-  const episodes = new Map<string, EpisodeRow>((episodeRows ?? []).map((e) => [e.limit_id, e as EpisodeRow]));
-
-  let notified = 0;
-  let logged = 0;
-  let driftOrTrade: "drift" | "trade" | "unknown" | null = null;
-
-  for (const row of allRows) {
-    const id = row.limit.id;
-    const status = row.status;
-    const prior = episodes.get(id);
-    const priorStatus = prior?.status ?? "green";
-    const isNewEpisode = status !== priorStatus;
-
-    const shouldNotifyYellow = status === "yellow" && NOTIFY_ON_YELLOW.has(id) && isNewEpisode;
-    const shouldNotifyRed = status === "red" && isNewEpisode;
-    const isIntraday = INTRADAY_ITEMS.has(id);
-
-    if (shouldNotifyRed || shouldNotifyYellow) {
-      const message = `${row.limit.label} entered ${status.toUpperCase()}: ${row.display} (target ${row.limit.target}).`;
-      await sendNotification({ limitId: id, status, message }, { intraday: isIntraday });
-      notified++;
-    }
-
-    if (status === "red") {
-      if (driftOrTrade === null) driftOrTrade = await classifyDriftOrTrade();
-      if (isNewEpisode) {
-        await admin.from("risk_breach_log").insert({
-          limit_id: id,
-          limit_label: row.limit.label,
-          target: row.limit.target,
-          actual_value: row.value,
-          drift_or_trade: driftOrTrade,
-        });
-        logged++;
-      }
-    }
-
-    // Net exposure's countdown: starts the moment it goes red, escalates if
-    // still red once it expires, clears the moment it leaves red.
-    let countdownExpiresAt = prior?.countdown_expires_at ?? null;
-    if (COUNTDOWN_ITEMS.has(id)) {
-      if (status === "red" && isNewEpisode) {
-        countdownExpiresAt = new Date(Date.now() + COUNTDOWN_DAYS * 86_400_000).toISOString();
-      } else if (status === "red" && countdownExpiresAt && new Date(countdownExpiresAt) < new Date()) {
-        await sendNotification({
-          limitId: id,
-          status: "red",
-          message: `${row.limit.label} has been outside policy for ${COUNTDOWN_DAYS} trading days without resolving — escalating.`,
-        });
-        notified++;
-        // Push the clock forward so this doesn't refire every run until it resolves.
-        countdownExpiresAt = new Date(Date.now() + COUNTDOWN_DAYS * 86_400_000).toISOString();
-      } else if (status !== "red") {
-        countdownExpiresAt = null;
-      }
-    }
-
-    await admin.from("risk_episodes").upsert(
-      {
-        limit_id: id,
-        status,
-        entered_at: isNewEpisode ? new Date().toISOString() : (prior?.entered_at ?? new Date().toISOString()),
-        last_notified_at: shouldNotifyRed || shouldNotifyYellow ? new Date().toISOString() : (prior?.last_notified_at ?? null),
-        countdown_expires_at: countdownExpiresAt,
-      },
-      { onConflict: "limit_id" },
-    );
+  // One batched email for every close-of-day red that opened today.
+  if (batched.length && opts.closeOfDay !== false) {
+    const sends = await sendCloseOfDayBatch(batched);
+    for (const send of sends) send.unresolved.forEach((r) => unresolved.add(r));
+    result.notified += batched.length;
   }
 
-  return { notified, logged };
+  result.unresolvedRecipients = [...unresolved];
+  return result;
+}
+
+function toAlert(reading: Reading): AlertMessage {
+  // "none" never reaches here — the caller checks the tier first — but the
+  // type has to be narrowed, and close-to-Risk-Manager is the safe default.
+  const tier = (reading.tier === "none" ? "close" : reading.tier) as Exclude<NotifyTier, "none">;
+  return {
+    monitorId: reading.monitorId,
+    label: reading.label,
+    subject: reading.subject,
+    value: reading.display,
+    limitText: reading.limitText,
+    tier,
+    source: reading.source,
+  };
+}
+
+async function markNotified(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string | null,
+  recipients: string[],
+) {
+  if (!id) return;
+  await admin
+    .from("risk_alert_episodes")
+    .update({ notified: recipients, notified_at: new Date().toISOString() })
+    .eq("id", id);
+}
+
+// ── Stop-loss events (§5.3) ───────────────────────────────────────────────
+
+/**
+ * Records any stop that has fired, so the §5.3 list and its post-mortem
+ * checkbox have something to show. Idempotent per symbol per day: the daily
+ * cron re-detects the same fill until the position leaves the book, and one
+ * stop that fired must produce one row, not one per run.
+ */
+export async function recordStopLossEvents(model: RiskModel): Promise<number> {
+  const stopped = model.positions.filter((p) => p.stopped);
+  if (!stopped.length) return 0;
+
+  const admin = createAdminClient();
+  const today = new Date().toISOString().slice(0, 10);
+  let written = 0;
+
+  for (const row of stopped) {
+    const p = row.position;
+    const { data: existing } = await admin
+      .from("stop_loss_events")
+      .select("id")
+      .eq("symbol", p.symbol)
+      .gte("detected_at", `${today}T00:00:00Z`)
+      .maybeSingle();
+    if (existing) continue;
+
+    const { error } = await admin.from("stop_loss_events").insert({
+      symbol: p.symbol,
+      side: p.side,
+      quantity: p.absQuantity,
+      cost_basis: p.costBasis,
+      fill_price: p.price,
+      realized_loss: p.unrealizedPnl < 0 ? Math.abs(p.unrealizedPnl) : 0,
+      pnl_pct: p.pnlVsCostPct,
+    });
+    if (!error) written++;
+  }
+  return written;
+}
+
+// ── Alert log reads ───────────────────────────────────────────────────────
+
+export type AlertLogRow = {
+  id: string;
+  monitor_id: string;
+  monitor_label: string;
+  subject: string | null;
+  status: "yellow" | "red";
+  opened_at: string;
+  closed_at: string | null;
+  value_at_trigger: number | null;
+  threshold: string | null;
+  notified: string[] | null;
+  notified_at: string | null;
+  peak_value: number | null;
+  acknowledged_at: string | null;
+  resolution_note: string | null;
+};
+
+export async function getAlertLog(limit = 200, since?: string): Promise<AlertLogRow[]> {
+  try {
+    const admin = createAdminClient();
+    let query = admin
+      .from("risk_alert_episodes")
+      .select(
+        "id, monitor_id, monitor_label, subject, status, opened_at, closed_at, value_at_trigger, threshold, notified, notified_at, peak_value, acknowledged_at, resolution_note",
+      )
+      .order("opened_at", { ascending: false })
+      .limit(limit);
+    if (since) query = query.gte("opened_at", since);
+    const { data } = await query;
+    return (data ?? []) as AlertLogRow[];
+  } catch {
+    return [];
+  }
+}
+
+export async function acknowledgeEpisode(id: string, userId: string, note: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("risk_alert_episodes")
+    .update({
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: userId,
+      resolution_note: note || null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** A friendlier label for a monitor id, used by the log and the CSV export. */
+export function monitorLabel(id: string): string {
+  return MONITORS_BY_ID[id]?.label ?? POSITION_RULES_BY_ID[id]?.label ?? id;
 }

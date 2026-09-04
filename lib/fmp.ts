@@ -84,3 +84,39 @@ export async function fetchProfile(symbol: string): Promise<FmpProfile | null> {
     industry: row.industry != null ? String(row.industry) : undefined,
   };
 }
+
+export type TreasuryRates = { date: string; month3: number | null };
+
+/**
+ * 3-month U.S. Treasury bill yield — the Fund's return benchmark and the
+ * risk-free rate for Sharpe [Spec §3.3, §6; Committee decision 9/2/26].
+ *
+ * Returns null rather than a stand-in when the feed is unavailable: §1 rule 2
+ * requires a card to go grey rather than show a silently wrong number, and a
+ * benchmark the Advisory Board sees is exactly the wrong place to guess.
+ */
+export async function fetchTreasuryRate(): Promise<TreasuryRates | null> {
+  const key = process.env.FMP_API_KEY;
+  if (!key) return null;
+  const to = new Date();
+  const from = new Date(to.getTime() - 10 * 86_400_000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const url = `${FMP_BASE}/treasury-rates?from=${iso(from)}&to=${iso(to)}&apikey=${encodeURIComponent(key)}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 21_600 } });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Record<string, unknown>[];
+    if (!Array.isArray(rows) || !rows.length) return null;
+    // Newest first is not guaranteed; sort so a stale row never wins.
+    const sorted = [...rows].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+    const latest = sorted[0];
+    const raw = latest.month3 ?? latest.month3Yield ?? latest["3month"];
+    const month3 = raw == null ? null : Number(raw);
+    return {
+      date: String(latest.date ?? iso(to)),
+      month3: month3 != null && Number.isFinite(month3) ? month3 : null,
+    };
+  } catch {
+    return null;
+  }
+}

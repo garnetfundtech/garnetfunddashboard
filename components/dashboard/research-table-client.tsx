@@ -48,6 +48,7 @@ function roleColor(role: UserRole) {
     developer: "text-info",
     admin: "text-warn",
     pm: "text-garnet",
+    risk_manager: "text-neg",
     analyst: "text-info",
     faculty: "text-ink-2",
   };

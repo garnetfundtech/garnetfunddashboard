@@ -1,656 +1,512 @@
 /**
- * Garnet Fund — Risk Parameters (single source of truth)
+ * Garnet Fund — Wave 1 monitor definitions (Build Specification §4).
  *
- * Every limit, band, and threshold from the fund's risk framework is encoded
- * here so the rest of the system (engine + Risk Monitor UI) reads from one
- * place. Numeric green/yellow cutoffs are our interpretation of the written
- * targets — they're annotated on each row and are trivial to tune.
+ * What lives here: the *shape* of every monitor — its label, how it is
+ * calculated, the IPS clause it traces to, who it notifies and when. What
+ * does NOT live here: a single threshold. Those come from `lib/risk-config.ts`
+ * at evaluation time, because §7's rule is that the Risk Manager can move any
+ * limit without a code change.
  *
- * Framework authored by the PM team (Nihar / Chase / Arav). Where a metric
- * needs data we don't yet compute live (factor regressions, VaR, stress
- * tests), the row is still defined so nothing is lost — it carries a
- * `dataSource` of "manual" or "planned" and the UI labels it honestly.
+ * Two conventions from §4 are implemented once, here, so that no monitor gets
+ * to disagree with another about what "at the limit" means:
+ *
+ *   Caps are compliant at exactly the cap and red strictly above, matching the
+ *   IPS wording "over 10%". Yellow bands begin at their lower threshold
+ *   inclusive. So a long at exactly 10.0% of NAV is yellow, 10.1% is red.
+ *
+ *   The 20–60% net band is inclusive: 20% and 60% are compliant (yellow), and
+ *   red is strictly below 20% or strictly above 60%.
+ *
+ * The three-tier rule, likewise implemented once: green and yellow are
+ * dashboard-only. Yellow changes the colour and opens an alert-log episode so
+ * drift is visible as it builds, but it never notifies. Red is the only state
+ * that sends anything.
  */
+import { cfg, type ConfigKey, type RiskConfig } from "@/lib/risk-config";
 
 export type RiskStatus = "green" | "yellow" | "red" | "na";
 
-export type RiskGroup =
-  | "exposure"
-  | "factor"
-  | "sizing"
-  | "drawdown"
-  | "performance"
-  | "health";
+/**
+ * Who a red notifies, per the §4.4 routing table. Yellow and green never
+ * reach any of these.
+ */
+export type NotifyTier =
+  /** Risk Manager, President, relevant PM — immediately on detection. */
+  | "immediate"
+  /** Risk Manager, President, Head of Operations — immediately. A debit is a
+   *  tax-status issue (IRC §514), not only a risk issue. */
+  | "immediate-ops"
+  /** Risk Manager only, batched into one close-of-day message. */
+  | "close"
+  /** Risk Manager at close; President and Faculty Advisor once the Risk
+   *  Manager confirms the breach. IPS VIII.b requires this specific chain. */
+  | "close-chain"
+  /** Never notifies — the monitor has no red tier at all. */
+  | "none";
 
-export type RiskCadence = "daily" | "weekly" | "monthly" | "quarterly" | "event";
+export const NOTIFY_RECIPIENTS: Record<Exclude<NotifyTier, "none">, string[]> = {
+  immediate: ["Risk Manager", "President", "Relevant PM"],
+  "immediate-ops": ["Risk Manager", "President", "Head of Operations"],
+  close: ["Risk Manager"],
+  "close-chain": ["Risk Manager", "President (after confirmation)", "Faculty Advisor (after confirmation)"],
+};
 
-/** Whether the value behind this row comes from live data, sample/demo data,
- *  manual entry, or is planned for a later phase. */
-export type RiskDataSource = "live" | "sample" | "manual" | "planned";
+export type MonitorGroup = "exposure" | "allocation" | "balance" | "options" | "governance";
 
-export type RiskUnit = "%" | "beta" | "x" | "ratio" | "count" | "$" | "";
+export const MONITOR_GROUPS: { id: MonitorGroup; label: string; blurb: string }[] = [
+  { id: "exposure", label: "Exposure & Volatility", blurb: "The three IPS II.c limits: gross, net, and the 12% volatility ceiling." },
+  { id: "allocation", label: "Allocation & Concentration", blurb: "The 75/25 team split and the 15%-of-NAV sector cap inside the Equities book." },
+  { id: "balance", label: "Balance Sheet", blurb: "Margin debit and tradable cash. A debit is a tax problem before it is a risk problem." },
+  { id: "options", label: "Alternatives Greeks", blurb: "Theta and vega. Neither carries a numeric IPS limit, so neither can ever notify." },
+  { id: "governance", label: "Governance", blurb: "The summer trading blackout." },
+];
 
 /**
- * How the current value is scored against the limit:
- *  - abs-band  value magnitude should stay small     (|v| ≤ green → yellow → red)
- *  - max       value should stay below a ceiling     (v ≤ green → yellow → red)
- *  - min       value should stay above a floor       (v ≥ green → yellow → red)
- *  - range     value should stay inside a band       (rangeGreen[0..1] → yellow either side → red past rangeYellow)
- *              e.g. gross exposure: green 135–165, yellow 165–175 or below 135, red beyond either.
+ * How a monitor scores its value. Every variant reads its numbers from
+ * config; none of them carries a literal.
  */
-export type RiskKind = "abs-band" | "max" | "min" | "range";
+export type ScoreKind =
+  /** Below a ceiling. red > cap; yellow ≥ warn; else green. */
+  | "cap"
+  /** Inside an inclusive band. red < min or > max; yellow < warnLow or ≥ warnHigh. */
+  | "band"
+  /** Inside a configured allocation band, yellow when near an edge from the inside. */
+  | "allocation-band"
+  /** Zero tolerance. red > tolerance; else green. */
+  | "zero"
+  /** A floor with no red tier — display only. yellow < floor; else green. */
+  | "soft-floor"
+  /** Positive is good, no red tier. yellow ≤ 0; else green. */
+  | "positive-or-warn"
+  /** Non-positive is good, no red tier. yellow > 0; else green. */
+  | "non-positive-or-warn"
+  /** A count of events. red > 0; else green. */
+  | "event-count";
 
-export type RiskLimit = {
+export type Monitor = {
   id: string;
-  group: RiskGroup;
+  group: MonitorGroup;
   label: string;
-  /** Human-readable target straight from the notes, e.g. "0% · band ±10%". */
-  target: string;
-  unit: RiskUnit;
-  kind: RiskKind;
-  /** Boundary of the green (in-policy) zone. Unused (0) for kind "range" — use rangeGreen instead. */
-  green: number;
-  /** Boundary of the yellow (watch) zone; beyond it is red (breach). Unused (0) for kind "range". */
-  yellow: number;
-  /** kind "range" only: [low, high] of the green band, e.g. [135, 165]. */
-  rangeGreen?: [number, number];
-  /** kind "range" only: [low, high] of the yellow band; outside this is red. */
-  rangeYellow?: [number, number];
-  cadence: RiskCadence;
-  /** Red always notifies. These four also notify on yellow because they drift
-   *  on their own and are slow to reverse — see the framework doc's
-   *  Notification Rules section. Every other item stays board-color-only
-   *  until red. */
-  notifyOnYellow?: boolean;
-  /** Whether a breach fires during market hours (item 5) or batches into the
-   *  end-of-day send (everything else). */
-  alertTiming?: "intraday" | "close";
-  dataSource: RiskDataSource;
-  /** "What kills the idea" — the rationale / backstop behind the number. */
+  /** The §4.1 Calculation column, so the dashboard can show its own working. */
+  calculation: string;
+  source: string;
+  unit: "%" | "$" | "$/day" | "count";
+  kind: ScoreKind;
+  /** Config keys this monitor scores against. Absent keys mean "unscored". */
+  keys: {
+    cap?: ConfigKey;
+    warn?: ConfigKey;
+    min?: ConfigKey;
+    max?: ConfigKey;
+    warnLow?: ConfigKey;
+    warnHigh?: ConfigKey;
+    bandLow?: ConfigKey;
+    bandHigh?: ConfigKey;
+    bandWarn?: ConfigKey;
+  };
+  notify: NotifyTier;
+  /** Whether a red fires the moment it is detected or waits for the close. */
+  timing: "intraday" | "close";
   note?: string;
 };
 
-export const RISK_GROUPS: { id: RiskGroup; label: string; blurb: string }[] = [
-  { id: "exposure", label: "Exposure & Neutrality", blurb: "Net, gross, and beta. Checked daily since they drift even without a trade." },
-  { id: "factor", label: "Factor & Sector", blurb: "Style loadings and sector long-vs-short balance." },
-  { id: "sizing", label: "Position Sizing", blurb: "Shorts are capped tighter than longs on purpose." },
-  { id: "drawdown", label: "Drawdown & VaR", blurb: "Backstops that force a committee conversation before new risk." },
-  { id: "performance", label: "Performance", blurb: "The scorecard, reviewed monthly against T-bills rather than the market." },
-  { id: "health", label: "Health Checks", blurb: "Plumbing that keeps the book tradable and diversified." },
-];
-
-export const CADENCE_LABEL: Record<RiskCadence, string> = {
-  daily: "Daily",
-  weekly: "Weekly",
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  event: "Pre-catalyst",
-};
-
-/**
- * The full limit set. Order within a group is display order.
- */
-export const RISK_LIMITS: RiskLimit[] = [
-  // ── Exposure & Neutrality ──────────────────────────────────────────────
-  {
-    id: "net-exposure",
-    group: "exposure",
-    label: "Net Exposure",
-    target: "0% · rebalance band ±10%",
-    unit: "%",
-    kind: "abs-band",
-    green: 7,
-    yellow: 10,
-    cadence: "daily",
-    dataSource: "live",
-    notifyOnYellow: true,
-    alertTiming: "close",
-    note: "Longs minus shorts. Won't sit at 0, since daily market moves push it around even when we don't touch anything. Outside ±10%: rebalance within 2 trading days. Red starts a 2-trading-day countdown; if it expires still red, the notification escalates.",
-  },
+/** §4.1 — the portfolio-level limit strip. One card per row. */
+export const MONITORS: Monitor[] = [
   {
     id: "gross-exposure",
     group: "exposure",
-    label: "Gross Exposure",
-    target: "135–165% (75/75) · hard cap 175%",
+    label: "Gross exposure",
+    calculation: "(Σ |long MV| + Σ |short MV|) ÷ NAV. Options and futures enter at delta-adjusted notional.",
+    source: "IPS II.c",
     unit: "%",
-    kind: "range",
-    green: 0,
-    yellow: 0,
-    rangeGreen: [135, 165],
-    rangeYellow: [165, 175],
-    cadence: "daily",
-    dataSource: "live",
-    alertTiming: "close",
-    note: "Longs plus shorts. Target 135–165%, split roughly 75% long and 75% short. Low gross (under 135%) is yellow, not red, since it just means we've quietly stopped deploying capital. Hard cap 175%.",
+    kind: "cap",
+    keys: { cap: "gross_cap", warn: "gross_yellow" },
+    notify: "close",
+    timing: "close",
+    note: "Target 100% gross exposure. No leverage: the fund does not operate outside invested capital.",
   },
   {
-    id: "net-beta",
+    id: "net-exposure",
     group: "exposure",
-    label: "Net Beta (vs S&P 500)",
-    target: "−0.10 to +0.10",
-    unit: "beta",
-    kind: "abs-band",
-    green: 0.07,
-    yellow: 0.1,
-    cadence: "weekly",
-    dataSource: "live",
-    notifyOnYellow: true,
-    alertTiming: "close",
-    note: "Weekly run regression. Outside ±0.10 → bring the book back inside within 2 trading days.",
-  },
-
-  // ── Factor & Sector ────────────────────────────────────────────────────
-  {
-    id: "factor-size",
-    group: "factor",
-    label: "Size Loading",
-    target: "±0.20",
-    unit: "beta",
-    kind: "abs-band",
-    green: 0.15,
-    yellow: 0.2,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Monthly factor regression. Each style loading stays within ±0.20.",
-  },
-  {
-    id: "factor-value",
-    group: "factor",
-    label: "Value Loading",
-    target: "±0.20",
-    unit: "beta",
-    kind: "abs-band",
-    green: 0.15,
-    yellow: 0.2,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Monthly factor regression. Each style loading stays within ±0.20.",
-  },
-  {
-    id: "factor-momentum",
-    group: "factor",
-    label: "Momentum Loading",
-    target: "±0.20",
-    unit: "beta",
-    kind: "abs-band",
-    green: 0.15,
-    yellow: 0.2,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Monthly factor regression. Each style loading stays within ±0.20.",
-  },
-  {
-    id: "sector-balance",
-    group: "factor",
-    label: "Sector Long-vs-Short Gap",
-    target: "each sector within ±5%",
+    label: "Net exposure",
+    calculation: "(Σ long MV − Σ |short MV|) ÷ NAV, delta-adjusted.",
+    source: "IPS II.c",
     unit: "%",
-    kind: "abs-band",
-    green: 4,
-    yellow: 5,
-    cadence: "weekly",
-    dataSource: "live",
-    alertTiming: "close",
-    note: "Each sector's long weight stays within ±5% of its short weight, in percentage points of NAV. Value shown is the widest sector gap. The industry breakdown underneath matters too: a sector can look balanced while one industry inside it is a concentrated bet.",
+    kind: "band",
+    keys: { min: "net_min", max: "net_max", warnLow: "net_yellow_low", warnHigh: "net_yellow_high" },
+    notify: "close",
+    timing: "close",
+    note: "Target band 20% to 60% net long, inclusive at both ends.",
   },
-
-  // ── Position Sizing ────────────────────────────────────────────────────
   {
-    id: "max-long-weight",
-    group: "sizing",
-    label: "Largest Long",
-    target: "≤ 5% of fund",
+    id: "annualized-volatility",
+    group: "exposure",
+    label: "Annualized volatility",
+    calculation: "Std. dev. of daily fund returns × √252 over the configured trailing window.",
+    source: "IPS II.c",
     unit: "%",
-    kind: "max",
-    green: 4.5,
-    yellow: 5,
-    cadence: "daily",
-    dataSource: "live",
-    note: "Longs max out at 5% of the fund.",
+    kind: "cap",
+    keys: { cap: "volatility_cap", warn: "volatility_yellow" },
+    notify: "close",
+    timing: "close",
+    note: "Computed from the Fund's own stored daily NAV series, which is why §8 requires NAV capture to start at go-live.",
   },
   {
-    id: "max-short-weight",
-    group: "sizing",
-    label: "Largest Short",
-    target: "≤ 3% · new shorts start 2%",
+    id: "equities-allocation",
+    group: "allocation",
+    label: "Equities allocation",
+    calculation: "Equities team capital at work ÷ NAV, against the 75% target.",
+    source: "IPS II.a, VIII.a",
     unit: "%",
-    kind: "max",
-    green: 2.5,
-    yellow: 3,
-    cadence: "daily",
-    dataSource: "live",
-    notifyOnYellow: true,
-    alertTiming: "close",
-    note: "Measured at market value, not cost. Shorts cap at 3%; new shorts start at 2% and flag red above that. A short grows as it moves against you while the loss is uncapped, so a 3% short that doubles becomes a ~6% position having never been added to. That's why the short book runs tighter than the long book.",
+    kind: "allocation-band",
+    keys: { bandLow: "equities_band_low", bandHigh: "equities_band_high", bandWarn: "allocation_band_warn_pts" },
+    notify: "close-chain",
+    timing: "close",
+    note: "PENDING: the acceptable band around 75% referenced in IPS VIII.a is not yet defined. Until the Committee sets it, this card displays its value and declines to score it.",
   },
   {
-    id: "single-day-move",
-    group: "sizing",
-    label: "Single-Day Move",
-    target: "adverse move ≤ 6% · red past 10%",
+    id: "alternatives-allocation",
+    group: "allocation",
+    label: "Alternatives allocation",
+    calculation: "Alternatives team exposure ÷ NAV, with futures at beta-weighted dollar delta.",
+    source: "IPS II.b",
     unit: "%",
-    kind: "max",
-    green: 6,
-    yellow: 10,
-    cadence: "daily",
-    dataSource: "live",
-    alertTiming: "intraday",
-    note: "Close-to-close change. Adverse means down for a long, up for a short; a favorable move of any size is green, with no notification. A 6% move is roughly three standard deviations for a typical large-cap (≈1.9% daily vol); 10% is roughly five. Red fires during the trading day, not the end-of-day batch. Value shown is the worst adverse move in the book.",
+    kind: "cap",
+    keys: { cap: "alternatives_cap", warn: "alternatives_yellow" },
+    // §4.4 lists "Alternatives exposure over 25%" under Risk Manager only, and
+    // "Alternatives allocation outside its band" under the President/Faculty
+    // chain. The 25% hard cap is the row implemented here, so it routes to the
+    // Risk Manager; the band breach routes through equities-allocation.
+    notify: "close",
+    timing: "close",
+    note: "Hard 25% exposure limit.",
   },
   {
-    id: "long-kill-trigger",
-    group: "sizing",
-    label: "Long Kill-Trigger",
-    target: "−20% from cost",
+    id: "sector-concentration",
+    group: "allocation",
+    label: "Sector concentration",
+    calculation:
+      "Highest of: gross exposure of Equities-team positions in a sector (Σ |long MV| + Σ |short MV|) ÷ NAV. Alternatives positions are excluded.",
+    source: "IPS VI; sector cap approved 9/2/26",
     unit: "%",
-    kind: "min",
-    green: -15,
-    yellow: -20,
-    cadence: "daily",
-    dataSource: "live",
-    note: "Backstop: −20% from cost on a long forces a review of what killed the idea. Value shown is the worst long drawdown from cost.",
+    kind: "cap",
+    keys: { cap: "sector_cap", warn: "sector_yellow" },
+    notify: "close",
+    timing: "close",
+    note: "Measured on gross exposure per sector, consistent with every other IPS limit. Net exposure by sector is displayed alongside for information but is not limited.",
   },
   {
-    id: "short-kill-trigger",
-    group: "sizing",
-    label: "Short Kill-Trigger",
-    target: "−15% against us",
+    id: "margin-debit",
+    group: "balance",
+    label: "Margin debit balance",
+    calculation: "Direct pull from the broker as a discrete field, not derived from the cash balance.",
+    source: "IPS II.c; tax structure",
+    unit: "$",
+    kind: "zero",
+    keys: { cap: "margin_debit_tolerance" },
+    notify: "immediate-ops",
+    timing: "intraday",
+    note: "Zero tolerance. A debit balance is acquisition indebtedness under IRC §514 and creates UBTI exposure, which is why this escalates to Operations.",
+  },
+  {
+    id: "cash-available",
+    group: "balance",
+    label: "Cash available to trade",
+    calculation: "Excess liquidity ÷ NAV, from the broker.",
+    source: "Risk Manager operating control",
     unit: "%",
-    kind: "min",
-    green: -10,
-    yellow: -15,
-    cadence: "daily",
-    dataSource: "live",
-    note: "Backstop: −15% against us on a short forces a review. Value shown is the worst short move against us.",
+    kind: "soft-floor",
+    keys: { min: "cash_floor_pct" },
+    notify: "none",
+    timing: "close",
+    note: "Leading indicator for a debit balance. Display only — no red tier, so it never notifies.",
   },
   {
-    id: "borrow-fee-gate",
-    group: "sizing",
-    label: "Short Borrow Fee",
-    target: "≤ ~3% / yr to short",
-    unit: "%",
-    kind: "max",
-    green: 3,
-    yellow: 3,
-    cadence: "event",
-    dataSource: "manual",
-    note: "We don't short anything with a borrow fee above ~3%/yr. Check before pitching a short, not after. Value shown is the highest borrow fee in the short book.",
+    id: "alternatives-theta",
+    group: "options",
+    label: "Alternatives net theta",
+    calculation: "Σ theta across Alternatives options positions, in dollars per day. Scored on the 20-day average.",
+    source: "IPS III.b",
+    unit: "$/day",
+    kind: "positive-or-warn",
+    keys: {},
+    notify: "none",
+    timing: "close",
+    note: "The IPS requirement is positive theta on average, so the tier is judged on the 20-day average rather than the day's reading. No numeric limit exists, so there is no red tier and this can never notify.",
   },
   {
-    id: "short-interest-gate",
-    group: "sizing",
-    label: "Short Interest",
-    target: "≤ ~15% of float",
-    unit: "%",
-    kind: "max",
-    green: 15,
-    yellow: 15,
-    cadence: "event",
-    dataSource: "manual",
-    note: "We don't short anything with short interest above ~15% of float. Value shown is the highest SI in the short book.",
+    id: "alternatives-vega",
+    group: "options",
+    label: "Alternatives net vega",
+    calculation: "Σ vega across Alternatives options positions.",
+    source: "IPS III.b",
+    unit: "$",
+    kind: "non-positive-or-warn",
+    keys: { cap: "net_vega_cap" },
+    notify: "none",
+    timing: "close",
+    note: "PENDING: no numeric cap is defined in the IPS. Shows the value and flags if net long.",
   },
   {
-    id: "liquidity-exit",
-    group: "sizing",
-    label: "Liquidity (days to exit)",
-    target: "≤ 2–3 trading days",
+    id: "trading-calendar",
+    group: "governance",
+    label: "Trading calendar",
+    calculation:
+      "Count of trades executed between the last day of Spring semester and the first day of Fall semester.",
+    source: "Gov. VIII.c",
     unit: "count",
-    kind: "max",
-    green: 2,
-    yellow: 3,
-    cadence: "weekly",
-    dataSource: "manual",
-    note: "Nothing on either side we can't exit within 2–3 trading days. Value shown is the slowest position to unwind.",
-  },
-
-  // ── Drawdown & VaR ─────────────────────────────────────────────────────
-  {
-    id: "drawdown-from-high",
-    group: "drawdown",
-    label: "Drawdown from High",
-    target: "−8% → committee before new risk",
-    unit: "%",
-    kind: "min",
-    green: -5,
-    yellow: -8,
-    cadence: "daily",
-    dataSource: "live",
-    notifyOnYellow: true,
-    alertTiming: "close",
-    note: "Fall 8% from the high-water mark (which only ratchets upward) and no new risk gets added until the committee meets. That's tight on purpose: at 4–8% target annualised volatility, an 8% drawdown is a larger move than one standard deviation over a full year in a market-neutral book. Persistent, undismissable banner on red.",
-  },
-  {
-    id: "var-95",
-    group: "drawdown",
-    label: "95% VaR (daily)",
-    target: "watch vs long-only book",
-    unit: "%",
-    kind: "max",
-    green: 1.5,
-    yellow: 2.5,
-    cadence: "daily",
-    dataSource: "planned",
-    note: "Track 95% VaR daily with CVaR alongside. If VaR ever approaches what a long-only book would show, that itself is the alarm that neutrality has drifted.",
-  },
-  {
-    id: "cvar-95",
-    group: "drawdown",
-    label: "95% CVaR (daily)",
-    target: "tracked alongside VaR",
-    unit: "%",
-    kind: "max",
-    green: 2.5,
-    yellow: 3.5,
-    cadence: "daily",
-    dataSource: "planned",
-    note: "Expected loss in the worst 5% of days. Sits next to VaR.",
-  },
-
-  // ── Performance ────────────────────────────────────────────────────────
-  {
-    id: "sharpe",
-    group: "performance",
-    label: "Sharpe Ratio",
-    target: "> 1.0 · floor 0.5",
-    unit: "ratio",
-    kind: "min",
-    green: 1.0,
-    yellow: 0.5,
-    cadence: "monthly",
-    dataSource: "live",
-    note: "The scorecard. Judged against T-bills, not the market: up 6% while the market is down 20% is the same job as up 6% while it's up 20%.",
-  },
-  {
-    id: "sortino",
-    group: "performance",
-    label: "Sortino Ratio",
-    target: "> 1.5 · flag if < Sharpe",
-    unit: "ratio",
-    kind: "min",
-    green: 1.5,
-    yellow: 1.0,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Downside-only risk-adjusted return. Flag if it ever drops below Sharpe.",
-  },
-  {
-    id: "realized-vol",
-    group: "performance",
-    label: "Realized Volatility",
-    target: "4–8% annualized · flag > 10%",
-    unit: "%",
-    kind: "max",
-    green: 8,
-    yellow: 10,
-    cadence: "monthly",
-    dataSource: "live",
-    note: "Annualized. Target band 4–8%, hard flag at 10%.",
-  },
-  {
-    id: "r2-spx",
-    group: "performance",
-    label: "R² vs S&P 500",
-    target: "< 0.10 · flag at 0.20",
-    unit: "ratio",
-    kind: "max",
-    green: 0.1,
-    yellow: 0.2,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "How much of our return the market explains. Low is the point of a neutral book.",
-  },
-  {
-    id: "long-alpha",
-    group: "performance",
-    label: "Long Alpha (2Q)",
-    target: "positive over trailing 2Q",
-    unit: "%",
-    kind: "min",
-    green: 0,
-    yellow: 0,
-    cadence: "quarterly",
-    dataSource: "planned",
-    note: "Each side positive over the trailing two quarters. One side negative two quarters straight → review that book.",
-  },
-  {
-    id: "short-alpha",
-    group: "performance",
-    label: "Short Alpha (2Q)",
-    target: "positive over trailing 2Q",
-    unit: "%",
-    kind: "min",
-    green: 0,
-    yellow: 0,
-    cadence: "quarterly",
-    dataSource: "planned",
-    note: "Each side positive over the trailing two quarters. Most books earn on one side, and knowing which one is how we get better.",
-  },
-  {
-    id: "hit-rate",
-    group: "performance",
-    label: "Hit Rate",
-    target: "> 50%",
-    unit: "%",
-    kind: "min",
-    green: 52,
-    yellow: 50,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Share of positions that made money.",
-  },
-  {
-    id: "slugging",
-    group: "performance",
-    label: "Slugging (avg win ÷ avg loss)",
-    target: "> 1.2",
-    unit: "x",
-    kind: "min",
-    green: 1.2,
-    yellow: 1.0,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Average winner divided by average loser.",
-  },
-
-  // ── Health Checks ──────────────────────────────────────────────────────
-  {
-    id: "calmar",
-    group: "health",
-    label: "Calmar Ratio",
-    target: "> 1.0",
-    unit: "ratio",
-    kind: "min",
-    green: 1.0,
-    yellow: 0.7,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Return over max drawdown.",
-  },
-  {
-    id: "borrow-drag",
-    group: "health",
-    label: "Borrow Cost Drag",
-    target: "< 1.0% of NAV · hard cap 1.5%",
-    unit: "%",
-    kind: "max",
-    green: 1.0,
-    yellow: 1.5,
-    cadence: "monthly",
-    dataSource: "manual",
-    note: "Total borrow cost as a share of NAV, annualized.",
-  },
-  {
-    id: "turnover",
-    group: "health",
-    label: "Monthly Turnover",
-    target: "< 25% of gross / month",
-    unit: "%",
-    kind: "max",
-    green: 25,
-    yellow: 35,
-    cadence: "monthly",
-    dataSource: "planned",
-    note: "Turnover as a share of gross exposure per month.",
-  },
-  {
-    id: "avg-correlation-long",
-    group: "health",
-    label: "Avg Pairwise Corr (Long)",
-    target: "< 0.40",
-    unit: "ratio",
-    kind: "max",
-    green: 0.4,
-    yellow: 0.55,
-    cadence: "weekly",
-    dataSource: "planned",
-    note: "Average pairwise correlation within the long book.",
-  },
-  {
-    id: "avg-correlation-short",
-    group: "health",
-    label: "Avg Pairwise Corr (Short)",
-    target: "< 0.40",
-    unit: "ratio",
-    kind: "max",
-    green: 0.4,
-    yellow: 0.55,
-    cadence: "weekly",
-    dataSource: "planned",
-    note: "Average pairwise correlation within the short book.",
-  },
-  {
-    id: "effective-bets-long",
-    group: "health",
-    label: "Effective Bets (Long)",
-    target: "> 12 per side",
-    unit: "count",
-    kind: "min",
-    green: 12,
-    yellow: 8,
-    cadence: "weekly",
-    dataSource: "live",
-    note: "Diversification measure (inverse Herfindahl of within-book weights). More than 12 per side.",
-  },
-  {
-    id: "effective-bets-short",
-    group: "health",
-    label: "Effective Bets (Short)",
-    target: "> 12 per side",
-    unit: "count",
-    kind: "min",
-    green: 12,
-    yellow: 8,
-    cadence: "weekly",
-    dataSource: "live",
-    note: "Diversification measure (inverse Herfindahl of within-book weights). More than 12 per side.",
-  },
-  {
-    id: "margin-buffer",
-    group: "health",
-    label: "Free Margin Buffer",
-    target: "≥ 25% above maintenance",
-    unit: "%",
-    kind: "min",
-    green: 25,
-    yellow: 15,
-    cadence: "daily",
-    dataSource: "manual",
-    note: "Free margin at least 25% above the maintenance requirement at all times.",
-  },
-  {
-    id: "stress-worst-loss",
-    group: "health",
-    label: "Worst Stress Scenario",
-    target: "loss ≤ 10% of NAV",
-    unit: "%",
-    kind: "max",
-    green: 7,
-    yellow: 10,
-    cadence: "quarterly",
-    dataSource: "planned",
-    note: "Quarterly: −20% crash, +15% melt-up, 30% squeeze on the largest short. Any scenario worse than −10% of NAV flags, like a covenant breach in the loan's downside case.",
-  },
-  {
-    id: "stale-data",
-    group: "health",
-    label: "Stale Data Check",
-    target: "all prices current",
-    unit: "count",
-    kind: "max",
-    green: 24,
-    yellow: 24,
-    cadence: "daily",
-    dataSource: "live",
-    note: "Binary, with no yellow state. Green while every price is current; red the moment any price is older than one trading day. Everything else on this board is only as trustworthy as this check: a green board built on a dead data feed is worse than no board, because it produces false confidence instead of none. Value shown is hours since the oldest price update.",
+    kind: "event-count",
+    keys: {},
+    notify: "immediate",
+    timing: "intraday",
+    note: "Blackout dates are entered per university calendar each year. With no dates configured this reports 'not configured' rather than a false all-clear.",
   },
 ];
 
-// Metrics wired to live computation in Phase 2 (analytics engine + risk-live).
-// Flipping the tag here keeps the config the single source of truth.
-const PHASE_2_LIVE = new Set<string>([
-  "factor-size",
-  "factor-value",
-  "factor-momentum",
-  "var-95",
-  "cvar-95",
-  "sortino",
-  "r2-spx",
-  "long-alpha",
-  "short-alpha",
-  "hit-rate",
-  "slugging",
-  "calmar",
-  "turnover",
-  "avg-correlation-long",
-  "avg-correlation-short",
-  "drawdown-from-high",
-  "stress-worst-loss",
-]);
-for (const limit of RISK_LIMITS) {
-  if (PHASE_2_LIVE.has(limit.id)) limit.dataSource = "live";
-}
-
-export const LIMITS_BY_ID: Record<string, RiskLimit> = Object.fromEntries(
-  RISK_LIMITS.map((l) => [l.id, l]),
+export const MONITORS_BY_ID: Record<string, Monitor> = Object.fromEntries(
+  MONITORS.map((m) => [m.id, m]),
 );
 
-/**
- * Score a raw value against a limit. Returns "na" when there's nothing to score.
- */
-export function evaluateLimit(limit: RiskLimit, value: number | null | undefined): RiskStatus {
-  if (value == null || !Number.isFinite(value)) return "na";
+// ── §4.2 position-level rules ────────────────────────────────────────────
 
-  switch (limit.kind) {
-    case "abs-band": {
-      const v = Math.abs(value);
-      if (v <= limit.green) return "green";
-      if (v <= limit.yellow) return "yellow";
-      return "red";
+export type PositionRuleId =
+  | "long-size"
+  | "short-size"
+  | "pnl-vs-cost"
+  | "stop-order-present"
+  | "stop-loss-status"
+  | "position-var-share"
+  | "price-target"
+  | "days-to-expiry"
+  | "defined-risk-max-loss";
+
+export type PositionRule = {
+  id: PositionRuleId;
+  label: string;
+  source: string;
+  notify: NotifyTier;
+  timing: "intraday" | "close";
+  /** Whether this rule has a red tier at all. */
+  hasRed: boolean;
+  note: string;
+};
+
+export const POSITION_RULES: PositionRule[] = [
+  {
+    id: "long-size",
+    label: "Long position size",
+    source: "IPS III.b, IV.c step 6",
+    notify: "immediate",
+    timing: "intraday",
+    hasRed: true,
+    note: "Market value ÷ NAV. Where the limit is exceeded, exposure must be reduced below the cap immediately.",
+  },
+  {
+    id: "short-size",
+    label: "Short position size",
+    source: "IPS III.b; short cap approved 9/2/26",
+    notify: "immediate",
+    timing: "intraday",
+    hasRed: true,
+    note: "|Market value| ÷ NAV. Capped tighter than a long because an adverse move expands a short while a long self-limits.",
+  },
+  {
+    id: "pnl-vs-cost",
+    label: "P&L vs cost",
+    source: "IPS III.d",
+    notify: "close",
+    timing: "close",
+    hasRed: true,
+    note: "(Market value − cost basis) ÷ cost basis, sign-corrected for shorts. The yellow tier is the last point at which a decision can still be made; past the red, the broker has already acted.",
+  },
+  {
+    id: "stop-order-present",
+    label: "Stop order present",
+    source: "IPS III.d; mechanism approved 9/2/26",
+    notify: "immediate",
+    timing: "intraday",
+    hasRed: true,
+    note: "A resting stop must exist for every position at the correct side, quantity, and a trigger within tolerance of the stop level. A missing, partial, or mispriced stop is red because an unprotected position is invisible until it matters.",
+  },
+  {
+    id: "stop-loss-status",
+    label: "Stop-loss status",
+    source: "IPS III.d, V.a",
+    notify: "immediate",
+    timing: "intraday",
+    hasRed: true,
+    note: "The broker executes the resting stop automatically. This is confirmation of an execution that already occurred, not an action prompt.",
+  },
+  {
+    id: "position-var-share",
+    label: "Position VaR share",
+    source: "IPS III.d (replacement approved in principle 9/2/26)",
+    notify: "close",
+    timing: "close",
+    hasRed: true,
+    note: "Standalone one-day 95% VaR of the position ÷ total Fund one-day 95% VaR. A concentration limit by risk rather than by size: a full-size position in a quiet name passes, the same size in a volatile one is flagged and must be sized down.",
+  },
+  {
+    id: "price-target",
+    label: "Price target",
+    source: "IPS V.a",
+    notify: "none",
+    timing: "close",
+    hasRed: false,
+    note: "A position at or above its thesis price target shows REVIEW and routes to Investment Committee gain monitoring. Yellow only — it never notifies.",
+  },
+  {
+    id: "days-to-expiry",
+    label: "Days to expiry",
+    source: "IPS III.b",
+    notify: "none",
+    timing: "close",
+    hasRed: false,
+    note: "Long-premium options only. Inside the approval window without the Risk Manager's approval flag is yellow. Yellow only — it never notifies.",
+  },
+  {
+    id: "defined-risk-max-loss",
+    label: "Defined-risk max loss",
+    source: "IPS II.b",
+    notify: "close",
+    timing: "close",
+    hasRed: true,
+    note: "Alternatives only, from the Risk Manager entry form, in dollars.",
+  },
+];
+
+export const POSITION_RULES_BY_ID: Record<string, PositionRule> = Object.fromEntries(
+  POSITION_RULES.map((r) => [r.id, r]),
+);
+
+// ── Scoring ───────────────────────────────────────────────────────────────
+
+/**
+ * Scores one monitor's value against the live config.
+ *
+ * Returns "na" whenever the value is missing OR the limit it needs is
+ * undecided (§8). That second case matters: an unscored monitor still shows
+ * its number, it just refuses to claim the number is compliant.
+ */
+export function scoreMonitor(
+  monitor: Monitor,
+  value: number | null | undefined,
+  config: RiskConfig,
+): RiskStatus {
+  if (value == null || !Number.isFinite(value)) return "na";
+  const k = monitor.keys;
+  const at = (key: ConfigKey | undefined) => (key ? cfg(config, key) : null);
+
+  switch (monitor.kind) {
+    case "cap": {
+      const cap = at(k.cap);
+      const warn = at(k.warn);
+      if (cap == null) return "na";
+      // Compliant at exactly the cap, red strictly above ["over 10%"].
+      if (value > cap) return "red";
+      // Yellow bands begin at their lower threshold inclusive.
+      if (warn != null && value >= warn) return "yellow";
+      return "green";
     }
-    case "max": {
-      if (value <= limit.green) return "green";
-      if (value <= limit.yellow) return "yellow";
-      return "red";
+    case "band": {
+      const min = at(k.min);
+      const max = at(k.max);
+      if (min == null || max == null) return "na";
+      // Inclusive band: 20% and 60% are compliant, red strictly outside.
+      if (value < min || value > max) return "red";
+      const warnLow = at(k.warnLow);
+      const warnHigh = at(k.warnHigh);
+      if (warnLow != null && value < warnLow) return "yellow";
+      if (warnHigh != null && value >= warnHigh) return "yellow";
+      return "green";
     }
-    case "min": {
-      if (value >= limit.green) return "green";
-      if (value >= limit.yellow) return "yellow";
-      return "red";
+    case "allocation-band": {
+      const low = at(k.bandLow);
+      const high = at(k.bandHigh);
+      // The whole point of the PENDING marker: with no band, no verdict.
+      if (low == null || high == null) return "na";
+      if (value < low || value > high) return "red";
+      const warnPts = at(k.bandWarn) ?? 0;
+      if (value - low <= warnPts || high - value <= warnPts) return "yellow";
+      return "green";
     }
-    case "range": {
-      // Asymmetric by design (gross exposure is the only user today): below
-      // the green band is always yellow, uncapped — low gross means we've
-      // quietly stopped deploying capital, not a breach of anything, so
-      // there's no red floor on that side. Above green, yellow up to the
-      // ceiling, red past it.
-      const [gLow, gHigh] = limit.rangeGreen ?? [0, 0];
-      const yHigh = limit.rangeYellow?.[1] ?? gHigh;
-      if (value >= gLow && value <= gHigh) return "green";
-      if (value < gLow) return "yellow";
-      if (value <= yHigh) return "yellow";
-      return "red";
+    case "zero": {
+      const tolerance = at(k.cap) ?? 0;
+      return value > tolerance ? "red" : "green";
     }
+    case "soft-floor": {
+      const floor = at(k.min);
+      if (floor == null) return "na";
+      return value < floor ? "yellow" : "green";
+    }
+    case "positive-or-warn":
+      return value > 0 ? "green" : "yellow";
+    case "non-positive-or-warn": {
+      // Once the Committee sets a numeric vega cap this becomes a real ceiling;
+      // until then, net long is the only thing we can honestly flag.
+      const cap = at(k.cap);
+      if (cap != null) return value > cap ? "red" : value > 0 ? "yellow" : "green";
+      return value > 0 ? "yellow" : "green";
+    }
+    case "event-count":
+      return value > 0 ? "red" : "green";
     default:
       return "na";
+  }
+}
+
+/** A one-line rendering of what a monitor is currently scored against. */
+export function describeLimit(monitor: Monitor, config: RiskConfig): string {
+  const at = (key: ConfigKey | undefined) => (key ? cfg(config, key) : null);
+  const pct = (n: number | null) => (n == null ? "—" : `${n}%`);
+
+  switch (monitor.kind) {
+    case "cap": {
+      const cap = at(monitor.keys.cap);
+      if (cap == null) return "No limit set";
+      return monitor.unit === "$" ? `≤ $${cap.toLocaleString("en-US")}` : `≤ ${pct(cap)}`;
+    }
+    case "band": {
+      const min = at(monitor.keys.min);
+      const max = at(monitor.keys.max);
+      return min == null || max == null ? "No band set" : `${pct(min)} – ${pct(max)}`;
+    }
+    case "allocation-band": {
+      const low = at(monitor.keys.bandLow);
+      const high = at(monitor.keys.bandHigh);
+      return low == null || high == null ? "Band not set (PENDING)" : `${pct(low)} – ${pct(high)}`;
+    }
+    case "zero":
+      return "Zero tolerance";
+    case "soft-floor": {
+      const floor = at(monitor.keys.min);
+      return floor == null ? "No floor set" : `≥ ${pct(floor)}`;
+    }
+    case "positive-or-warn":
+      return "Positive on 20-day average";
+    case "non-positive-or-warn": {
+      const cap = at(monitor.keys.cap);
+      return cap == null ? "Not net long (no cap set)" : `≤ $${cap.toLocaleString("en-US")}`;
+    }
+    case "event-count":
+      return "No trades in blackout";
+    default:
+      return "—";
+  }
+}
+
+export function formatMonitorValue(monitor: Monitor, value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  switch (monitor.unit) {
+    case "%":
+      return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)}%`;
+    case "$":
+      return `${value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
+    case "$/day":
+      return `${value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("en-US")}/day`;
+    case "count":
+      return String(Math.round(value));
+    default:
+      return String(value);
   }
 }
