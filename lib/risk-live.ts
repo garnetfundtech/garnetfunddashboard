@@ -29,7 +29,7 @@ import { unstable_cache } from "next/cache";
 import {
   fetchPortfolioSummary,
   fetchRiskOrders,
-  loadValidTraderToken,
+  getValidTraderToken,
 } from "@/lib/market-data";
 import { getOptionGreeks, getPriceHistory } from "@/lib/schwab";
 import { fetchTreasuryRate } from "@/lib/fmp";
@@ -405,7 +405,19 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       config,
     });
 
-  const portfolio = await fetchPortfolioSummary();
+  // Wave 1: everything that does not need the position list. Orders in
+  // particular used to wait behind the portfolio fetch and the token load for
+  // no reason — nothing about an order query depends on what we hold.
+  const [portfolio, token, rawOrders, approvals, navSeries, tbill, thetaAvg] = await Promise.all([
+    fetchPortfolioSummary(),
+    getValidTraderToken(),
+    fetchRiskOrders().catch(() => null),
+    getOpenApprovals(),
+    getNavSeries(),
+    fetchTreasuryRate(),
+    getThetaAverage(THETA_WINDOW_DAYS),
+  ]);
+
   if (!portfolio) {
     return emptyModel([
       { label: "Schwab positions & balances", ok: false, asOf: null, note: "Unreachable or token invalid." },
@@ -413,25 +425,21 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
   }
 
   const nav = portfolio.liquidationValue;
-  const token = await loadValidTraderToken();
 
-  let positions = portfolio.positions as SidedPosition[];
-  const withSectors = await enrichPositionsWithSectors(portfolio.positions).catch(() => null);
-  if (withSectors) positions = withSectors as SidedPosition[];
-
-  const optionSymbols = positions
+  // Wave 2: the position-dependent lookups, also concurrent with each other.
+  const optionSymbols = (portfolio.positions as SidedPosition[])
     .filter((p) => assetClassOf(p.assetType) === "Option")
     .map((p) => p.ticker);
 
-  const [rawOrders, greeks, approvals, navSeries, tbill, entryDates, thetaAvg] = await Promise.all([
-    fetchRiskOrders().catch(() => null),
-    token && optionSymbols.length ? getOptionGreeks(token, optionSymbols).catch(() => ({})) : Promise.resolve({}),
-    getOpenApprovals(),
-    getNavSeries(),
-    fetchTreasuryRate(),
-    getEntryDates(positions.map((p) => p.ticker)),
-    getThetaAverage(THETA_WINDOW_DAYS),
+  const [withSectors, greeks, entryDates] = await Promise.all([
+    enrichPositionsWithSectors(portfolio.positions).catch(() => null),
+    token && optionSymbols.length
+      ? getOptionGreeks(token, optionSymbols).catch(() => ({}))
+      : Promise.resolve({}),
+    getEntryDates(portfolio.positions.map((p) => p.ticker)),
   ]);
+
+  const positions = (withSectors ?? portfolio.positions) as SidedPosition[];
 
   const orders = normalizeOrders(rawOrders);
 
@@ -626,8 +634,19 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
   });
 }
 
+/**
+ * Cache window for the whole board.
+ *
+ * §6 Data freshness: "End-of-day refresh is the minimum. Intraday refresh, if
+ * available from the broker, is desirable for the stop-loss and 10% cap checks
+ * only." Five minutes is far fresher than that floor, and it means only the
+ * first viewer after an expiry pays the cold build — everyone else gets the
+ * board in milliseconds. Every card still carries its own as-of stamp, so a
+ * cached number is never mistaken for a live one, and the alerting itself does
+ * not read this cache: the cron routes rebuild the model themselves.
+ */
 const cachedLiveRiskModel = unstable_cache(buildLiveRiskModel, ["risk-model-wave1"], {
-  revalidate: 90,
+  revalidate: 300,
   tags: ["schwab-risk"],
 });
 

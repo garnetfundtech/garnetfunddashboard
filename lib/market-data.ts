@@ -162,7 +162,7 @@ export type BenchmarkHistory = {
 
 // ── Portfolio data ────────────────────────────────────────────────────────────
 
-export async function getTraderAccountHash(): Promise<string | null> {
+async function loadTraderAccountHash(): Promise<string | null> {
   const token = await getValidTraderToken();
   if (!token) return null;
   try {
@@ -172,6 +172,16 @@ export async function getTraderAccountHash(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * The account hash is a stable identifier — it does not change for the life of
+ * the account — but resolving it costs a full round trip to Schwab, and it sat
+ * on the critical path of every risk page load. Cached for a day.
+ */
+export const getTraderAccountHash = unstable_cache(loadTraderAccountHash, ["trader-account-hash-v1"], {
+  revalidate: 86_400,
+  tags: ["schwab-account"],
+});
 
 async function loadAccountOrders(days = 60) {
   const token = await loadValidTraderToken();
