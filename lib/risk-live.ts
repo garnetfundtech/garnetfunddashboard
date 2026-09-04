@@ -34,7 +34,7 @@ import {
 import { getOptionGreeks, getPriceHistory } from "@/lib/schwab";
 import { fetchTreasuryRate } from "@/lib/fmp";
 import { enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
-import { closesFromCandles, historicalVaR, simpleReturnsFromCloses } from "@/lib/portfolio-analytics";
+import { betaFromReturns, closesFromCandles, historicalVaR, simpleReturnsFromCloses } from "@/lib/portfolio-analytics";
 import { defaultRiskConfig, getRiskConfig, cfg, type RiskConfig } from "@/lib/risk-config";
 import { getOpenApprovals } from "@/lib/risk-approvals";
 import { getEntryDates, getThetaAverage, type EntryRecord } from "@/lib/risk-history";
@@ -50,6 +50,7 @@ import {
   computeGreeks,
   computeSectorExposure,
   evaluatePosition,
+  isCommodityFuture,
   mapSector,
   sideOf,
   teamOf,
@@ -167,6 +168,7 @@ function exposureOf(
   assetClass: ReturnType<typeof assetClassOf>,
   option: OptionDetail | null,
   underlyingPrice: number | null,
+  futureBeta: number | null,
 ): { exposure: number; basis: EnrichedPosition["exposureBasis"] } {
   const signedQty = sideOf(p) === "short" ? -Math.abs(p.quantity) : Math.abs(p.quantity);
 
@@ -181,8 +183,26 @@ function exposureOf(
   }
 
   if (assetClass === "Future") {
-    // Contract delta and the index beta both need a feed we do not have.
-    return { exposure: p.marketValue, basis: "unavailable" };
+    // §6: "Futures at dollar delta beta-weighted to the S&P 500 or underlying
+    // index; commodity futures at raw notional and excluded from the beta
+    // weighting."
+    //
+    // The multiplier is never invented — without it from the broker there is
+    // no notional to compute, and a guessed contract size would misstate the
+    // whole Alternatives book.
+    const multiplier = p.futuresMultiplier;
+    if (multiplier == null || !(p.currentPrice > 0)) {
+      return { exposure: p.marketValue, basis: "unavailable" };
+    }
+    const notional = signedQty * multiplier * p.currentPrice;
+
+    if (isCommodityFuture(p.ticker)) {
+      return { exposure: notional, basis: "raw-notional" };
+    }
+    if (futureBeta == null) {
+      return { exposure: notional, basis: "unavailable" };
+    }
+    return { exposure: notional * futureBeta, basis: "beta-weighted" };
   }
 
   return { exposure: p.marketValue, basis: "market-value" };
@@ -196,8 +216,9 @@ async function enrichPositions(params: {
   underlyingPrices: Map<string, number>;
   coverageSectors: string[];
   entryDates: Map<string, EntryRecord>;
+  futureBetas: Map<string, number>;
 }): Promise<EnrichedPosition[]> {
-  const { positions, nav, approvals, greeks, underlyingPrices, coverageSectors, entryDates } = params;
+  const { positions, nav, approvals, greeks, underlyingPrices, coverageSectors, entryDates, futureBetas } = params;
 
   return positions.map((p) => {
     const side = sideOf(p);
@@ -205,7 +226,13 @@ async function enrichPositions(params: {
     const approval = approvals.get(p.ticker);
     const option = assetClass === "Option" ? buildOptionDetail(p, greeks) : null;
     const underlyingPrice = option?.underlying ? (underlyingPrices.get(option.underlying) ?? null) : null;
-    const { exposure, basis } = exposureOf(p, assetClass, option, underlyingPrice);
+    const { exposure, basis } = exposureOf(
+      p,
+      assetClass,
+      option,
+      underlyingPrice,
+      futureBetas.get(p.ticker) ?? null,
+    );
 
     const absQuantity = Math.abs(p.quantity);
     const costBasis = p.avgCost * absQuantity * (option ? option.multiplier : 1);
@@ -240,6 +267,55 @@ async function enrichPositions(params: {
       approval: approval ?? null,
     };
   });
+}
+
+/**
+ * Beta of each non-commodity future against the S&P 500, from price history —
+ * the regression §6 calls for, not a stand-in.
+ *
+ * Any contract whose history Schwab will not serve is left out of the map, and
+ * its exposure falls back to "unavailable" rather than to an assumed beta of
+ * one. That distinction matters: assuming 1.0 would quietly treat an interest
+ * rate future as though it moved with equities.
+ *
+ * Untested against a live futures position, because the fund has never held
+ * one. The first future the fund buys is worth eyeballing on the board.
+ */
+async function computeFutureBetas(
+  token: string | null,
+  positions: SidedPosition[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const futures = positions.filter(
+    (p) => assetClassOf(p.assetType) === "Future" && !isCommodityFuture(p.ticker),
+  );
+  if (!token || !futures.length) return out;
+
+  const history = async (symbol: string) => {
+    const hist = await getPriceHistory(
+      token, symbol, PRICE_HISTORY.periodType, PRICE_HISTORY.period,
+      PRICE_HISTORY.frequencyType, PRICE_HISTORY.frequency,
+    );
+    return simpleReturnsFromCloses(closesFromCandles(hist.candles ?? []));
+  };
+
+  const spy = await history("SPY").catch(() => [] as number[]);
+  if (spy.length < 30) return out;
+
+  await Promise.all(
+    futures.map(async (p) => {
+      try {
+        const contract = await history(p.ticker);
+        const n = Math.min(contract.length, spy.length);
+        if (n < 30) return;
+        const beta = betaFromReturns(contract.slice(-n), spy.slice(-n));
+        if (beta != null && Number.isFinite(beta)) out.set(p.ticker, beta);
+      } catch {
+        // Left absent — exposureOf falls back to "unavailable".
+      }
+    }),
+  );
+  return out;
 }
 
 // ── VaR (§6: historical simulation, 250 days, current weights) ────────────
@@ -431,12 +507,13 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     .filter((p) => assetClassOf(p.assetType) === "Option")
     .map((p) => p.ticker);
 
-  const [withSectors, greeks, entryDates] = await Promise.all([
+  const [withSectors, greeks, entryDates, futureBetas] = await Promise.all([
     enrichPositionsWithSectors(portfolio.positions).catch(() => null),
     token && optionSymbols.length
       ? getOptionGreeks(token, optionSymbols).catch(() => ({}))
       : Promise.resolve({}),
     getEntryDates(portfolio.positions.map((p) => p.ticker)),
+    computeFutureBetas(token, portfolio.positions as SidedPosition[]).catch(() => new Map<string, number>()),
   ]);
 
   const positions = (withSectors ?? portfolio.positions) as SidedPosition[];
@@ -479,6 +556,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     underlyingPrices,
     coverageSectors: config.coverageSectors,
     entryDates,
+    futureBetas,
   });
 
   const exposure = computeExposure(enriched, nav);
@@ -560,7 +638,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
       ? `${exposure.degraded.length} position(s) at market value, not delta-adjusted: ${exposure.degraded.join(", ")}.`
       : null,
     "alternatives-allocation": exposure.degraded.length
-      ? "Futures are counted at market value; no beta-weighting feed is wired."
+      ? `Counted at market value, not delta-adjusted or beta-weighted: ${exposure.degraded.join(", ")}.`
       : null,
     "margin-debit": portfolio.marginBalance == null ? "The broker did not report a margin balance." : null,
     "alternatives-theta": greekTotals.missing.length

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -12,6 +12,7 @@ import {
   saveConfigAction,
   saveBlackoutAction,
   saveCoverageSectorsAction,
+  importNavLogAction,
 } from "@/app/(dashboard)/risk-admin/actions";
 
 const INPUT = "border border-line bg-surface px-1.5 py-1 text-[12.5px] text-ink";
@@ -132,12 +133,61 @@ export type ConfigHistoryRow = {
   changed_by_name: string | null;
 };
 
+export type NavSummary = { count: number; first: string | null; last: string | null; manual: number };
+
+/**
+ * §8: "Storage of a daily NAV record begins at go-live, and the Risk Manager is
+ * maintaining a manual NAV log until then for import on day one." Every
+ * volatility, Sharpe and VaR figure reads this series, and no amount of later
+ * work can reconstruct a day that was never recorded.
+ */
+function NavImport({ nav }: { nav: NavSummary }) {
+  const [state, action, pending] = useActionState(importNavLogAction, null as { ok: boolean; message: string } | null);
+
+  return (
+    <section className="panel flex flex-col gap-2 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="panel-title">Daily NAV series</p>
+        <p className="text-[11.5px] text-ink-3">
+          {nav.count === 0
+            ? "empty"
+            : `${nav.count} day${nav.count === 1 ? "" : "s"} · ${nav.first} → ${nav.last}${nav.manual ? ` · ${nav.manual} imported` : ""}`}
+        </p>
+      </div>
+      <p className="text-[12px] text-ink-3">
+        Volatility, Sharpe and VaR are all computed from this series, and a day not recorded cannot be recovered
+        later. The daily snapshot adds a row each weekday from go-live; paste the pre-go-live log here to backfill.
+        One row per line as <span className="num">date, NAV</span> — add a third column for a donation or
+        disbursement that day so it is excluded from performance. Re-importing a corrected row replaces it.
+      </p>
+      <form action={action} className="flex flex-col gap-2">
+        <textarea
+          name="log"
+          rows={5}
+          placeholder={"2026-08-18, 98450.22\n2026-08-19, 98790.10\n2026-08-20, 104120.55, 5000"}
+          className={cn(INPUT, "w-full font-mono")}
+        />
+        <div className="flex items-center gap-2">
+          <button type="submit" disabled={pending} className="text-[12.5px] text-pos underline disabled:opacity-50">
+            {pending ? "Importing…" : "Import NAV log"}
+          </button>
+          {state && (
+            <span className={cn("text-[12px]", state.ok ? "text-pos" : "text-neg")}>{state.message}</span>
+          )}
+        </div>
+      </form>
+    </section>
+  );
+}
+
 export function RiskAdminClient({
   config,
   history,
+  nav,
 }: {
   config: RiskConfig;
   history: ConfigHistoryRow[];
+  nav: NavSummary;
 }) {
   const sections = [...new Set(CONFIG_DEFS.map((d) => d.section))];
   const pendingCount = CONFIG_DEFS.filter((d) => config.values[d.key] == null).length;
@@ -195,6 +245,8 @@ export function RiskAdminClient({
           </TableShell>
         );
       })}
+
+      <NavImport nav={nav} />
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         <section className="panel flex flex-col gap-2 p-3">

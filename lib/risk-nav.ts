@@ -165,6 +165,90 @@ export async function recordNav(params: {
   if (error) throw error;
 }
 
+export type NavImportResult = { imported: number; skipped: string[] };
+
+/**
+ * §8: "Storage of a daily NAV record begins at go-live, and the Risk Manager
+ * is maintaining a manual NAV log until then for import on day one."
+ *
+ * Accepts one record per line as `date,nav` or `date,nav,external_flow`, with
+ * an optional header row. Rows are validated individually and a bad row is
+ * reported rather than silently dropped — an import that quietly loses a day
+ * puts a hole in the series every later return calculation reads through.
+ *
+ * Imported rows are marked source 'manual' so a later audit can tell which
+ * figures came from the broker and which from the Risk Manager's own log.
+ */
+export function parseNavLog(text: string): { rows: NavPoint[]; skipped: string[] } {
+  const rows: NavPoint[] = [];
+  const skipped: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    // Tolerate a header row without making the caller strip it.
+    if (/^(date|captured_on)\b/i.test(line)) continue;
+
+    const parts = line.split(/[,\t;]/).map((c) => c.trim());
+    const [dateRaw, navRaw, flowRaw] = parts;
+
+    const date = normalizeDate(dateRaw ?? "");
+    const nav = Number(navRaw?.replace(/[$,]/g, ""));
+    const flow = flowRaw ? Number(flowRaw.replace(/[$,]/g, "")) : 0;
+
+    if (!date) { skipped.push(`${line} — unrecognised date`); continue; }
+    if (!Number.isFinite(nav) || nav <= 0) { skipped.push(`${line} — NAV must be a positive number`); continue; }
+    if (!Number.isFinite(flow)) { skipped.push(`${line} — external flow must be a number`); continue; }
+    if (seen.has(date)) { skipped.push(`${line} — duplicate date in this import`); continue; }
+
+    seen.add(date);
+    rows.push({ captured_on: date, nav, external_flow: flow, source: "manual" });
+  }
+
+  rows.sort((a, b) => a.captured_on.localeCompare(b.captured_on));
+  return { rows, skipped };
+}
+
+/** Accepts YYYY-MM-DD, MM/DD/YYYY and M/D/YY. Returns ISO, or "" if unusable. */
+function normalizeDate(input: string): string {
+  const value = input.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) ? "" : value;
+  }
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(value);
+  if (slash) {
+    const [, m, d, y] = slash;
+    const year = y.length === 2 ? `20${y}` : y;
+    const iso = `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    return Number.isNaN(new Date(`${iso}T00:00:00Z`).getTime()) ? "" : iso;
+  }
+  return "";
+}
+
+/**
+ * Writes an imported log. Existing rows for the same date are replaced, so a
+ * corrected log can be re-imported without first deleting anything.
+ */
+export async function importNavLog(text: string): Promise<NavImportResult> {
+  const { rows, skipped } = parseNavLog(text);
+  if (!rows.length) return { imported: 0, skipped };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("nav_daily").upsert(
+    rows.map((r) => ({
+      captured_on: r.captured_on,
+      nav: r.nav,
+      external_flow: r.external_flow,
+      source: "manual",
+      note: "Imported from the Risk Manager's pre-go-live NAV log [§8].",
+    })),
+    { onConflict: "captured_on" },
+  );
+  if (error) throw error;
+  return { imported: rows.length, skipped };
+}
+
 // ── Period selection (§5, date-range selector) ────────────────────────────
 
 export type PeriodKey = "wtd" | "mtd" | "std" | "fytd" | "inception";

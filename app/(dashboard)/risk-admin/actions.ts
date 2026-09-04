@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireApprovedProfile } from "@/lib/auth";
 import { isRiskManager } from "@/lib/nav-access";
 import { updateRiskConfig, type ConfigKey } from "@/lib/risk-config";
+import { importNavLog } from "@/lib/risk-nav";
 
 /**
  * §7: "The Risk Manager holds sole edit rights, and every change must be
@@ -70,4 +71,29 @@ export async function saveCoverageSectorsAction(formData: FormData) {
   await updateRiskConfig({ key: "coverage_sectors", jsonValue: sectors, reason, changedBy: profile.id });
   revalidatePath("/risk-admin");
   revalidatePath("/risk");
+}
+
+/**
+ * §8: the Risk Manager's pre-go-live NAV log, imported on day one. Volatility,
+ * Sharpe and VaR all read this series and it cannot be reconstructed after the
+ * fact, so this is the only way history before go-live ever exists.
+ */
+export async function importNavLogAction(_prev: unknown, formData: FormData) {
+  await requireRiskManager();
+  const text = String(formData.get("log") ?? "");
+  if (!text.trim()) return { ok: false, message: "Paste at least one row." };
+
+  try {
+    const { imported, skipped } = await importNavLog(text);
+    revalidatePath("/risk-admin");
+    revalidatePath("/risk");
+    return {
+      ok: imported > 0,
+      message:
+        `${imported} day${imported === 1 ? "" : "s"} imported.` +
+        (skipped.length ? ` ${skipped.length} row(s) skipped: ${skipped.slice(0, 3).join("; ")}` : ""),
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Import failed." };
+  }
 }

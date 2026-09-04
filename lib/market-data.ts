@@ -304,6 +304,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
           underlyingSymbol: inst.underlyingSymbol != null ? String(inst.underlyingSymbol) : undefined,
           putCall: rawPutCall === "PUT" || rawPutCall === "CALL" ? rawPutCall : undefined,
           maturityDate: inst.maturityDate != null ? String(inst.maturityDate) : undefined,
+          futuresMultiplier: Number.isFinite(Number(inst.multiplier)) ? Number(inst.multiplier) : undefined,
           quantity,
           avgCost,
           currentPrice,

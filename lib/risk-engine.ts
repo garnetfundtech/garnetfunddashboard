@@ -190,6 +190,38 @@ export function mapSector(
   return OTHER_SECTOR;
 }
 
+/**
+ * CME/CBOT/NYMEX/COMEX roots for commodity-based futures.
+ *
+ * IPS II.b excludes commodity-based futures from beta-weighting. §8 records
+ * that the sentence can be read as excluding them from the 25% Alternatives
+ * calculation entirely, and that this build adopts the more conservative
+ * reading: they count toward the 25% at raw notional, they are simply not
+ * beta-weighted to the S&P 500 — which would be meaningless for crude oil.
+ */
+const COMMODITY_FUTURE_ROOTS = new Set([
+  "CL", "QM", "BZ", "NG", "QG", "RB", "HO", // energy
+  "GC", "MGC", "SI", "SIL", "HG", "PL", "PA", // metals
+  "ZC", "ZS", "ZW", "ZL", "ZM", "ZO", "ZR", // grains
+  "KC", "SB", "CC", "CT", "OJ", // softs
+  "LE", "HE", "GF", // livestock
+]);
+
+/**
+ * The root of a futures symbol, e.g. "/ESZ26" → "ES". Returns null when the
+ * symbol does not look like a futures contract, in which case the caller must
+ * not assume anything about it.
+ */
+export function futureRoot(symbol: string): string | null {
+  const m = /^\/?([A-Z]{1,3})[FGHJKMNQUVXZ]\d{1,2}$/.exec(symbol.trim().toUpperCase());
+  return m ? m[1] : null;
+}
+
+export function isCommodityFuture(symbol: string): boolean {
+  const root = futureRoot(symbol);
+  return root != null && COMMODITY_FUTURE_ROOTS.has(root);
+}
+
 // ── Exposure ──────────────────────────────────────────────────────────────
 
 /** How a position's exposure figure was arrived at, so the UI can say so. */

@@ -1,5 +1,6 @@
 import { enforceNavAccess } from "@/lib/dashboard-guard";
 import { getRiskConfig } from "@/lib/risk-config";
+import { getNavSeries } from "@/lib/risk-nav";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RiskAdminClient, type ConfigHistoryRow } from "@/components/dashboard/risk-admin-client";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function RiskAdminPage() {
   await enforceNavAccess("/risk-admin");
 
-  const config = await getRiskConfig();
+  const [config, navSeries] = await Promise.all([getRiskConfig(), getNavSeries()]);
 
   let history: ConfigHistoryRow[] = [];
   try {
@@ -40,5 +41,16 @@ export default async function RiskAdminPage() {
     history = [];
   }
 
-  return <RiskAdminClient config={config} history={history} />;
+  return (
+    <RiskAdminClient
+      config={config}
+      history={history}
+      nav={{
+        count: navSeries.points.length,
+        first: navSeries.points[0]?.captured_on ?? null,
+        last: navSeries.points.at(-1)?.captured_on ?? null,
+        manual: navSeries.points.filter((p) => p.source === "manual").length,
+      }}
+    />
+  );
 }

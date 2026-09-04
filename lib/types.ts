@@ -99,6 +99,9 @@ export type LivePosition = {
   putCall?: "PUT" | "CALL";
   /** Fixed income only: individual debt securities are held to maturity. */
   maturityDate?: string;
+  /** Futures only: contract multiplier, straight from the broker. Never
+   *  inferred — without it the notional cannot be computed [Risk spec §6]. */
+  futuresMultiplier?: number;
 };
 
 export type PortfolioSummary = {
