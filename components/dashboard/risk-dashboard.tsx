@@ -120,6 +120,7 @@ export function RiskDashboard({
           model={model}
           alertLog={alertLog}
           canEdit={canEdit}
+          fullBoard={fullBoard}
           onEditApproval={(row) => setEditing({ row })}
         />
       ) : report ? (

@@ -153,10 +153,12 @@ type SideFilter = "All" | "Long" | "Short";
 function PositionTable({
   model,
   canEdit,
+  fullBoard,
   onEdit,
 }: {
   model: RiskModel;
   canEdit: boolean;
+  fullBoard: boolean;
   onEdit: (row: PositionRow | null) => void;
 }) {
   const [team, setTeam] = useState<TeamFilter>("All");
@@ -238,7 +240,14 @@ function PositionTable({
           {rows.length === 0 && (
             <tr>
               <td colSpan={canEdit ? 21 : 20} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
-                {model.hasLiveData ? "No positions match these filters." : "No live position data."}
+                {!model.hasLiveData
+                  ? "No live position data."
+                  : model.positions.length === 0 && !fullBoard
+                    ? // An analyst is scoped to the positions naming them, so
+                      // an empty table means no approval names them yet —
+                      // not that the feed is down.
+                      "No positions are assigned to you yet. The Risk Manager assigns an analyst when recording a position approval [IPS IV.c step 6]."
+                    : "No positions match these filters."}
               </td>
             </tr>
           )}
@@ -464,19 +473,23 @@ export function RiskAlertsTab({
   model,
   alertLog,
   canEdit,
+  fullBoard,
   onEditApproval,
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
   canEdit: boolean;
+  fullBoard: boolean;
   onEditApproval: (row: PositionRow | null) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <LimitStrip model={model} />
-      <PositionTable model={model} canEdit={canEdit} onEdit={onEditApproval} />
-      <SectorTable sectors={model.sectors} cap={model.config.values.sector_cap} />
-      <AlertLog rows={alertLog} canEdit={canEdit} />
+      {/* The limit strip, sector breakdown and alert log are fund-wide, so
+          they belong to the roles with the full board [Spec §6]. */}
+      {fullBoard && <LimitStrip model={model} />}
+      <PositionTable model={model} canEdit={canEdit} fullBoard={fullBoard} onEdit={onEditApproval} />
+      {fullBoard && <SectorTable sectors={model.sectors} cap={model.config.values.sector_cap} />}
+      {fullBoard && <AlertLog rows={alertLog} canEdit={canEdit} />}
     </div>
   );
 }
