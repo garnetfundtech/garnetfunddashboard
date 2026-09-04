@@ -138,6 +138,12 @@ function SectorTable({ sectors, cap }: { sectors: SectorRow[]; cap: number | nul
   );
 }
 
+/** §4.2 holding period — display only, from the entry date the stored record
+ *  reconstructs (see lib/risk-history.ts). */
+function holdingDays(entryDate: string): number {
+  return Math.max(0, Math.round((Date.now() - new Date(entryDate).getTime()) / 86_400_000));
+}
+
 // ── §4.2 Position table ───────────────────────────────────────────────────
 
 type TeamFilter = "All" | "Equities" | "Alternatives";
@@ -200,7 +206,7 @@ function PositionTable({
           )}
         </div>
       }
-      footer="A stopped position pins to the top. A dash means the column is display only and carries no alert."
+      footer="A stopped position pins to the top. A dash means the column is display only and carries no alert. Held is days since entry, reconstructed from the stored daily snapshots."
     >
       <table className="w-full">
         <thead>
@@ -224,13 +230,14 @@ function PositionTable({
             <th className="px-2.5 py-1.5 text-right font-medium">DTE</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Max loss</th>
             <th className="px-2.5 py-1.5 font-medium">Maturity</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Held</th>
             {canEdit && <th className="px-2.5 py-1.5" />}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={canEdit ? 20 : 19} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
+              <td colSpan={canEdit ? 21 : 20} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
                 {model.hasLiveData ? "No positions match these filters." : "No live position data."}
               </td>
             </tr>
@@ -295,6 +302,13 @@ function PositionTable({
                   {row.rules["defined-risk-max-loss"].display}
                 </Cell>
                 <td className="px-2.5 py-1.5 text-[12.5px] text-ink-3">{p.maturityDate ?? "—"}</td>
+                <td className="px-2.5 py-1.5 text-right text-[12.5px] text-ink-3">
+                  {p.entryDate ? (
+                    <span title={`Entered ${p.entryDate}`}>{holdingDays(p.entryDate)}d</span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 {canEdit && (
                   <td className="px-2.5 py-1.5">
                     <button

@@ -26,6 +26,7 @@ import {
   type PeriodKey,
 } from "@/lib/risk-nav";
 import type { RiskModel, SectorRow } from "@/lib/risk-engine";
+import { getRealizedPnl } from "@/lib/risk-history";
 import type { AlertLogRow } from "@/lib/risk-episodes";
 import { monitorLabel } from "@/lib/risk-episodes";
 
@@ -79,7 +80,9 @@ export type PerformanceMetrics = {
   excessReturnPct: number | null;
   unrealizedPnl: number | null;
   realizedPnl: number | null;
-  pnlByTeam: { team: string; unrealized: number }[];
+  pnlByTeam: { team: string; unrealized: number; realized: number }[];
+  /** Closed lots behind the realized figure. */
+  realizedCount: number;
   observations: number;
 };
 
@@ -315,10 +318,11 @@ export async function buildReportingModel(params: {
   const to = today.toISOString().slice(0, 10);
   const from = periodStart(period, today);
 
-  const [snapshots, stopLossEvents, changes] = await Promise.all([
+  const [snapshots, stopLossEvents, changes, realized] = await Promise.all([
     loadSnapshots(from),
     loadStopLossEvents(from),
     loadPortfolioChanges(from),
+    getRealizedPnl(from),
   ]);
 
   const windowed = sliceSeries(navSeries, from);
@@ -336,12 +340,14 @@ export async function buildReportingModel(params: {
     benchmarkReturnPct: bench,
     excessReturnPct: periodReturnPct != null && bench != null ? periodReturnPct - bench : null,
     unrealizedPnl: model.positions.reduce((s, r) => s + r.position.unrealizedPnl, 0),
-    realizedPnl: null,
+    realizedPnl: realized.total,
+    realizedCount: realized.count,
     pnlByTeam: ["equities", "alternatives"].map((team) => ({
       team,
       unrealized: model.positions
         .filter((r) => r.position.team === team)
         .reduce((s, r) => s + r.position.unrealizedPnl, 0),
+      realized: realized.byTeam.find((t) => t.team === team)?.realized ?? 0,
     })),
     observations: windowed.observations,
   };
@@ -538,8 +544,12 @@ export function renderPack(pack: PackDef, report: ReportingModel, model: RiskMod
   lines.push(`- 3-month T-bill over the same period: ${pct(report.performance.benchmarkReturnPct)}`);
   lines.push(`- Return vs benchmark: ${pct(report.performance.excessReturnPct)}`);
   lines.push(`- Unrealized P&L: ${usd(report.performance.unrealizedPnl)}`);
+  lines.push(
+    `- Realized P&L: ${usd(report.performance.realizedPnl)} across ${report.performance.realizedCount} closed lot${report.performance.realizedCount === 1 ? "" : "s"}`,
+  );
   for (const t of report.performance.pnlByTeam) {
-    lines.push(`  - ${t.team === "equities" ? "Equities" : "Alternatives"}: ${usd(t.unrealized)}`);
+    const name = t.team === "equities" ? "Equities" : "Alternatives";
+    lines.push(`  - ${name}: unrealized ${usd(t.unrealized)}, realized ${usd(t.realized)}`);
   }
   lines.push("");
 

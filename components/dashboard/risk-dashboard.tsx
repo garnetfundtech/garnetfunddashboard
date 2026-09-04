@@ -33,6 +33,7 @@ export function RiskDashboard({
   alertLog,
   report,
   tab,
+  fullBoard,
   period,
   packs,
   analysts,
@@ -41,8 +42,10 @@ export function RiskDashboard({
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
-  report: ReportingModel;
+  /** null for an analyst, who cannot open the Fund Reporting tab. */
+  report: ReportingModel | null;
   tab: RiskTab;
+  fullBoard: boolean;
   period: PeriodKey;
   packs: PackDef[];
   analysts: AnalystOption[];
@@ -71,13 +74,17 @@ export function RiskDashboard({
         meta={
           <span className="flex items-center gap-2">
             <span className={cn("text-[12.5px]", breaches ? "text-neg" : "text-pos")}>
-              {breaches ? `${breaches} breach${breaches === 1 ? "" : "es"}` : "All limits within policy"}
+              {breaches
+                ? `${breaches} breach${breaches === 1 ? "" : "es"}`
+                : fullBoard
+                  ? "All limits within policy"
+                  : "Your positions are within policy"}
             </span>
             <span className="text-ink-3">·</span>
             <AsOf iso={model.asOf} />
           </span>
         }
-        actions={<FilterTabs options={TABS} value={tab} onChange={(v) => navigate({ tab: v })} />}
+        actions={fullBoard ? <FilterTabs options={TABS} value={tab} onChange={(v) => navigate({ tab: v })} /> : undefined}
       />
 
       {/* §1 rule 2: a feed that is down is said out loud, not left to a grey card. */}
@@ -101,6 +108,13 @@ export function RiskDashboard({
         </div>
       )}
 
+      {!fullBoard && (
+        <div className="panel px-3 py-2 text-[12.5px] text-ink-3">
+          You are seeing the positions you are the assigned analyst on. The portfolio limit strip, the alert log
+          and the Fund Reporting tab go to the Risk Manager, the President and the PMs [IPS IV.c step 6; Spec §6].
+        </div>
+      )}
+
       {tab === "alerts" ? (
         <RiskAlertsTab
           model={model}
@@ -108,14 +122,14 @@ export function RiskDashboard({
           canEdit={canEdit}
           onEditApproval={(row) => setEditing({ row })}
         />
-      ) : (
+      ) : report ? (
         <RiskReportingTab
           report={report}
           period={period}
           onPeriodChange={(p) => navigate({ period: p })}
           packs={packs}
         />
-      )}
+      ) : null}
 
       {/* Data provenance — §1 rule 2: every number carries a visible source. */}
       <section className="panel flex flex-col gap-1 px-3 py-2">

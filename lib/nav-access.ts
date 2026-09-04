@@ -48,8 +48,19 @@ export function isRiskManager(role: UserRole): boolean {
   return role === "risk_manager" || role === "admin" || role === "developer";
 }
 
-/** Read-only on both risk tabs but no edit rights: President, PMs [Spec §6]. */
-export function canReadRiskReporting(role: UserRole): boolean {
+/**
+ * Spec §6 Access: "Risk Manager: full access and edit rights on limits and
+ * position entry. President and PMs: read access to both tabs. Analysts: read
+ * access to their own positions only."
+ *
+ * So an analyst reaches /risk but sees only the positions they are the
+ * assigned analyst on — not the portfolio limit strip, not the alert log, and
+ * not the Fund Reporting tab, none of which are "their positions". Faculty sit
+ * with the observers rather than the analysts here: the Faculty Advisor is a
+ * named recipient of the IPS VIII.b escalation chain and of the semester
+ * report, so they need the whole board.
+ */
+export function canReadFullRiskBoard(role: UserRole): boolean {
   return role !== "analyst";
 }
 

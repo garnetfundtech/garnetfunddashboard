@@ -37,6 +37,7 @@ import { enrichPositionsWithSectors } from "@/lib/compute-portfolio-risk-stats";
 import { closesFromCandles, historicalVaR, simpleReturnsFromCloses } from "@/lib/portfolio-analytics";
 import { defaultRiskConfig, getRiskConfig, cfg, type RiskConfig } from "@/lib/risk-config";
 import { getOpenApprovals } from "@/lib/risk-approvals";
+import { getEntryDates, getThetaAverage, type EntryRecord } from "@/lib/risk-history";
 import {
   annualizedVolatility,
   getNavSeries,
@@ -73,6 +74,9 @@ const ORDER_WINDOW_DAYS = 400;
 
 /** Enough daily history for the §6 250-day VaR lookback, with slack. */
 const PRICE_HISTORY = { periodType: "year" as const, period: 2, frequencyType: "daily" as const, frequency: 1 };
+
+/** §4.1: theta's tier is judged on its 20-day average, not the day's reading. */
+const THETA_WINDOW_DAYS = 20;
 
 /** VaR is priced per instrument; this bounds the fan-out on a large book. */
 const MAX_VAR_SYMBOLS = 40;
@@ -191,8 +195,9 @@ async function enrichPositions(params: {
   greeks: Record<string, Awaited<ReturnType<typeof getOptionGreeks>>[string]>;
   underlyingPrices: Map<string, number>;
   coverageSectors: string[];
+  entryDates: Map<string, EntryRecord>;
 }): Promise<EnrichedPosition[]> {
-  const { positions, nav, approvals, greeks, underlyingPrices, coverageSectors } = params;
+  const { positions, nav, approvals, greeks, underlyingPrices, coverageSectors, entryDates } = params;
 
   return positions.map((p) => {
     const side = sideOf(p);
@@ -229,7 +234,7 @@ async function enrichPositions(params: {
       pnlVsCostPct,
       unrealizedPnl: p.unrealizedPnl,
       dayPnl: p.dayPnl,
-      entryDate: null,
+      entryDate: entryDates.get(p.ticker.toUpperCase())?.entryDate ?? null,
       option,
       maturityDate: p.maturityDate ?? null,
       approval: approval ?? null,
@@ -391,12 +396,14 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     .filter((p) => assetClassOf(p.assetType) === "Option")
     .map((p) => p.ticker);
 
-  const [rawOrders, greeks, approvals, navSeries, tbill] = await Promise.all([
+  const [rawOrders, greeks, approvals, navSeries, tbill, entryDates, thetaAvg] = await Promise.all([
     fetchAccountOrders(ORDER_WINDOW_DAYS).catch(() => null),
     token && optionSymbols.length ? getOptionGreeks(token, optionSymbols).catch(() => ({})) : Promise.resolve({}),
     getOpenApprovals(),
     getNavSeries(),
     fetchTreasuryRate(),
+    getEntryDates(positions.map((p) => p.ticker)),
+    getThetaAverage(THETA_WINDOW_DAYS),
   ]);
 
   const orders = normalizeOrders(rawOrders);
@@ -436,6 +443,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     greeks,
     underlyingPrices,
     coverageSectors: config.coverageSectors,
+    entryDates,
   });
 
   const exposure = computeExposure(enriched, nav);
@@ -480,16 +488,20 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     "sector-concentration": topSector?.grossPct ?? null,
     "margin-debit": marginDebit,
     "cash-available": cashPct,
-    // 20-day average per §4.1: the IPS requirement is positive theta on
-    // average, not on any one day. With no stored theta history yet, the
-    // day's reading is shown and the card says the average is not yet
-    // available rather than passing the day off as the average.
-    "alternatives-theta": greekTotals.netTheta,
+    // §4.1: "The IPS requirement is positive theta on average, so the tier is
+    // judged on the 20-day average." The day's reading is shown underneath it
+    // rather than being scored, and until the window fills this is null — an
+    // unscored card, not the day passed off as the average.
+    "alternatives-theta": thetaAvg.average,
     "alternatives-vega": greekTotals.netVega,
     "trading-calendar": blackoutTrades,
   };
 
   const details: Record<string, string | null> = {
+    "alternatives-theta":
+      greekTotals.netTheta != null
+        ? `Today ${greekTotals.netTheta >= 0 ? "+" : "−"}$${Math.abs(Math.round(greekTotals.netTheta)).toLocaleString("en-US")}/day`
+        : null,
     "sector-concentration": topSector ? `${topSector.sector} · net ${topSector.netPct.toFixed(1)}%` : null,
     "equities-allocation": `Target ${cfg(config, "equities_target") ?? 75}% · Alternatives ${exposure.alternativesPct.toFixed(1)}%`,
     "annualized-volatility": vol.value == null ? null : `${vol.observations} observations`,
@@ -515,8 +527,8 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     "margin-debit": portfolio.marginBalance == null ? "The broker did not report a margin balance." : null,
     "alternatives-theta": greekTotals.missing.length
       ? `Greeks unavailable for ${greekTotals.missing.join(", ")}; excluded from the total.`
-      : greekTotals.netTheta != null
-        ? "Day's reading. The 20-day average needs stored greek history and begins accruing at go-live."
+      : thetaAvg.average == null && greekTotals.netTheta != null
+        ? `The 20-day average needs ${THETA_WINDOW_DAYS} stored daily readings; ${thetaAvg.observations} on file. Uncoloured until the window fills.`
         : null,
     "alternatives-vega": greekTotals.missing.length
       ? `Greeks unavailable for ${greekTotals.missing.join(", ")}; excluded from the total.`

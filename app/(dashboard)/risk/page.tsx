@@ -1,9 +1,10 @@
 import { RiskDashboard, type RiskTab } from "@/components/dashboard/risk-dashboard";
 import { enforceNavAccess } from "@/lib/dashboard-guard";
-import { isRiskManager } from "@/lib/nav-access";
+import { canReadFullRiskBoard, isRiskManager } from "@/lib/nav-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTreasuryRate } from "@/lib/fmp";
 import { getRiskModel } from "@/lib/risk-live";
+import type { RiskModel } from "@/lib/risk-engine";
 import { getAlertLog } from "@/lib/risk-episodes";
 import { getNavSeries } from "@/lib/risk-nav";
 import { buildReportingModel, REPORT_PACKS, type PeriodKey } from "@/lib/risk-reporting";
@@ -29,6 +30,25 @@ async function getAnalysts(): Promise<{ id: string; name: string }[]> {
   }
 }
 
+/**
+ * §6 Access: "Analysts: read access to their own positions only." Strips the
+ * board down to the rows this analyst is the assigned analyst on, and empties
+ * the portfolio-level monitors, which are not their positions.
+ */
+function scopeToAnalyst(model: RiskModel, userId: string): RiskModel {
+  const mine = model.positions.filter((row) => row.position.approval?.analyst_id === userId);
+  const symbols = new Set(mine.map((row) => row.position.symbol));
+  return {
+    ...model,
+    positions: mine,
+    monitors: [],
+    sectors: [],
+    exposure: null,
+    fundVar: null,
+    breaches: model.breaches.filter((b) => b.subject != null && symbols.has(b.subject)),
+  };
+}
+
 export default async function RiskPage({
   searchParams,
 }: {
@@ -37,10 +57,13 @@ export default async function RiskPage({
   const sp = await searchParams;
   const profile = await enforceNavAccess("/risk");
 
-  const tab: RiskTab = sp.tab === "reporting" ? "reporting" : "alerts";
+  const fullBoard = canReadFullRiskBoard(profile.role);
+  // §6 Access: an analyst reads their own positions only, so the Fund
+  // Reporting tab is not theirs to open even by URL.
+  const tab: RiskTab = sp.tab === "reporting" && fullBoard ? "reporting" : "alerts";
   const period: PeriodKey = PERIODS.has(sp.period as PeriodKey) ? (sp.period as PeriodKey) : "mtd";
 
-  const [model, alertLog, navSeries, tbill, analysts] = await Promise.all([
+  const [fullModel, fullAlertLog, navSeries, tbill, analysts] = await Promise.all([
     getRiskModel(),
     getAlertLog(200),
     getNavSeries(),
@@ -48,19 +71,34 @@ export default async function RiskPage({
     getAnalysts(),
   ]);
 
-  const report = await buildReportingModel({
-    period,
-    model,
-    navSeries,
-    alertLog,
-    config: model.config,
-    riskFreePct: tbill?.month3 ?? null,
-  });
+  // Scoping happens here rather than in the component: an analyst's browser
+  // should never receive the positions they are not assigned to.
+  const model = fullBoard ? fullModel : scopeToAnalyst(fullModel, profile.id);
+  const alertLog = fullBoard
+    ? fullAlertLog
+    : fullAlertLog.filter((row) =>
+        row.subject ? model.positions.some((p) => p.position.symbol === row.subject) : false,
+      );
+
+  // Built from the whole book, and only for the roles that can open Tab 2.
+  // An analyst never gets one, so the fund-wide figures never reach their
+  // browser as a serialized prop for a tab they cannot see.
+  const report = fullBoard
+    ? await buildReportingModel({
+        period,
+        model: fullModel,
+        navSeries,
+        alertLog: fullAlertLog,
+        config: fullModel.config,
+        riskFreePct: tbill?.month3 ?? null,
+      })
+    : null;
 
   return (
     <RiskDashboard
       model={model}
       alertLog={alertLog}
+      fullBoard={fullBoard}
       report={report}
       tab={tab}
       period={period}
