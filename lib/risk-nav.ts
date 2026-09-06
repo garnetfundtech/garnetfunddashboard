@@ -250,19 +250,46 @@ export async function importNavLog(text: string): Promise<NavImportResult> {
 }
 
 /**
+ * A day-over-day NAV move this large cannot be performance.
+ *
+ * At the IPS's 12% *annualized* volatility ceiling, a 25% single-day move is
+ * on the order of three hundred standard deviations. Anything at that scale is
+ * money arriving or leaving — a donation, a disbursement, or the fund being
+ * seeded — and recording it as a return would poison every period return,
+ * the volatility figure and Sharpe along with it.
+ */
+const IMPLAUSIBLE_DAILY_MOVE = 0.25;
+
+export type NavBackfill = {
+  added: number;
+  skipped: number;
+  /** Days recorded as flows because the move could not have been performance. */
+  flagged: { date: string; movePct: number; flow: number }[];
+};
+
+/**
  * Backfills nav_daily from the NAV already stored on each daily risk snapshot.
  *
  * The snapshot table has been recording NAV since well before nav_daily
  * existed, and it is the same quantity under §6 — total account equity at the
  * close. Copying it across is not a reconstruction; it is reading a figure
- * that was captured on the day, which is exactly what §8 requires.
+ * captured on the day, which is what §8 asks for.
  *
- * External flows are left at zero: a snapshot cannot tell a donation from a
- * gain, so any day that carried one must be corrected by importing that row
- * with its flow. Days already present in nav_daily are never overwritten —
- * a Risk Manager's own imported figure outranks a derived one.
+ * The subtlety is external flows. A snapshot cannot tell a donation from a
+ * gain, and this fund's own history contains a day where NAV went from $502 to
+ * roughly $100,000 — the seeding. Imported naively that is a 19,925% return,
+ * which would make volatility meaningless and every period return wrong.
+ *
+ * So any day whose implied move exceeds what performance could produce is
+ * written with its whole change recorded as an external flow, which nets the
+ * day's return to zero, and is reported back so the Risk Manager can replace
+ * the estimate with the actual contribution. That is a stated assumption on a
+ * day that is otherwise unusable, not a silent approximation of a real return.
+ *
+ * Days already in nav_daily are never touched: a figure the Risk Manager
+ * entered outranks one derived here.
  */
-export async function backfillNavFromSnapshots(): Promise<{ added: number; skipped: number }> {
+export async function backfillNavFromSnapshots(): Promise<NavBackfill> {
   const admin = createAdminClient();
 
   const { data: snaps } = await admin
@@ -270,26 +297,56 @@ export async function backfillNavFromSnapshots(): Promise<{ added: number; skipp
     .select("captured_on, nav")
     .not("nav", "is", null)
     .order("captured_on", { ascending: true });
-  if (!snaps?.length) return { added: 0, skipped: 0 };
+  if (!snaps?.length) return { added: 0, skipped: 0, flagged: [] };
 
   const { data: existing } = await admin.from("nav_daily").select("captured_on");
   const have = new Set((existing ?? []).map((r) => r.captured_on as string));
 
-  const rows = (snaps as { captured_on: string; nav: number }[])
-    .filter((r) => !have.has(r.captured_on) && Number(r.nav) > 0)
-    .map((r) => ({
-      captured_on: r.captured_on,
-      nav: Number(r.nav),
-      external_flow: 0,
-      source: "broker" as const,
-      note: "Backfilled from the stored daily risk snapshot for this date.",
-    }));
+  const series = (snaps as { captured_on: string; nav: number }[]).filter((r) => Number(r.nav) > 0);
 
-  if (!rows.length) return { added: 0, skipped: snaps.length };
+  const rows: Record<string, unknown>[] = [];
+  const flagged: NavBackfill["flagged"] = [];
+
+  for (let i = 0; i < series.length; i++) {
+    const row = series[i];
+    if (have.has(row.captured_on)) continue;
+
+    const nav = Number(row.nav);
+    // Compare against the previous stored day, whether or not it was imported,
+    // so the check does not miss a jump that straddles an existing row.
+    const prior = i > 0 ? Number(series[i - 1].nav) : null;
+    const move = prior != null && prior > 0 ? (nav - prior) / prior : 0;
+
+    if (Math.abs(move) > IMPLAUSIBLE_DAILY_MOVE && prior != null) {
+      const flow = nav - prior;
+      flagged.push({ date: row.captured_on, movePct: move * 100, flow });
+      rows.push({
+        captured_on: row.captured_on,
+        nav,
+        external_flow: flow,
+        source: "broker",
+        note:
+          `Move of ${(move * 100).toFixed(0)}% cannot be performance, so the full change of ` +
+          `${flow.toFixed(2)} is recorded as an external flow. Replace with the actual ` +
+          `contribution or disbursement for this date.`,
+      });
+      continue;
+    }
+
+    rows.push({
+      captured_on: row.captured_on,
+      nav,
+      external_flow: 0,
+      source: "broker",
+      note: "Backfilled from the stored daily risk snapshot for this date.",
+    });
+  }
+
+  if (!rows.length) return { added: 0, skipped: series.length, flagged };
 
   const { error } = await admin.from("nav_daily").insert(rows);
   if (error) throw error;
-  return { added: rows.length, skipped: snaps.length - rows.length };
+  return { added: rows.length, skipped: series.length - rows.length, flagged };
 }
 
 // ── Period selection (§5, date-range selector) ────────────────────────────

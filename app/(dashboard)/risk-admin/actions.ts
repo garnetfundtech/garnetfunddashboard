@@ -107,14 +107,19 @@ export async function importNavLogAction(_prev: unknown, formData: FormData) {
 export async function backfillNavAction(_prev: unknown, _formData: FormData) {
   await requireRiskManager();
   try {
-    const { added, skipped } = await backfillNavFromSnapshots();
+    const { added, skipped, flagged } = await backfillNavFromSnapshots();
     revalidatePath("/risk-admin");
     revalidatePath("/risk");
     return {
       ok: added > 0,
       message: added
-        ? `${added} day${added === 1 ? "" : "s"} recovered from stored snapshots.` +
-          (skipped ? ` ${skipped} already present.` : "")
+        ? `${added} day${added === 1 ? "" : "s"} recovered.` +
+          (skipped ? ` ${skipped} already present.` : "") +
+          (flagged.length
+            ? ` ${flagged.length} day(s) moved too far to be performance and were recorded as flows — ` +
+              `${flagged.map((f) => `${f.date} (${f.movePct.toFixed(0)}%)`).join(", ")}. ` +
+              `Re-import those dates with the actual contribution amount.`
+            : "")
         : "Nothing to recover — every snapshot day is already in the series.",
     };
   } catch (err) {
