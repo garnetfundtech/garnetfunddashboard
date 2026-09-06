@@ -249,6 +249,49 @@ export async function importNavLog(text: string): Promise<NavImportResult> {
   return { imported: rows.length, skipped };
 }
 
+/**
+ * Backfills nav_daily from the NAV already stored on each daily risk snapshot.
+ *
+ * The snapshot table has been recording NAV since well before nav_daily
+ * existed, and it is the same quantity under §6 — total account equity at the
+ * close. Copying it across is not a reconstruction; it is reading a figure
+ * that was captured on the day, which is exactly what §8 requires.
+ *
+ * External flows are left at zero: a snapshot cannot tell a donation from a
+ * gain, so any day that carried one must be corrected by importing that row
+ * with its flow. Days already present in nav_daily are never overwritten —
+ * a Risk Manager's own imported figure outranks a derived one.
+ */
+export async function backfillNavFromSnapshots(): Promise<{ added: number; skipped: number }> {
+  const admin = createAdminClient();
+
+  const { data: snaps } = await admin
+    .from("risk_snapshots")
+    .select("captured_on, nav")
+    .not("nav", "is", null)
+    .order("captured_on", { ascending: true });
+  if (!snaps?.length) return { added: 0, skipped: 0 };
+
+  const { data: existing } = await admin.from("nav_daily").select("captured_on");
+  const have = new Set((existing ?? []).map((r) => r.captured_on as string));
+
+  const rows = (snaps as { captured_on: string; nav: number }[])
+    .filter((r) => !have.has(r.captured_on) && Number(r.nav) > 0)
+    .map((r) => ({
+      captured_on: r.captured_on,
+      nav: Number(r.nav),
+      external_flow: 0,
+      source: "broker" as const,
+      note: "Backfilled from the stored daily risk snapshot for this date.",
+    }));
+
+  if (!rows.length) return { added: 0, skipped: snaps.length };
+
+  const { error } = await admin.from("nav_daily").insert(rows);
+  if (error) throw error;
+  return { added: rows.length, skipped: snaps.length - rows.length };
+}
+
 // ── Period selection (§5, date-range selector) ────────────────────────────
 
 export type PeriodKey = "wtd" | "mtd" | "std" | "fytd" | "inception";
@@ -296,6 +339,11 @@ export function periodStart(period: PeriodKey, today = new Date()): string | nul
 }
 
 /** Slices the series to a period, keeping the point before it as the base. */
+/** Jan 1 of the current calendar year — "YTD" as a reader expects it. */
+export function calendarYearStart(today = new Date()): string {
+  return new Date(Date.UTC(today.getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+}
+
 export function sliceSeries(series: NavSeries, from: string | null): NavSeries {
   if (!from) return series;
   const idx = series.points.findIndex((p) => p.captured_on >= from);

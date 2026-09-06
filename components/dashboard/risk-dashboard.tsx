@@ -13,6 +13,7 @@ import { AsOf } from "@/components/dashboard/risk-status";
 import type { PositionRow, RiskModel } from "@/lib/risk-engine";
 import type { AlertLogRow } from "@/lib/risk-episodes";
 import type { PackDef, PeriodKey, ReportingModel } from "@/lib/risk-reporting";
+import type { CatalystFeed } from "@/lib/risk-catalysts";
 
 export type RiskTab = "alerts" | "reporting";
 
@@ -31,6 +32,7 @@ const TABS: { value: RiskTab; label: string }[] = [
 export function RiskDashboard({
   model,
   alertLog,
+  catalysts,
   report,
   tab,
   fullBoard,
@@ -42,6 +44,7 @@ export function RiskDashboard({
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
+  catalysts: CatalystFeed;
   /** null for an analyst, who cannot open the Fund Reporting tab. */
   report: ReportingModel | null;
   tab: RiskTab;
@@ -84,8 +87,27 @@ export function RiskDashboard({
             <AsOf iso={model.asOf} />
           </span>
         }
-        actions={fullBoard ? <FilterTabs options={TABS} value={tab} onChange={(v) => navigate({ tab: v })} /> : undefined}
       />
+
+      {fullBoard && (
+        <nav className="flex items-end gap-0 border-b border-line">
+          {TABS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => navigate({ tab: t.value })}
+              className={cn(
+                "-mb-px border-b-2 px-3.5 py-2 text-[13.5px] transition-colors",
+                tab === t.value
+                  ? "border-garnet font-medium text-ink"
+                  : "border-transparent text-ink-3 hover:text-ink",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* §1 rule 2: a feed that is down is said out loud, not left to a grey card. */}
       {staleFeeds.length > 0 && (
@@ -119,6 +141,7 @@ export function RiskDashboard({
         <RiskAlertsTab
           model={model}
           alertLog={alertLog}
+          catalysts={catalysts}
           canEdit={canEdit}
           fullBoard={fullBoard}
           onEditApproval={(row) => setEditing({ row })}

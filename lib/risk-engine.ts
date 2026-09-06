@@ -269,6 +269,8 @@ export type EnrichedPosition = {
 
 export type ExposureMetrics = {
   nav: number;
+  /** Σ |exposure| in dollars — the denominator for "% of book". */
+  grossUsd: number;
   grossPct: number;
   netPct: number;
   longExposure: number;
@@ -306,6 +308,7 @@ export function computeExposure(positions: EnrichedPosition[], nav: number): Exp
 
   return {
     nav,
+    grossUsd: longExposure + shortExposure,
     grossPct: pct(longExposure + shortExposure),
     netPct: pct(longExposure - shortExposure),
     longExposure,
@@ -328,6 +331,12 @@ export type SectorRow = {
   grossPct: number;
   /** Displayed alongside for information; not limited [§8 Sector cap basis]. */
   netPct: number;
+  longUsd: number;
+  shortUsd: number;
+  grossUsd: number;
+  netUsd: number;
+  /** How many Equities-book positions sit in this sector. */
+  count: number;
 };
 
 /**
@@ -340,27 +349,33 @@ export function computeSectorExposure(
   nav: number,
   coverageSectors: string[],
 ): SectorRow[] {
-  const map = new Map<string, { long: number; short: number }>();
+  const map = new Map<string, { long: number; short: number; count: number }>();
   for (const sector of [...coverageSectors, OTHER_SECTOR]) {
-    map.set(sector, { long: 0, short: 0 });
+    map.set(sector, { long: 0, short: 0, count: 0 });
   }
 
   for (const p of positions) {
     if (p.team !== "equities" || p.assetClass === "Cash") continue;
-    const entry = map.get(p.sector) ?? { long: 0, short: 0 };
+    const entry = map.get(p.sector) ?? { long: 0, short: 0, count: 0 };
     if (p.exposure >= 0) entry.long += Math.abs(p.exposure);
     else entry.short += Math.abs(p.exposure);
+    entry.count += 1;
     map.set(p.sector, entry);
   }
 
   const pct = (v: number) => (nav > 0 ? (v / nav) * 100 : 0);
   return [...map.entries()]
-    .map(([sector, { long, short }]) => ({
+    .map(([sector, { long, short, count }]) => ({
       sector,
       longPct: pct(long),
       shortPct: pct(short),
       grossPct: pct(long + short),
       netPct: pct(long - short),
+      longUsd: long,
+      shortUsd: short,
+      grossUsd: long + short,
+      netUsd: long - short,
+      count,
     }))
     .sort((a, b) => b.grossPct - a.grossPct);
 }
@@ -466,7 +481,12 @@ export function checkStopOrder(
   // clean bill of health — hence "unknown" rather than "ok".
   if (orders == null) return { state: "unknown", order: null, expected: null };
 
-  const expected = expectedStopPrice(position.side, position.avgCost, stopPct);
+  // Cost per unit derived from the dollar cost basis, not from averagePrice,
+  // so the stop level lands in the same scale the broker quotes the price in.
+  // For an equity the two are identical; for a bond averagePrice is per 100 of
+  // par and would put the stop an order of magnitude away from any real price.
+  const unitCost = position.absQuantity > 0 ? position.costBasis / position.absQuantity : position.avgCost;
+  const expected = expectedStopPrice(position.side, unitCost, stopPct);
 
   const candidates = orders.filter(
     (o) =>
@@ -745,11 +765,33 @@ export type DataFeed = {
   note?: string;
 };
 
+/** §5.1 headline figures, surfaced on Tab 1 so NAV is visible at a glance. */
+export type HeadlinePerformance = {
+  dayPnl: number | null;
+  dayPnlPct: number | null;
+  mtdPct: number | null;
+  ytdPct: number | null;
+  /** Trading days behind the MTD and YTD figures. */
+  mtdDays: number;
+  ytdDays: number;
+};
+
+/** One stored day, for the NAV, exposure and volatility charts. */
+export type HistoryPoint = {
+  date: string;
+  nav: number | null;
+  netPct: number | null;
+  grossPct: number | null;
+  volPct: number | null;
+};
+
 export type RiskModel = {
   asOf: string;
   hasLiveData: boolean;
   nav: number | null;
   navAsOf: string | null;
+  performance: HeadlinePerformance | null;
+  history: HistoryPoint[];
   exposure: ExposureMetrics | null;
   sectors: SectorRow[];
   monitors: { group: MonitorGroup; label: string; blurb: string; rows: MonitorRow[] }[];
@@ -771,6 +813,8 @@ export function buildRiskModel(input: {
   hasLiveData: boolean;
   nav: number | null;
   navAsOf: string | null;
+  performance?: HeadlinePerformance | null;
+  history?: HistoryPoint[];
   exposure: ExposureMetrics | null;
   sectors: SectorRow[];
   positions: PositionRow[];
@@ -844,6 +888,8 @@ export function buildRiskModel(input: {
     hasLiveData: input.hasLiveData,
     nav: input.nav,
     navAsOf: input.navAsOf,
+    performance: input.performance ?? null,
+    history: input.history ?? [],
     exposure: input.exposure,
     sectors: input.sectors,
     monitors,

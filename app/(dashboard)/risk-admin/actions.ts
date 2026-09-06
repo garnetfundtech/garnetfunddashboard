@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireApprovedProfile } from "@/lib/auth";
 import { isRiskManager } from "@/lib/nav-access";
 import { updateRiskConfig, type ConfigKey } from "@/lib/risk-config";
-import { importNavLog } from "@/lib/risk-nav";
+import { backfillNavFromSnapshots, importNavLog } from "@/lib/risk-nav";
 
 /**
  * §7: "The Risk Manager holds sole edit rights, and every change must be
@@ -95,5 +95,29 @@ export async function importNavLogAction(_prev: unknown, formData: FormData) {
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Import failed." };
+  }
+}
+
+/**
+ * Pulls NAV forward from the stored daily snapshots into the NAV series. Every
+ * figure was captured on its own day, so this recovers history rather than
+ * inventing it — but any day that carried a donation still needs importing
+ * with its external flow, since a snapshot cannot tell a gift from a gain.
+ */
+export async function backfillNavAction(_prev: unknown, _formData: FormData) {
+  await requireRiskManager();
+  try {
+    const { added, skipped } = await backfillNavFromSnapshots();
+    revalidatePath("/risk-admin");
+    revalidatePath("/risk");
+    return {
+      ok: added > 0,
+      message: added
+        ? `${added} day${added === 1 ? "" : "s"} recovered from stored snapshots.` +
+          (skipped ? ` ${skipped} already present.` : "")
+        : "Nothing to recover — every snapshot day is already in the series.",
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Backfill failed." };
   }
 }

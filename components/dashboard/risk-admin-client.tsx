@@ -13,6 +13,7 @@ import {
   saveBlackoutAction,
   saveCoverageSectorsAction,
   importNavLogAction,
+  backfillNavAction,
 } from "@/app/(dashboard)/risk-admin/actions";
 
 const INPUT = "border border-line bg-surface px-1.5 py-1 text-[12.5px] text-ink";
@@ -143,6 +144,10 @@ export type NavSummary = { count: number; first: string | null; last: string | n
  */
 function NavImport({ nav }: { nav: NavSummary }) {
   const [state, action, pending] = useActionState(importNavLogAction, null as { ok: boolean; message: string } | null);
+  const [fillState, fillAction, filling] = useActionState(
+    backfillNavAction,
+    null as { ok: boolean; message: string } | null,
+  );
 
   return (
     <section className="panel flex flex-col gap-2 p-3">
@@ -160,6 +165,18 @@ function NavImport({ nav }: { nav: NavSummary }) {
         One row per line as <span className="num">date, NAV</span> — add a third column for a donation or
         disbursement that day so it is excluded from performance. Re-importing a corrected row replaces it.
       </p>
+      <form action={fillAction} className="flex items-center gap-2 border-b border-line pb-2">
+        <button type="submit" disabled={filling} className="text-[12.5px] text-info underline disabled:opacity-50">
+          {filling ? "Recovering…" : "Recover NAV from stored snapshots"}
+        </button>
+        <span className="text-[11.5px] text-ink-3">
+          Daily snapshots already record NAV; this pulls those days into the series.
+        </span>
+        {fillState && (
+          <span className={cn("text-[12px]", fillState.ok ? "text-pos" : "text-ink-3")}>{fillState.message}</span>
+        )}
+      </form>
+
       <form action={action} className="flex flex-col gap-2">
         <textarea
           name="log"

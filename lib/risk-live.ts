@@ -26,6 +26,7 @@
  *                                     Alternatives cards say so.
  */
 import { unstable_cache } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   fetchPortfolioSummary,
   fetchRiskOrders,
@@ -40,7 +41,11 @@ import { getOpenApprovals } from "@/lib/risk-approvals";
 import { getEntryDates, getThetaAverage, type EntryRecord } from "@/lib/risk-history";
 import {
   annualizedVolatility,
+  calendarYearStart,
+  chainLink,
   getNavSeries,
+  periodStart,
+  sliceSeries,
   type NavSeries,
 } from "@/lib/risk-nav";
 import {
@@ -57,6 +62,8 @@ import {
   type BrokerOrder,
   type DataFeed,
   type EnrichedPosition,
+  type HeadlinePerformance,
+  type HistoryPoint,
   type MonitorValueMap,
   type OptionDetail,
   type PositionApproval,
@@ -235,7 +242,10 @@ async function enrichPositions(params: {
     );
 
     const absQuantity = Math.abs(p.quantity);
-    const costBasis = p.avgCost * absQuantity * (option ? option.multiplier : 1);
+    // Same reasoning as lib/market-data.ts: averagePrice carries each
+    // instrument's own quoting convention, so the cost basis is taken from
+    // the two dollar figures instead.
+    const costBasis = Math.abs(p.marketValue - p.unrealizedPnl);
 
     // Schwab's unrealizedPnlPct is already sign-corrected for shorts (a rise
     // in a shorted name comes back negative), which is exactly the §6 rule.
@@ -439,6 +449,33 @@ async function computeVar(
   return { fundDollars: (pct / 100) * nav, fundPct: pct, perSymbol, observations, missing, coveragePct };
 }
 
+/**
+ * The stored daily series behind the NAV, exposure and volatility charts.
+ *
+ * Read from risk_snapshots rather than recomputed, per §6 Storage — a chart in
+ * a board report has to show what was true on each day, not what today's
+ * weights would have implied on each day.
+ */
+async function loadHistory(): Promise<HistoryPoint[]> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("risk_snapshots")
+      .select("captured_on, nav, net_pct, gross_pct, annualized_vol")
+      .order("captured_on", { ascending: true })
+      .limit(400);
+    return (data ?? []).map((r) => ({
+      date: r.captured_on as string,
+      nav: r.nav as number | null,
+      netPct: r.net_pct as number | null,
+      grossPct: r.gross_pct as number | null,
+      volPct: r.annualized_vol as number | null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // ── Trading calendar (§4.1, Gov. VIII.c) ──────────────────────────────────
 
 /**
@@ -484,7 +521,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
   // Wave 1: everything that does not need the position list. Orders in
   // particular used to wait behind the portfolio fetch and the token load for
   // no reason — nothing about an order query depends on what we hold.
-  const [portfolio, token, rawOrders, approvals, navSeries, tbill, thetaAvg] = await Promise.all([
+  const [portfolio, token, rawOrders, approvals, navSeries, tbill, thetaAvg, history] = await Promise.all([
     fetchPortfolioSummary(),
     getValidTraderToken(),
     fetchRiskOrders().catch(() => null),
@@ -492,6 +529,7 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     getNavSeries(),
     fetchTreasuryRate(),
     getThetaAverage(THETA_WINDOW_DAYS),
+    loadHistory(),
   ]);
 
   if (!portfolio) {
@@ -591,6 +629,19 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     portfolio.marginBalance == null ? null : portfolio.marginBalance < 0 ? Math.abs(portfolio.marginBalance) : 0;
   const cashSource = portfolio.availableFunds ?? portfolio.cashAvailable ?? null;
   const cashPct = cashSource != null && nav > 0 ? (cashSource / nav) * 100 : null;
+
+  // §5.1 headline: NAV is the one number missing from the board entirely, and
+  // the day's P&L is what anyone opening it looks for first.
+  const dayPnl = Number.isFinite(portfolio.dayPnl) ? portfolio.dayPnl : null;
+  const priorNav = dayPnl != null ? nav - dayPnl : null;
+  const performance: HeadlinePerformance = {
+    dayPnl,
+    dayPnlPct: priorNav != null && priorNav > 0 ? (dayPnl! / priorNav) * 100 : null,
+    mtdPct: chainLink(sliceSeries(navSeries, periodStart("mtd", now)).returns),
+    ytdPct: chainLink(sliceSeries(navSeries, calendarYearStart(now)).returns),
+    mtdDays: sliceSeries(navSeries, periodStart("mtd", now)).observations,
+    ytdDays: sliceSeries(navSeries, calendarYearStart(now)).observations,
+  };
 
   const values: MonitorValueMap = {
     "gross-exposure": exposure.grossPct,
@@ -699,6 +750,8 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     hasLiveData: true,
     nav,
     navAsOf: portfolio.verifiedAt,
+    performance,
+    history,
     exposure,
     sectors,
     positions: positionRows,

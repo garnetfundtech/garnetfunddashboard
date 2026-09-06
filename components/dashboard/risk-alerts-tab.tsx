@@ -20,6 +20,14 @@ import {
 import { NOTIFY_RECIPIENTS, type RiskStatus } from "@/lib/risk-parameters";
 import type { MonitorRow, PositionRow, RiskModel, SectorRow } from "@/lib/risk-engine";
 import type { AlertLogRow } from "@/lib/risk-episodes";
+import type { CatalystFeed } from "@/lib/risk-catalysts";
+import { PositionSizeChart, SectorGrossChart } from "@/components/dashboard/risk-position-chart";
+import {
+  CatalystPanel,
+  ExposureHistoryChart,
+  NavHeader,
+  VolatilityCard,
+} from "@/components/dashboard/risk-overview";
 import { acknowledgeEpisodeAction, confirmAllocationBreachAction } from "@/app/(dashboard)/risk/actions";
 
 // ── §4.1 Portfolio-level limit strip ──────────────────────────────────────
@@ -83,14 +91,32 @@ function LimitStrip({ model }: { model: RiskModel }) {
             <p className="text-[12px] text-ink-3">{group.blurb}</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {group.rows.map((row) => (
-              <MonitorCard key={row.monitor.id} row={row} asOf={model.navAsOf} />
-            ))}
+            {group.rows
+              .filter((row) => row.monitor.id !== "annualized-volatility")
+              .map((row) => (
+                <MonitorCard key={row.monitor.id} row={row} asOf={model.navAsOf} />
+              ))}
+            {/* Volatility carries a floor and a sparkline the generic card
+                cannot express, so it renders in place with its own card. */}
+            {group.rows.some((r) => r.monitor.id === "annualized-volatility") && (
+              <VolatilityCard
+                value={findVol(model)?.value ?? null}
+                status={findVol(model)?.status ?? "na"}
+                floor={model.config.values.volatility_floor}
+                cap={model.config.values.volatility_cap}
+                history={model.history}
+                note={findVol(model)?.degradedReason ?? null}
+              />
+            )}
           </div>
         </section>
       ))}
     </div>
   );
+}
+
+function findVol(model: RiskModel): MonitorRow | undefined {
+  return model.monitors.flatMap((g) => g.rows).find((r) => r.monitor.id === "annualized-volatility");
 }
 
 // ── Sector breakdown ──────────────────────────────────────────────────────
@@ -110,10 +136,13 @@ function SectorTable({ sectors, cap }: { sectors: SectorRow[]; cap: number | nul
         <thead>
           <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
             <th className="px-2.5 py-1.5 font-medium">Sector</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Positions</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Long</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Short</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Gross</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Gross $</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Net</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Net $</th>
           </tr>
         </thead>
         <tbody>
@@ -123,12 +152,15 @@ function SectorTable({ sectors, cap }: { sectors: SectorRow[]; cap: number | nul
             return (
               <tr key={s.sector} className="border-b border-line last:border-b-0">
                 <td className="px-2.5 py-1.5 text-[13px] text-ink">{s.sector}</td>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">{s.count || "—"}</td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(s.longPct)}</td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(s.shortPct)}</td>
                 <td className={cn("px-2.5 py-1.5 text-right num text-[13px] font-medium", STATUS_TEXT[status])}>
                   {fmtPct(s.grossPct)}
                 </td>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">{fmtUsd(s.grossUsd, true)}</td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(s.netPct)}</td>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">{fmtUsd(s.netUsd, true)}</td>
               </tr>
             );
           })}
@@ -136,6 +168,21 @@ function SectorTable({ sectors, cap }: { sectors: SectorRow[]; cap: number | nul
       </table>
     </TableShell>
   );
+}
+
+/**
+ * How far the price has to fall (for a long) or rise (for a short) before the
+ * resting stop triggers, as a percentage of the current price. Positive means
+ * the stop is still below a long; a negative number means the stop level has
+ * already been passed and the fill is pending.
+ */
+function distanceToStop(row: PositionRow): number | null {
+  const { expected } = row.stop;
+  const price = row.position.price;
+  if (expected == null || !(price > 0)) return null;
+  return row.position.side === "long"
+    ? ((price - expected) / price) * 100
+    : ((expected - price) / price) * 100;
 }
 
 /** §4.2 holding period — display only, from the entry date the stored record
@@ -170,6 +217,10 @@ function PositionTable({
     () => ["All", ...new Set(model.positions.map((r) => r.position.sector))],
     [model.positions],
   );
+
+  // "% of book" is a share of gross exposure, not of NAV — the two answer
+  // different questions and the table now shows both.
+  const grossUsd = model.exposure?.grossUsd ?? 0;
 
   const rows = model.positions.filter((r) => {
     if (team !== "All" && r.position.team !== team.toLowerCase()) return false;
@@ -222,9 +273,13 @@ function PositionTable({
             <th className="px-2.5 py-1.5 text-right font-medium">Qty</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Price</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Market value</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Cost basis</th>
             <th className="px-2.5 py-1.5 text-right font-medium">% NAV</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">% book</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Approved</th>
             <th className="px-2.5 py-1.5 text-right font-medium">P&amp;L vs cost</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">Stop price</th>
+            <th className="px-2.5 py-1.5 text-right font-medium">To stop</th>
             <th className="px-2.5 py-1.5 font-medium">Stop order</th>
             <th className="px-2.5 py-1.5 font-medium">Stop-loss</th>
             <th className="px-2.5 py-1.5 text-right font-medium">VaR share</th>
@@ -232,6 +287,7 @@ function PositionTable({
             <th className="px-2.5 py-1.5 text-right font-medium">DTE</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Max loss</th>
             <th className="px-2.5 py-1.5 font-medium">Maturity</th>
+            <th className="px-2.5 py-1.5 font-medium">Entry</th>
             <th className="px-2.5 py-1.5 text-right font-medium">Held</th>
             {canEdit && <th className="px-2.5 py-1.5" />}
           </tr>
@@ -239,7 +295,7 @@ function PositionTable({
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={canEdit ? 21 : 20} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
+              <td colSpan={canEdit ? 26 : 25} className="px-3 py-12 text-center text-[13.5px] text-ink-3">
                 {!model.hasLiveData
                   ? "No live position data."
                   : model.positions.length === 0 && !fullBoard
@@ -280,20 +336,32 @@ function PositionTable({
                 </td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtUsd(p.price)}</td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtUsd(p.marketValue, true)}</td>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">{fmtUsd(p.costBasis, true)}</td>
                 <Cell status={sizeRule.status} className="text-right font-medium">
                   {sizeRule.display}
                 </Cell>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">
+                  {grossUsd > 0 ? fmtPct((Math.abs(p.exposure) / grossUsd) * 100) : "—"}
+                </td>
                 <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">
                   {p.approval?.approved_size_pct != null ? `${p.approval.approved_size_pct}%` : "—"}
                 </td>
                 <Cell status={row.rules["pnl-vs-cost"].status} className="text-right">
                   {row.rules["pnl-vs-cost"].display}
                 </Cell>
+                <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-3">
+                  {row.stop.expected != null ? fmtUsd(row.stop.expected) : "—"}
+                </td>
+                <td
+                  className={cn(
+                    "px-2.5 py-1.5 text-right num text-[13px]",
+                    distanceToStop(row) != null && distanceToStop(row)! <= 10 ? "text-warn" : "text-ink-3",
+                  )}
+                >
+                  {distanceToStop(row) != null ? fmtPct(distanceToStop(row)) : "—"}
+                </td>
                 <Cell status={row.rules["stop-order-present"].status}>
                   {row.rules["stop-order-present"].display}
-                  {row.stop.expected != null && row.rules["stop-order-present"].status === "red" && (
-                    <span className="ml-1 text-[11px] text-ink-3">exp. {fmtUsd(row.stop.expected)}</span>
-                  )}
                 </Cell>
                 <Cell status={row.rules["stop-loss-status"].status}>
                   {row.stopped ? <span className="font-semibold">STOPPED</span> : row.rules["stop-loss-status"].display}
@@ -310,7 +378,10 @@ function PositionTable({
                 <Cell status={row.rules["defined-risk-max-loss"].status} className="text-right">
                   {row.rules["defined-risk-max-loss"].display}
                 </Cell>
-                <td className="px-2.5 py-1.5 text-[12.5px] text-ink-3">{p.maturityDate ?? "—"}</td>
+                <td className="px-2.5 py-1.5 text-[12.5px] text-ink-3">
+                  {p.maturityDate ? p.maturityDate.slice(0, 10) : "—"}
+                </td>
+                <td className="px-2.5 py-1.5 text-[12.5px] text-ink-3">{p.entryDate ?? "—"}</td>
                 <td className="px-2.5 py-1.5 text-right text-[12.5px] text-ink-3">
                   {p.entryDate ? (
                     <span title={`Entered ${p.entryDate}`}>{holdingDays(p.entryDate)}d</span>
@@ -472,24 +543,55 @@ function AlertLog({ rows, canEdit }: { rows: AlertLogRow[]; canEdit: boolean }) 
 export function RiskAlertsTab({
   model,
   alertLog,
+  catalysts,
   canEdit,
   fullBoard,
   onEditApproval,
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
+  catalysts: CatalystFeed;
   canEdit: boolean;
   fullBoard: boolean;
   onEditApproval: (row: PositionRow | null) => void;
 }) {
+  const cfgv = model.config.values;
   return (
     <div className="flex flex-col gap-3">
+      {/* NAV and P&L lead: they are what a reader looks for before any limit,
+          and they were missing from the board entirely. */}
+      {fullBoard && (
+        <NavHeader nav={model.nav} performance={model.performance} history={model.history} />
+      )}
+
       {/* The limit strip, sector breakdown and alert log are fund-wide, so
           they belong to the roles with the full board [Spec §6]. */}
       {fullBoard && <LimitStrip model={model} />}
+
+      <PositionSizeChart
+        rows={model.positions}
+        longCap={cfgv.long_cap}
+        shortCap={cfgv.short_cap}
+      />
+
       <PositionTable model={model} canEdit={canEdit} fullBoard={fullBoard} onEdit={onEditApproval} />
-      {fullBoard && <SectorTable sectors={model.sectors} cap={model.config.values.sector_cap} />}
-      {fullBoard && <AlertLog rows={alertLog} canEdit={canEdit} />}
+
+      {fullBoard && (
+        <>
+          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+            <ExposureHistoryChart
+              history={model.history}
+              grossCap={cfgv.gross_cap}
+              netMin={cfgv.net_min}
+              netMax={cfgv.net_max}
+            />
+            <SectorGrossChart rows={model.sectors} cap={cfgv.sector_cap} />
+          </div>
+          <SectorTable sectors={model.sectors} cap={cfgv.sector_cap} />
+          <CatalystPanel feed={catalysts} />
+          <AlertLog rows={alertLog} canEdit={canEdit} />
+        </>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { getRiskModel } from "@/lib/risk-live";
 import type { RiskModel } from "@/lib/risk-engine";
 import { getAlertLog } from "@/lib/risk-episodes";
 import { getNavSeries } from "@/lib/risk-nav";
+import { getCatalysts } from "@/lib/risk-catalysts";
 import { buildReportingModel, REPORT_PACKS, type PeriodKey } from "@/lib/risk-reporting";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,10 @@ export default async function RiskPage({
         row.subject ? model.positions.some((p) => p.position.symbol === row.subject) : false,
       );
 
+  // Catalysts are scoped to what the reader can see: an analyst gets the
+  // earnings dates of their own names, not the whole book's.
+  const catalysts = await getCatalysts(model.positions.map((p) => p.position.symbol));
+
   // Built from the whole book, and only for the roles that can open Tab 2.
   // An analyst never gets one, so the fund-wide figures never reach their
   // browser as a serialized prop for a tab they cannot see.
@@ -98,6 +103,7 @@ export default async function RiskPage({
     <RiskDashboard
       model={model}
       alertLog={alertLog}
+      catalysts={catalysts}
       fullBoard={fullBoard}
       report={report}
       tab={tab}

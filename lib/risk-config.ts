@@ -55,6 +55,7 @@ export type ConfigKey =
   | "net_yellow_high"
   | "volatility_cap"
   | "volatility_yellow"
+  | "volatility_floor"
   | "volatility_window_days"
   // Allocation
   | "equities_target"
@@ -173,6 +174,16 @@ export const CONFIG_DEFS: ConfigDef[] = [
     source: "Risk Manager",
     status: "operating",
     section: "exposure",
+  },
+  {
+    key: "volatility_floor",
+    label: "Annualized volatility floor",
+    defaultValue: 6,
+    unit: "%",
+    source: "Risk Manager",
+    status: "operating",
+    section: "exposure",
+    note: "Not an IPS limit and never a breach — the IPS sets only the 12% ceiling. Shown beside it because volatility far below the floor means capital is not being deployed, which is a different problem from taking too much risk.",
   },
   {
     key: "volatility_window_days",

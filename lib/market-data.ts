@@ -273,7 +273,21 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
         const unrealizedPnl = Number(
           (isShort ? p.shortOpenProfitLoss : p.longOpenProfitLoss) ?? p.longOpenProfitLoss ?? 0,
         );
-        const costBasis = avgCost * absQty;
+        // Cost basis from two dollar figures the broker reports directly,
+        // rather than from averagePrice × quantity.
+        //
+        // averagePrice is quoted in each instrument's own convention: dollars
+        // per share for an equity, but per 100 of par for a bond. Multiplying
+        // a bond's 100.63 by 95 units gave $9,560 against a $95,026 market
+        // value — a tenfold understatement that made a Treasury down 0.6%
+        // read as down 6%, and would have fired the −30% stop alert on a bond
+        // that had barely moved. marketValue − openProfitLoss is exact in
+        // every convention because both sides are already dollars.
+        //
+        // The absolute value is what makes it work for a short: sold at 100
+        // and now marked at 130 gives (−130) − (−30) = −100, whose magnitude
+        // is the original short-sale value, so the ratio below is −30%.
+        const costBasis = Math.abs(marketValue - unrealizedPnl);
         // Negative pct = losing: for a long that's a drop from cost, for a short
         // that's the name moving against us. Both feed the kill-trigger rows.
         const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
