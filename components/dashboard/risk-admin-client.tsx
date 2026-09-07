@@ -8,12 +8,14 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
 import { GhostBtn } from "@/components/dashboard/buttons";
 import { CONFIG_DEFS, type ConfigDef, type ConfigStatus, type RiskConfig } from "@/lib/risk-config";
+import type { EmailDiagnostics } from "@/lib/notify";
 import {
   saveConfigAction,
   saveBlackoutAction,
   saveCoverageSectorsAction,
   importNavLogAction,
   backfillNavAction,
+  sendTestAlertAction,
 } from "@/app/(dashboard)/risk-admin/actions";
 
 const INPUT = "border border-line bg-surface px-1.5 py-1 text-[12.5px] text-ink";
@@ -197,14 +199,85 @@ function NavImport({ nav }: { nav: NavSummary }) {
   );
 }
 
+/**
+ * Whether a red would actually reach anyone.
+ *
+ * Alerts are rare by design, so a broken mailer stays invisible until the
+ * first real breach — the worst possible moment to find out. This shows the
+ * §4.4 routing as it currently resolves and can send one real test down it.
+ */
+function EmailStatus({ email }: { email: EmailDiagnostics }) {
+  const [state, action, pending] = useActionState(
+    sendTestAlertAction,
+    null as { ok: boolean; message: string } | null,
+  );
+
+  return (
+    <section className="panel flex flex-col gap-2 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="panel-title">Alert delivery</p>
+        <span className={cn("text-[11.5px]", email.configured ? "text-pos" : "text-warn")}>
+          {email.configured ? `${email.host}:${email.port}` : "not configured"}
+        </span>
+      </div>
+
+      {email.configured ? (
+        <p className="text-[12px] text-ink-3">
+          Sending as <span className="text-ink-2">{email.from}</span>. Only a red notifies; yellow states appear on
+          the dashboard and in the alert log and send nothing.
+        </p>
+      ) : (
+        <p className="text-[12px] text-ink-3">
+          Reds are still recorded in the alert log, but nothing is emailed until this is set up.
+        </p>
+      )}
+
+      <ul className="flex flex-col gap-0.5">
+        {email.routing.map((r) => (
+          <li key={r.role} className="flex items-baseline justify-between gap-3 text-[12px]">
+            <span className="text-ink-2">{r.role}</span>
+            <span className={cn("num", r.addresses.length ? "text-ink-3" : "text-warn")}>
+              {r.addresses.length ? r.addresses.join(", ") : "nowhere"}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {email.problems.length > 0 && (
+        <ul className="flex flex-col gap-0.5 border-t border-line pt-2">
+          {email.problems.map((p) => (
+            <li key={p} className="text-[11.5px] text-warn">
+              {p}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form action={action} className="flex items-center gap-2 border-t border-line pt-2">
+        <button
+          type="submit"
+          disabled={pending || !email.configured}
+          className="text-[12.5px] text-pos underline disabled:opacity-40"
+        >
+          {pending ? "Sending…" : "Send a test alert"}
+        </button>
+        <span className="text-[11.5px] text-ink-3">Goes down the real path, to the Risk Manager tier.</span>
+        {state && <span className={cn("text-[12px]", state.ok ? "text-pos" : "text-neg")}>{state.message}</span>}
+      </form>
+    </section>
+  );
+}
+
 export function RiskAdminClient({
   config,
   history,
   nav,
+  email,
 }: {
   config: RiskConfig;
   history: ConfigHistoryRow[];
   nav: NavSummary;
+  email: EmailDiagnostics;
 }) {
   const sections = [...new Set(CONFIG_DEFS.map((d) => d.section))];
   const pendingCount = CONFIG_DEFS.filter((d) => config.values[d.key] == null).length;
@@ -264,6 +337,8 @@ export function RiskAdminClient({
       })}
 
       <NavImport nav={nav} />
+
+      <EmailStatus email={email} />
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         <section className="panel flex flex-col gap-2 p-3">

@@ -48,6 +48,14 @@ export type ResolvedRecipients = {
  * the Risk Manager alone and the escalation is a separate, human-triggered
  * action from the alert log.
  */
+/** The address configured for one §4.4 role, independent of any tier. */
+export function addressesForRole(role: string): string[] {
+  const env = ROLE_ENV[role];
+  const value = (env ? process.env[env] : undefined) || process.env.RISK_ALERT_EMAIL;
+  if (!value) return [];
+  return value.split(",").map((a) => a.trim()).filter(Boolean);
+}
+
 export function resolveRecipients(tier: Exclude<NotifyTier, "none">): ResolvedRecipients {
   const fallback = process.env.RISK_ALERT_EMAIL;
   const roles = NOTIFY_RECIPIENTS[tier].filter((r) => !r.includes("after confirmation"));
@@ -284,4 +292,88 @@ export async function sendAllocationEscalation(params: {
     recipients: addresses,
     unresolved: addresses.length ? [] : ["President", "Faculty Advisor"],
   };
+}
+
+export type EmailDiagnostics = {
+  configured: boolean;
+  host: string;
+  port: number;
+  user: string | null;
+  from: string | null;
+  /** Every §4.4 role and the address it currently resolves to. */
+  routing: { role: string; addresses: string[] }[];
+  problems: string[];
+};
+
+/**
+ * What the alert mailer would actually do, without sending anything.
+ *
+ * Alerts are rare by design, so a misconfiguration would otherwise stay hidden
+ * until the first real breach — the worst possible moment to discover that
+ * nothing was ever delivered.
+ */
+export function inspectEmailConfig(): EmailDiagnostics {
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT || 465);
+  const user = process.env.SMTP_USER ?? null;
+  const pass = process.env.SMTP_APP_PASSWORD ?? null;
+  const problems: string[] = [];
+
+  if (!user) problems.push("SMTP_USER is not set.");
+  if (!pass) problems.push("SMTP_APP_PASSWORD is not set.");
+
+  const from = user ? senderAddress(user) : null;
+  if (user && !from) {
+    problems.push(
+      `SMTP_USER "${user}" is not an email address and RISK_EMAIL_FROM is unset, so there is no valid From address.`,
+    );
+  }
+
+  // Each role's own address, not the combined list of whichever tier it
+  // happens to sit in — showing the tier's aggregate next to "President"
+  // implies the President is reachable when only the Risk Manager is.
+  const roles = [...new Set(Object.values(NOTIFY_RECIPIENTS).flat())].filter(
+    (r) => !r.includes("after confirmation"),
+  );
+  const routing = roles.map((role) => ({ role, addresses: addressesForRole(role) }));
+  for (const { role, addresses } of routing) {
+    if (!addresses.length) problems.push(`No address configured for "${role}" — alerts routed there go nowhere.`);
+  }
+
+  return { configured: Boolean(user && pass && from), host, port, user, from, routing, problems };
+}
+
+/**
+ * Sends one test message through the real alert path, so a green result means
+ * a genuine red would also arrive.
+ */
+export async function sendTestAlert(to: string[]): Promise<{ ok: boolean; message: string }> {
+  const diag = inspectEmailConfig();
+  if (!diag.configured) {
+    return { ok: false, message: diag.problems.join(" ") || "Mailer is not configured." };
+  }
+  if (!to.length) return { ok: false, message: "No recipient resolved to send a test to." };
+
+  const body = [
+    "This is a test of the Garnet Fund risk alert mailer.",
+    "",
+    "If you are reading it, a real breach notification will reach you too.",
+    "",
+    `Sender:     ${diag.from}`,
+    `SMTP host:  ${diag.host}:${diag.port}`,
+    `Recipients: ${to.join(", ")}`,
+    "",
+    "Only a red notifies. Yellow states appear on the dashboard and in the",
+    "alert log and send nothing.",
+  ].join("\n");
+
+  try {
+    const sent = await sendEmail(to, "[Garnet Fund Risk] Test — alert delivery check", body);
+    if (!sent) return { ok: false, message: "The mailer declined to send. Check SMTP credentials." };
+    return { ok: true, message: `Test sent to ${to.join(", ")}. Check the inbox, and the spam folder.` };
+  } catch (err) {
+    // The SMTP server's own rejection is the single most useful thing here —
+    // it names a bad app password or an unverified sender directly.
+    return { ok: false, message: err instanceof Error ? err.message : "Send failed." };
+  }
 }

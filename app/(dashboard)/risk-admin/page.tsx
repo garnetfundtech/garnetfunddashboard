@@ -1,6 +1,7 @@
 import { enforceNavAccess } from "@/lib/dashboard-guard";
 import { getRiskConfig } from "@/lib/risk-config";
 import { getNavSeries } from "@/lib/risk-nav";
+import { inspectEmailConfig } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RiskAdminClient, type ConfigHistoryRow } from "@/components/dashboard/risk-admin-client";
 
@@ -51,6 +52,7 @@ export default async function RiskAdminPage() {
         last: navSeries.points.at(-1)?.captured_on ?? null,
         manual: navSeries.points.filter((p) => p.source === "manual").length,
       }}
+      email={inspectEmailConfig()}
     />
   );
 }

@@ -5,6 +5,7 @@ import { requireApprovedProfile } from "@/lib/auth";
 import { isRiskManager } from "@/lib/nav-access";
 import { updateRiskConfig, type ConfigKey } from "@/lib/risk-config";
 import { backfillNavFromSnapshots, importNavLog } from "@/lib/risk-nav";
+import { resolveRecipients, sendTestAlert } from "@/lib/notify";
 
 /**
  * §7: "The Risk Manager holds sole edit rights, and every change must be
@@ -125,4 +126,11 @@ export async function backfillNavAction(_prev: unknown, _formData: FormData) {
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Backfill failed." };
   }
+}
+
+/** Sends one test alert down the real path, to the Risk Manager's own tier. */
+export async function sendTestAlertAction(_prev: unknown, _formData: FormData) {
+  await requireRiskManager();
+  const { addresses } = resolveRecipients("close");
+  return sendTestAlert(addresses);
 }
