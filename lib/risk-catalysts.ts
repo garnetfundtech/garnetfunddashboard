@@ -12,8 +12,7 @@
  * unexplained blank — the same rule §1 applies to every other card.
  */
 import { fetchEarningsCalendar } from "@/lib/fmp";
-
-const FMP_BASE = "https://financialmodelingprep.com/stable";
+import { fetchFredCalendar } from "@/lib/fred";
 
 export type CatalystKind = "macro" | "earnings";
 
@@ -29,97 +28,7 @@ export type Catalyst = {
   held: boolean;
 };
 
-/**
- * The macro releases worth surfacing. FMP's economic calendar carries hundreds
- * of series a week, the overwhelming majority of which nobody trades; this is
- * the shortlist a long/short book actually reacts to.
- */
-const MACRO_PATTERNS: { pattern: RegExp; label: string }[] = [
-  { pattern: /consumer price index|^cpi\b|core cpi/i, label: "CPI" },
-  { pattern: /producer price index|^ppi\b/i, label: "PPI" },
-  { pattern: /pce price index|core pce/i, label: "PCE" },
-  { pattern: /fomc|federal funds rate|interest rate decision|rate decision/i, label: "FOMC" },
-  { pattern: /non.?farm payroll|employment change|unemployment rate/i, label: "Employment" },
-  { pattern: /\bgdp\b/i, label: "GDP" },
-  { pattern: /initial jobless claims/i, label: "Jobless claims" },
-  { pattern: /ism (manufacturing|services)/i, label: "ISM" },
-  { pattern: /retail sales/i, label: "Retail sales" },
-  { pattern: /consumer confidence|consumer sentiment/i, label: "Consumer sentiment" },
-];
-
-function classifyMacro(event: string): string | null {
-  for (const { pattern, label } of MACRO_PATTERNS) {
-    if (pattern.test(event)) return label;
-  }
-  return null;
-}
-
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-/**
- * US macro releases in the window, filtered to the shortlist above.
- *
- * Only US events: the fund is a US long/short book, and a German ZEW print in
- * the list is noise that makes the ones that matter harder to see.
- */
-async function fetchMacroCalendar(days: number): Promise<{ items: Catalyst[]; restricted: boolean }> {
-  const key = process.env.FMP_API_KEY;
-  if (!key) return { items: [], restricted: false };
-
-  const from = iso(new Date());
-  const to = iso(new Date(Date.now() + days * 86_400_000));
-  const url = `${FMP_BASE}/economic-calendar?from=${from}&to=${to}&apikey=${encodeURIComponent(key)}`;
-
-  try {
-    const res = await fetch(url, { next: { revalidate: 21_600 } });
-    // 402 is FMP's "not on your plan". Distinguished from any other failure
-    // because it is permanent until someone upgrades, and a panel that just
-    // shows nothing gives the reader no way to know that.
-    if (res.status === 402 || res.status === 403) return { items: [], restricted: true };
-    if (!res.ok) return { items: [], restricted: false };
-    const rows = (await res.json()) as Record<string, unknown>[];
-    if (!Array.isArray(rows)) return { items: [], restricted: false };
-
-    const out: Catalyst[] = [];
-    for (const row of rows) {
-      const country = String(row.country ?? "").toUpperCase();
-      if (country && country !== "US" && country !== "USA" && country !== "UNITED STATES") continue;
-
-      const event = String(row.event ?? "");
-      const label = classifyMacro(event);
-      if (!label) continue;
-
-      const raw = String(row.date ?? "");
-      const date = raw.slice(0, 10);
-      if (!date) continue;
-
-      const impactRaw = String(row.impact ?? "").toLowerCase();
-      out.push({
-        date,
-        kind: "macro",
-        label,
-        detail: event,
-        impact: impactRaw === "high" || impactRaw === "medium" || impactRaw === "low" ? impactRaw : null,
-        held: false,
-      });
-    }
-
-    // The same release often appears more than once (headline and core), which
-    // is one calendar entry to a reader.
-    const seen = new Set<string>();
-    return {
-      items: out.filter((c) => {
-        const k = `${c.date}:${c.label}`;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      }),
-      restricted: false,
-    };
-  } catch {
-    return { items: [], restricted: false };
-  }
-}
 
 /** Earnings dates, with the fund's own holdings marked. */
 async function fetchHeldEarnings(days: number, held: Set<string>): Promise<Catalyst[]> {
@@ -150,7 +59,7 @@ export type CatalystFeed = {
   available: boolean;
   /** Why the list is empty or partial, when it is. */
   note: string | null;
-  /** The macro feed is a paid endpoint the current plan does not include. */
+  /** True when the macro calendar could not be loaded at all. */
   macroRestricted?: boolean;
 };
 
@@ -160,37 +69,43 @@ export type CatalystFeed = {
  * fund actually owns reporting that morning matters more to this book.
  */
 export async function getCatalysts(heldSymbols: string[], days = 30): Promise<CatalystFeed> {
-  if (!process.env.FMP_API_KEY) {
-    return {
-      items: [],
-      available: false,
-      note: "No market-data API key is configured, so the calendar cannot be loaded.",
-      macroRestricted: false,
-    };
-  }
-
   const held = new Set(heldSymbols.map((s) => s.toUpperCase()));
   const [macro, earnings] = await Promise.all([
-    fetchMacroCalendar(days),
+    fetchFredCalendar(days),
     fetchHeldEarnings(days, held),
   ]);
 
-  const items = [...earnings, ...macro.items].sort((a, b) => {
+  const macroItems: Catalyst[] = macro.items.map((m) => ({
+    date: m.date,
+    kind: "macro",
+    label: m.label,
+    detail: m.name,
+    impact: null,
+    held: false,
+  }));
+
+  const items = [...earnings, ...macroItems].sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     if (a.held !== b.held) return a.held ? -1 : 1;
     return a.label.localeCompare(b.label);
   });
 
-  const macroNote = macro.restricted
-    ? "CPI, FOMC and the other macro releases need a paid market-data plan; this key covers earnings only."
-    : null;
+  // Said plainly rather than left as an absence: FOMC decision dates are not
+  // in FRED's release calendar at all, and a reader who sees CPI and payrolls
+  // listed would otherwise reasonably assume rate decisions were covered too.
+  const notes: string[] = [];
+  if (!macro.available) notes.push(macro.note ?? "The macro calendar is unavailable.");
+  if (macro.dropped.length) {
+    notes.push(`No published forward schedule for: ${macro.dropped.join(", ")}.`);
+  }
+  notes.push("FOMC decision dates are not published in FRED's release calendar.");
+  if (!process.env.FMP_API_KEY) notes.push("Earnings need a market-data API key.");
+  if (!items.length) notes.push(`Nothing else scheduled in the next ${days} days.`);
 
   return {
     items,
-    available: true,
-    note:
-      macroNote ??
-      (items.length ? null : `No tracked releases or holding earnings in the next ${days} days.`),
-    macroRestricted: macro.restricted,
+    available: macro.available || Boolean(process.env.FMP_API_KEY),
+    note: notes.join(" "),
+    macroRestricted: !macro.available,
   };
 }
