@@ -19,6 +19,14 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { NotifyTier } from "@/lib/risk-parameters";
 import { NOTIFY_RECIPIENTS } from "@/lib/risk-parameters";
+import {
+  batchAlertEmail,
+  escalationEmail,
+  immediateAlertEmail,
+  testAlertEmail,
+  type AlertEmail,
+  type EmailBreach,
+} from "@/lib/risk-email";
 
 export type NotificationChannel = "console" | "email" | "push";
 
@@ -31,6 +39,25 @@ const ROLE_ENV: Record<string, string> = {
   "President (after confirmation)": "RISK_EMAIL_PRESIDENT",
   "Faculty Advisor (after confirmation)": "RISK_EMAIL_FACULTY",
 };
+
+/**
+ * Addresses added to every message regardless of which §4.4 tier fired.
+ *
+ * The routing table decides who is responsible for acting on a breach; this is
+ * separate, for whoever needs a copy of everything — the person maintaining
+ * the system, and an archive of what was actually sent. Comma-separated.
+ */
+function alwaysRecipients(): string[] {
+  const raw = process.env.RISK_EMAIL_ALWAYS;
+  if (!raw) return [];
+  return raw.split(",").map((a) => a.trim()).filter(Boolean);
+}
+
+/** The board, for the button in every alert. */
+function dashboardUrl(): string | null {
+  const base = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  return base ? `${base}/risk` : null;
+}
 
 export type ResolvedRecipients = {
   addresses: string[];
@@ -69,7 +96,7 @@ export function resolveRecipients(tier: Exclude<NotifyTier, "none">): ResolvedRe
     if (resolved) addresses.push(...resolved.split(",").map((a) => a.trim()).filter(Boolean));
     else unresolved.push(role);
   }
-  return { addresses: [...new Set(addresses)], roles, unresolved };
+  return { addresses: [...new Set([...addresses, ...alwaysRecipients()])], roles, unresolved };
 }
 
 /** One red, ready to send. */
@@ -83,6 +110,17 @@ export type AlertMessage = {
   tier: Exclude<NotifyTier, "none">;
   source: string;
 };
+
+/** An alert as the email templates want it. */
+function toBreach(a: AlertMessage): EmailBreach {
+  return {
+    label: a.label,
+    subject: a.subject,
+    value: a.value,
+    limitText: a.limitText,
+    source: a.source,
+  };
+}
 
 function lineFor(a: AlertMessage): string {
   const where = a.subject ? ` — ${a.subject}` : "";
@@ -125,7 +163,7 @@ function senderAddress(user: string): string | null {
   return `Garnet Fund Risk <${user}>`;
 }
 
-async function sendEmail(to: string[], subject: string, body: string): Promise<boolean> {
+async function sendEmail(to: string[], subject: string, body: string, html?: string): Promise<boolean> {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || 465);
   const user = process.env.SMTP_USER;
@@ -154,6 +192,7 @@ async function sendEmail(to: string[], subject: string, body: string): Promise<b
     to: to.join(", "),
     subject,
     text: body,
+    ...(html ? { html } : {}),
   });
   return true;
 }
@@ -181,20 +220,20 @@ export type SendResult = { sent: boolean; recipients: string[]; unresolved: stri
 export async function sendImmediate(alert: AlertMessage): Promise<SendResult> {
   const { addresses, unresolved } = resolveRecipients(alert.tier);
   const heading = alert.subject ? `${alert.label} — ${alert.subject}` : alert.label;
-  const body = [
-    `RED — ${lineFor(alert)}`,
-    "",
-    "Detected immediately. This is one of the intraday-sensitive limits in IPS §4.4.",
-    "No further message will be sent while this episode stays open.",
-  ].join("\n");
 
-  const sent = await sendEmail(addresses, `[Garnet Fund Risk] RED — ${heading}`, body).catch(() => false);
+  const mail = immediateAlertEmail({
+    breach: toBreach(alert),
+    recipients: addresses,
+    dashboardUrl: dashboardUrl(),
+  });
+
+  const sent = await sendEmail(addresses, mail.subject, mail.text, mail.html).catch(() => false);
   await sendPush(`Garnet Fund Risk: ${heading}`, lineFor(alert));
 
   await logNotification({
     monitorId: alert.monitorId,
     subject: alert.subject,
-    message: body,
+    message: mail.text,
     channel: sent ? "email" : "console",
     recipients: addresses,
   });
@@ -219,26 +258,20 @@ export async function sendCloseOfDayBatch(alerts: AlertMessage[]): Promise<SendR
   for (const [tier, group] of byTier) {
     const { addresses, unresolved } = resolveRecipients(tier);
     const chain = tier === "close-chain";
-    const body = [
-      `${group.length} limit${group.length === 1 ? "" : "s"} entered RED today.`,
-      "",
-      ...group.map((a) => `• ${lineFor(a)}`),
-      "",
-      chain
-        ? "IPS VIII.b requires the Risk Manager to confirm this breach before the President and Faculty Advisor are notified. Confirm it from the alert log to escalate."
-        : "Each of these is one episode. No further message will be sent while it stays open, and none when it returns to green.",
-    ].join("\n");
 
-    const sent = await sendEmail(
-      addresses,
-      `[Garnet Fund Risk] Close of day — ${group.length} red${group.length === 1 ? "" : "s"}`,
-      body,
-    ).catch(() => false);
+    const mail = batchAlertEmail({
+      breaches: group.map(toBreach),
+      recipients: addresses,
+      requiresConfirmation: chain,
+      dashboardUrl: dashboardUrl(),
+    });
+
+    const sent = await sendEmail(addresses, mail.subject, mail.text, mail.html).catch(() => false);
 
     await logNotification({
       monitorId: "close-of-day-batch",
       subject: null,
-      message: body,
+      message: mail.text,
       channel: sent ? "email" : "console",
       recipients: addresses,
     });
@@ -263,26 +296,22 @@ export async function sendAllocationEscalation(params: {
 }): Promise<SendResult> {
   const president = process.env.RISK_EMAIL_PRESIDENT || process.env.RISK_ALERT_EMAIL;
   const faculty = process.env.RISK_EMAIL_FACULTY || process.env.RISK_ALERT_EMAIL;
-  const addresses = [...new Set([president, faculty].filter(Boolean) as string[])].flatMap((a) =>
-    a.split(",").map((x) => x.trim()).filter(Boolean),
-  );
+  const addresses = [
+    ...new Set([
+      ...[president, faculty]
+        .filter(Boolean)
+        .flatMap((a) => (a as string).split(",").map((x) => x.trim()).filter(Boolean)),
+      ...alwaysRecipients(),
+    ]),
+  ];
 
-  const body = [
-    `The Risk Manager has confirmed an allocation breach [IPS VIII.b].`,
-    "",
-    `${params.label}: ${params.value} against ${params.limitText}`,
-    "",
-    `Risk Manager's note: ${params.note || "(none)"}`,
-    `Confirmed by: ${params.confirmedBy}`,
-  ].join("\n");
+  const mail = escalationEmail({ ...params, recipients: addresses, dashboardUrl: dashboardUrl() });
 
-  const sent = await sendEmail(addresses, `[Garnet Fund Risk] Confirmed breach — ${params.label}`, body).catch(
-    () => false,
-  );
+  const sent = await sendEmail(addresses, mail.subject, mail.text, mail.html).catch(() => false);
   await logNotification({
     monitorId: "allocation-escalation",
     subject: null,
-    message: body,
+    message: mail.text,
     channel: sent ? "email" : "console",
     recipients: addresses,
   });
@@ -354,21 +383,15 @@ export async function sendTestAlert(to: string[]): Promise<{ ok: boolean; messag
   }
   if (!to.length) return { ok: false, message: "No recipient resolved to send a test to." };
 
-  const body = [
-    "This is a test of the Garnet Fund risk alert mailer.",
-    "",
-    "If you are reading it, a real breach notification will reach you too.",
-    "",
-    `Sender:     ${diag.from}`,
-    `SMTP host:  ${diag.host}:${diag.port}`,
-    `Recipients: ${to.join(", ")}`,
-    "",
-    "Only a red notifies. Yellow states appear on the dashboard and in the",
-    "alert log and send nothing.",
-  ].join("\n");
+  const mail = testAlertEmail({
+    recipients: to,
+    sender: diag.from ?? "unknown",
+    transport: `${diag.host}:${diag.port}`,
+    dashboardUrl: dashboardUrl(),
+  });
 
   try {
-    const sent = await sendEmail(to, "[Garnet Fund Risk] Test — alert delivery check", body);
+    const sent = await sendEmail(to, mail.subject, mail.text, mail.html);
     if (!sent) return { ok: false, message: "The mailer declined to send. Check SMTP credentials." };
     return { ok: true, message: `Test sent to ${to.join(", ")}. Check the inbox, and the spam folder.` };
   } catch (err) {
