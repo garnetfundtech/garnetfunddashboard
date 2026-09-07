@@ -30,6 +30,7 @@ type EpisodeRow = {
   value_at_trigger: number | null;
   peak_value: number | null;
   notified_at: string | null;
+  notified: string[] | null;
 };
 
 /** One evaluated reading, flattened out of the model. */
@@ -97,6 +98,21 @@ export function readingsFrom(model: RiskModel): Reading[] {
 
 const key = (monitorId: string, subject: string | null) => `${monitorId}::${subject ?? ""}`;
 
+/**
+ * Whether an episode's notification actually reached anybody.
+ *
+ * A timestamp alone does not mean delivered. An earlier version stamped
+ * notified_at the moment a message was queued for the close-of-day batch,
+ * before its outcome was known, and stamped it again when the mailer had no
+ * credentials at all — leaving four live breaches marked as notified with an
+ * empty recipient list and no way for them ever to be sent.
+ *
+ * Recipients are the evidence: if none were recorded, nobody was told.
+ */
+function wasDelivered(episode: EpisodeRow): boolean {
+  return Boolean(episode.notified_at) && (episode.notified?.length ?? 0) > 0;
+}
+
 export type EpisodeResult = {
   opened: number;
   closed: number;
@@ -132,7 +148,7 @@ export async function evaluateEpisodes(
 
   const { data: openRows } = await admin
     .from("risk_alert_episodes")
-    .select("id, monitor_id, subject, status, opened_at, value_at_trigger, peak_value, notified_at")
+    .select("id, monitor_id, subject, status, opened_at, value_at_trigger, peak_value, notified_at, notified")
     .is("closed_at", null);
 
   const open = new Map<string, EpisodeRow>(
@@ -242,7 +258,7 @@ export async function evaluateEpisodes(
     //
     // So a red episode with no recorded delivery is retried. Once a send
     // succeeds and stamps notified_at, this cannot fire again.
-    if (isRed && !existing.notified_at && reading.tier !== "none") {
+    if (isRed && !wasDelivered(existing) && reading.tier !== "none") {
       const alert = toAlert(reading);
       if (reading.timing === "intraday") {
         const send = await sendImmediate(alert);
