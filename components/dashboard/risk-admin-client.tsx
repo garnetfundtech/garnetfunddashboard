@@ -10,6 +10,11 @@ import { GhostBtn } from "@/components/dashboard/buttons";
 import { CONFIG_DEFS, type ConfigDef, type ConfigStatus, type RiskConfig } from "@/lib/risk-config";
 import type { EmailDiagnostics } from "@/lib/notify";
 import {
+  DECISION_LOG,
+  DECISION_STATE_LABEL,
+  type DecisionState,
+} from "@/lib/risk-decisions";
+import {
   saveConfigAction,
   saveBlackoutAction,
   saveCoverageSectorsAction,
@@ -268,6 +273,60 @@ function EmailStatus({ email }: { email: EmailDiagnostics }) {
   );
 }
 
+const DECISION_TONE: Record<DecisionState, Tone> = {
+  approved: "blue",
+  "in-principle": "amber",
+  undecided: "rose",
+};
+
+/**
+ * §5 of the Wave 2 holding document: limits the board already enforces under
+ * authority the published IPS text does not yet carry, plus the ones nobody
+ * has decided so the board cannot enforce them at all.
+ *
+ * Shown here rather than left in a Word document because an auditor opening
+ * this dashboard would find positions turning red against a 5% short cap that
+ * appears nowhere in the IPS, and because the undecided rows are the reason
+ * three monitors currently refuse to score.
+ */
+function DecisionLog() {
+  const open = DECISION_LOG.filter((d) => d.state === "undecided").length;
+
+  return (
+    <TableShell
+      title="IPS amendments outstanding"
+      count={DECISION_LOG.length}
+      footer={`${open} item${open === 1 ? "" : "s"} nobody has decided — the board cannot enforce those at all. The rest are Committee-approved and await only the IPS text.`}
+    >
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+            <th className="px-2.5 py-1.5 font-medium">Decision</th>
+            <th className="px-2.5 py-1.5 font-medium">Status</th>
+            <th className="px-2.5 py-1.5 font-medium">What the board does today</th>
+            <th className="px-2.5 py-1.5 font-medium">The gap</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DECISION_LOG.map((d) => (
+            <tr key={d.id} className="border-b border-line align-top last:border-b-0">
+              <td className="px-2.5 py-2">
+                <p className="text-[13px] text-ink">{d.title}</p>
+                <p className="mt-0.5 text-[11px] text-ink-3">{d.source}</p>
+              </td>
+              <td className="px-2.5 py-2">
+                <StatusPill label={DECISION_STATE_LABEL[d.state]} tone={DECISION_TONE[d.state]} dot={false} />
+              </td>
+              <td className="px-2.5 py-2 max-w-xs text-[12px] leading-snug text-ink-2">{d.enforcing}</td>
+              <td className="px-2.5 py-2 max-w-sm text-[12px] leading-snug text-ink-3">{d.gap}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableShell>
+  );
+}
+
 export function RiskAdminClient({
   config,
   history,
@@ -387,8 +446,10 @@ export function RiskAdminClient({
         </section>
       </div>
 
+      <DecisionLog />
+
       <TableShell
-        title="Decision log"
+        title="Configuration changes"
         count={history.length}
         footer="Every configuration change, permanently. A limit that moved for no recorded reason is the one that cannot be defended to the Advisory Board."
       >

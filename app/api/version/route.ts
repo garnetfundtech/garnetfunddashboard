@@ -18,14 +18,29 @@ export const dynamic = "force-dynamic";
  */
 export function GET() {
   const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
+  const set = (name: string) => Boolean(process.env[name]?.trim());
 
   return NextResponse.json(
     {
       commit: sha ? sha.slice(0, 7) : "local",
       branch: process.env.VERCEL_GIT_COMMIT_REF ?? "local",
       environment: process.env.VERCEL_ENV ?? "development",
-      builtAt: process.env.VERCEL_DEPLOYMENT_ID ? undefined : "local build",
       now: new Date().toISOString(),
+      // Whether each integration has credentials in THIS environment —
+      // booleans only, never a value. Environment variables are set in a
+      // dashboard rather than in the repo, so there is otherwise no way to
+      // tell from outside whether a key actually landed in production or was
+      // set somewhere the app cannot read, which has already happened once.
+      configured: {
+        supabase: set("NEXT_PUBLIC_SUPABASE_URL") && set("SUPABASE_SERVICE_ROLE_KEY"),
+        schwab: set("SCHWAB_CLIENT_ID") && set("SCHWAB_CLIENT_SECRET"),
+        marketData: set("FMP_API_KEY"),
+        macroCalendar: set("FRED_API_KEY"),
+        cronSecret: set("CRON_SECRET"),
+        alertSmtp: set("SMTP_USER") && set("SMTP_APP_PASSWORD"),
+        alertRecipients: set("RISK_ALERT_EMAIL") || set("RISK_EMAIL_RISK_MANAGER"),
+        alertAlwaysCopy: set("RISK_EMAIL_ALWAYS"),
+      },
     },
     { headers: { "Cache-Control": "no-store" } },
   );
