@@ -24,7 +24,6 @@ import {
   escalationEmail,
   immediateAlertEmail,
   testAlertEmail,
-  type AlertEmail,
   type EmailBreach,
 } from "@/lib/risk-email";
 
