@@ -102,6 +102,8 @@ export type EpisodeResult = {
   closed: number;
   escalated: number;
   notified: number;
+  /** Open reds whose original send never reached anyone, re-sent. */
+  retried: number;
   /** Roles the §4.4 table names but that have no configured address. */
   unresolvedRecipients: string[];
 };
@@ -120,7 +122,9 @@ export async function evaluateEpisodes(
   opts: { onlyTiming?: "intraday" | "close"; closeOfDay?: boolean } = {},
 ): Promise<EpisodeResult> {
   const admin = createAdminClient();
-  const result: EpisodeResult = { opened: 0, closed: 0, escalated: 0, notified: 0, unresolvedRecipients: [] };
+  const result: EpisodeResult = {
+    opened: 0, closed: 0, escalated: 0, notified: 0, retried: 0, unresolvedRecipients: [],
+  };
 
   let readings = readingsFrom(model);
   if (opts.onlyTiming) readings = readings.filter((r) => r.timing === opts.onlyTiming);
@@ -136,6 +140,8 @@ export async function evaluateEpisodes(
   );
 
   const batched: AlertMessage[] = [];
+  /** Episodes re-queued because an earlier send never reached anyone. */
+  const retriedIds: string[] = [];
   const unresolved = new Set<string>();
 
   for (const reading of readings) {
@@ -187,11 +193,13 @@ export async function evaluateEpisodes(
         if (reading.timing === "intraday") {
           const send = await sendImmediate(alert);
           send.unresolved.forEach((r) => unresolved.add(r));
-          await markNotified(admin, inserted?.id ?? null, send.recipients);
+          // Stamped only on a real delivery: an unstamped episode is retried
+          // by the branch above rather than being silently written off.
+          if (send.sent) await markNotified(admin, inserted?.id ?? null, send.recipients);
           result.notified++;
         } else {
           batched.push(alert);
-          await markNotified(admin, inserted?.id ?? null, []);
+          if (inserted?.id) retriedIds.push(inserted.id);
         }
       }
       continue;
@@ -210,14 +218,43 @@ export async function evaluateEpisodes(
         if (reading.timing === "intraday") {
           const send = await sendImmediate(alert);
           send.unresolved.forEach((r) => unresolved.add(r));
-          await markNotified(admin, existing.id, send.recipients);
+          // Same rule as a new episode: stamped only on a real delivery, so a
+          // failed send leaves the episode eligible for retry rather than
+          // recording a notification that never happened.
+          if (send.sent) await markNotified(admin, existing.id, send.recipients);
           result.notified++;
         } else {
           batched.push(alert);
-          await markNotified(admin, existing.id, []);
+          retriedIds.push(existing.id);
         }
       }
       continue;
+    }
+
+    // ── Open, red, and nobody was ever actually told ─────────────────────
+    //
+    // "One message per episode" means one message that reached someone. An
+    // episode opened while the mailer was unconfigured, or during an outage,
+    // has notified nobody — and because it stays open, the ordinary path would
+    // never send anything for it again. The breach would sit red on the board
+    // indefinitely with no one informed, which is the exact failure this
+    // system exists to prevent.
+    //
+    // So a red episode with no recorded delivery is retried. Once a send
+    // succeeds and stamps notified_at, this cannot fire again.
+    if (isRed && !existing.notified_at && reading.tier !== "none") {
+      const alert = toAlert(reading);
+      if (reading.timing === "intraday") {
+        const send = await sendImmediate(alert);
+        send.unresolved.forEach((r) => unresolved.add(r));
+        if (send.sent) {
+          await markNotified(admin, existing.id, send.recipients);
+          result.notified++;
+        }
+      } else {
+        batched.push(alert);
+        retriedIds.push(existing.id);
+      }
     }
 
     // ── Still open at the same tier: track the excursion, send nothing ───
@@ -226,11 +263,21 @@ export async function evaluateEpisodes(
     }
   }
 
-  // One batched email for every close-of-day red that opened today.
+  // One batched email for every close-of-day red that opened today, plus any
+  // whose earlier send never landed.
   if (batched.length && opts.closeOfDay !== false) {
     const sends = await sendCloseOfDayBatch(batched);
     for (const send of sends) send.unresolved.forEach((r) => unresolved.add(r));
     result.notified += batched.length;
+
+    // Only stamp the retries once something actually went out; otherwise they
+    // stay eligible so the next run tries again.
+    const delivered = sends.some((s) => s.sent);
+    if (delivered && retriedIds.length) {
+      const recipients = [...new Set(sends.flatMap((s) => s.recipients))];
+      await Promise.all(retriedIds.map((id) => markNotified(admin, id, recipients)));
+      result.retried = retriedIds.length;
+    }
   }
 
   result.unresolvedRecipients = [...unresolved];

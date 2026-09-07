@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
       opened: episodes?.opened ?? 0,
       closed: episodes?.closed ?? 0,
       escalated: episodes?.escalated ?? 0,
+      retried: episodes?.retried ?? 0,
       notified: episodes?.notified ?? 0,
       unresolvedRecipients: episodes?.unresolvedRecipients ?? [],
     });
