@@ -62,9 +62,9 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
  * Only US events: the fund is a US long/short book, and a German ZEW print in
  * the list is noise that makes the ones that matter harder to see.
  */
-async function fetchMacroCalendar(days: number): Promise<Catalyst[]> {
+async function fetchMacroCalendar(days: number): Promise<{ items: Catalyst[]; restricted: boolean }> {
   const key = process.env.FMP_API_KEY;
-  if (!key) return [];
+  if (!key) return { items: [], restricted: false };
 
   const from = iso(new Date());
   const to = iso(new Date(Date.now() + days * 86_400_000));
@@ -72,9 +72,13 @@ async function fetchMacroCalendar(days: number): Promise<Catalyst[]> {
 
   try {
     const res = await fetch(url, { next: { revalidate: 21_600 } });
-    if (!res.ok) return [];
+    // 402 is FMP's "not on your plan". Distinguished from any other failure
+    // because it is permanent until someone upgrades, and a panel that just
+    // shows nothing gives the reader no way to know that.
+    if (res.status === 402 || res.status === 403) return { items: [], restricted: true };
+    if (!res.ok) return { items: [], restricted: false };
     const rows = (await res.json()) as Record<string, unknown>[];
-    if (!Array.isArray(rows)) return [];
+    if (!Array.isArray(rows)) return { items: [], restricted: false };
 
     const out: Catalyst[] = [];
     for (const row of rows) {
@@ -103,14 +107,17 @@ async function fetchMacroCalendar(days: number): Promise<Catalyst[]> {
     // The same release often appears more than once (headline and core), which
     // is one calendar entry to a reader.
     const seen = new Set<string>();
-    return out.filter((c) => {
-      const k = `${c.date}:${c.label}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+    return {
+      items: out.filter((c) => {
+        const k = `${c.date}:${c.label}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }),
+      restricted: false,
+    };
   } catch {
-    return [];
+    return { items: [], restricted: false };
   }
 }
 
@@ -141,8 +148,10 @@ async function fetchHeldEarnings(days: number, held: Set<string>): Promise<Catal
 export type CatalystFeed = {
   items: Catalyst[];
   available: boolean;
-  /** Why the list is empty, when it is. */
+  /** Why the list is empty or partial, when it is. */
   note: string | null;
+  /** The macro feed is a paid endpoint the current plan does not include. */
+  macroRestricted?: boolean;
 };
 
 /**
@@ -156,6 +165,7 @@ export async function getCatalysts(heldSymbols: string[], days = 30): Promise<Ca
       items: [],
       available: false,
       note: "No market-data API key is configured, so the calendar cannot be loaded.",
+      macroRestricted: false,
     };
   }
 
@@ -165,15 +175,22 @@ export async function getCatalysts(heldSymbols: string[], days = 30): Promise<Ca
     fetchHeldEarnings(days, held),
   ]);
 
-  const items = [...earnings, ...macro].sort((a, b) => {
+  const items = [...earnings, ...macro.items].sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     if (a.held !== b.held) return a.held ? -1 : 1;
     return a.label.localeCompare(b.label);
   });
 
+  const macroNote = macro.restricted
+    ? "CPI, FOMC and the other macro releases need a paid market-data plan; this key covers earnings only."
+    : null;
+
   return {
     items,
     available: true,
-    note: items.length ? null : `No tracked releases or holding earnings in the next ${days} days.`,
+    note:
+      macroNote ??
+      (items.length ? null : `No tracked releases or holding earnings in the next ${days} days.`),
+    macroRestricted: macro.restricted,
   };
 }

@@ -101,12 +101,37 @@ async function logNotification(params: {
   }
 }
 
+/**
+ * The address alerts are sent from.
+ *
+ * Kept separate from the SMTP username because the two are only the same thing
+ * on Gmail. Resend's username is the literal string "resend" for every account,
+ * so deriving the sender from it would put `Garnet Fund Risk <resend>` in the
+ * From header and the send would be rejected outright.
+ */
+function senderAddress(user: string): string | null {
+  const explicit = process.env.RISK_EMAIL_FROM?.trim();
+  if (explicit) return explicit.includes("<") ? explicit : `Garnet Fund Risk <${explicit}>`;
+  // A username that is not an address cannot stand in for one.
+  if (!user.includes("@")) return null;
+  return `Garnet Fund Risk <${user}>`;
+}
+
 async function sendEmail(to: string[], subject: string, body: string): Promise<boolean> {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || 465);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_APP_PASSWORD;
   if (!user || !pass || !to.length) return false;
+
+  const from = senderAddress(user);
+  if (!from) {
+    console.error(
+      `[risk-alert] SMTP_USER "${user}" is not an email address and RISK_EMAIL_FROM is unset, so there is no ` +
+        `valid From address. Set RISK_EMAIL_FROM to a verified sender.`,
+    );
+    return false;
+  }
 
   const nodemailer = await import("nodemailer");
   const transport = nodemailer.createTransport({
@@ -117,7 +142,7 @@ async function sendEmail(to: string[], subject: string, body: string): Promise<b
   });
 
   await transport.sendMail({
-    from: `Garnet Fund Risk <${user}>`,
+    from,
     to: to.join(", "),
     subject,
     text: body,

@@ -310,7 +310,9 @@ export function CatalystPanel({ feed }: { feed: CatalystFeed }) {
           <CalendarDays className="h-3.5 w-3.5 text-ink-3" />
           Upcoming catalysts
         </p>
-        <p className="text-[11.5px] text-ink-3">Next 30 days · holdings and US macro</p>
+        <p className="text-[11.5px] text-ink-3">
+          Next 30 days · {feed.macroRestricted ? "holdings only" : "holdings and US macro"}
+        </p>
       </div>
 
       {byDate.size === 0 ? (
@@ -340,6 +342,13 @@ export function CatalystPanel({ feed }: { feed: CatalystFeed }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* The note explains a partial feed as well as an empty one, so it shows
+          even when there are rows — a calendar missing CPI without saying so
+          reads as "nothing is coming". */}
+      {feed.note && byDate.size > 0 && (
+        <p className="mt-2 border-t border-line pt-2 text-[11.5px] text-ink-3">{feed.note}</p>
       )}
     </section>
   );
