@@ -55,3 +55,12 @@ Tech Logins.xlsx
 
 # Supabase CLI scratch state.
 supabase/.temp/
+
+# This repository is public. Neither of the following is committed, because
+# publishing them is a decision for the fund rather than a side effect of
+# `git add -A`:
+#   - Cooper's specification documents, which are internal governance material.
+#   - The roster invite script, which embeds members' personal email addresses.
+# Remove the relevant line to commit them deliberately.
+*.docx
+scripts/invite-roster.mjs

@@ -117,6 +117,7 @@ export type EpisodeResult = {
   opened: number;
   closed: number;
   escalated: number;
+  /** Alerts that actually reached a recipient — not merely queued. */
   notified: number;
   /** Open reds whose original send never reached anyone, re-sent. */
   retried: number;
@@ -211,8 +212,10 @@ export async function evaluateEpisodes(
           send.unresolved.forEach((r) => unresolved.add(r));
           // Stamped only on a real delivery: an unstamped episode is retried
           // by the branch above rather than being silently written off.
-          if (send.sent) await markNotified(admin, inserted?.id ?? null, send.recipients);
-          result.notified++;
+          if (send.sent) {
+            await markNotified(admin, inserted?.id ?? null, send.recipients);
+            result.notified++;
+          }
         } else {
           batched.push(alert);
           if (inserted?.id) retriedIds.push(inserted.id);
@@ -237,8 +240,10 @@ export async function evaluateEpisodes(
           // Same rule as a new episode: stamped only on a real delivery, so a
           // failed send leaves the episode eligible for retry rather than
           // recording a notification that never happened.
-          if (send.sent) await markNotified(admin, existing.id, send.recipients);
-          result.notified++;
+          if (send.sent) {
+            await markNotified(admin, existing.id, send.recipients);
+            result.notified++;
+          }
         } else {
           batched.push(alert);
           retriedIds.push(existing.id);
@@ -284,11 +289,11 @@ export async function evaluateEpisodes(
   if (batched.length && opts.closeOfDay !== false) {
     const sends = await sendCloseOfDayBatch(batched);
     for (const send of sends) send.unresolved.forEach((r) => unresolved.add(r));
-    result.notified += batched.length;
 
     // Only stamp the retries once something actually went out; otherwise they
     // stay eligible so the next run tries again.
     const delivered = sends.some((s) => s.sent);
+    if (delivered) result.notified += batched.length;
     if (delivered && retriedIds.length) {
       const recipients = [...new Set(sends.flatMap((s) => s.recipients))];
       await Promise.all(retriedIds.map((id) => markNotified(admin, id, recipients)));

@@ -60,21 +60,38 @@ npm run dev
 
 ### Database Baseline
 
-SQL migrations are in:
+SQL migrations are in `supabase/migrations/`, applied in filename order. The
+`APPLY_*.sql` files in that directory are paste-ready combinations of a run of
+migrations, for applying through the Supabase SQL editor rather than the CLI.
 
-`supabase/migrations/0001_initial.sql`  
-`supabase/migrations/0002_governance_and_schwab.sql`  
-`supabase/migrations/0003_policy_and_index_hardening.sql`  
-`supabase/migrations/0004_rls_initplan_tuning.sql`
+Access model: the risk tables are reachable only through the service role in
+server code (`createAdminClient()`). They have row-level security enabled and
+no policy, so the publishable key cannot read or write them — see
+`0023_risk_table_lockdown.sql`. Who may *write* is enforced a layer up, in
+`requireRiskManager()`, which can check a profile role as §6 requires.
 
 ### Deployment
 
-- Production URL: [https://garnetfunddashboard.vercel.app](https://garnetfunddashboard.vercel.app)
-- Health check: [https://garnetfunddashboard.vercel.app/api/health](https://garnetfunddashboard.vercel.app/api/health)
+- Production URL: [https://garnetfunddashboard-gules.vercel.app](https://garnetfunddashboard-gules.vercel.app)
+- Health check: [/api/health](https://garnetfunddashboard-gules.vercel.app/api/health)
+- Which commit is serving, and which integrations have credentials in that
+  environment: [/api/version](https://garnetfunddashboard-gules.vercel.app/api/version)
 - `.vercelignore` is configured to avoid uploading local `.env` files.
 
-### Remaining External Inputs
+### Environment Variables
 
-- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel envs.
-- Add Schwab credentials and set `ENABLE_SCHWAB_SYNC=true` when ready.
-- Seed first `developer` account via invite so admin controls are available immediately.
+Set in Vercel, not in the repo. `/api/version` reports which of these the
+running deployment can actually see, as booleans, so a key set in the wrong
+place is visible from outside.
+
+| Variable | Purpose |
+| --- | --- |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side database access. Every risk table is reachable only through this. |
+| `SCHWAB_CLIENT_ID` / `SCHWAB_CLIENT_SECRET` | Positions, orders and quotes. |
+| `FMP_API_KEY` | 3-month T-bill benchmark. |
+| `FRED_API_KEY` | Macro release calendar (§5.4 catalysts). |
+| `CRON_SECRET` | Required by the daily cron routes; they return 401 without it. |
+| `SMTP_USER` / `SMTP_APP_PASSWORD` | Gmail app password for breach alerts. |
+| `RISK_ALERT_EMAIL` | Where §4.4 routes alerts when a role has no address. |
+| `RISK_EMAIL_ALWAYS` | Copied on every alert, whatever the tier. |
+| `RISK_EMAIL_FROM` | From address, when it differs from `SMTP_USER`. |
