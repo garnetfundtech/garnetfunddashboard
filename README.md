@@ -84,6 +84,11 @@ Set in Vercel, not in the repo. `/api/version` reports which of these the
 running deployment can actually see, as booleans, so a key set in the wrong
 place is visible from outside.
 
+Vercel resolves these at build time, so adding one does not affect the
+deployment already serving — redeploy, then confirm on `/api/version` that the
+boolean has flipped. A variable that stays `false` after a redeploy is set on
+the wrong environment or under a different name, not merely stale.
+
 | Variable | Purpose |
 | --- | --- |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side database access. Every risk table is reachable only through this. |
