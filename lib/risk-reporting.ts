@@ -22,9 +22,42 @@ import {
   periodStart,
   sharpeRatio,
   sliceSeries,
+  dailyReturns,
+  fundCVaR,
+  scaledVaR,
+  sortinoRatio,
+  fundVaR,
+  dollarVolatility,
+  drawdown,
+  type Drawdown,
+  type FundVar,
   type NavSeries,
   type PeriodKey,
+  type VolatilityResult,
+  type WindowedMetric,
 } from "@/lib/risk-nav";
+import {
+  computeWave2,
+  attribution,
+  sizeOverruns,
+  assignmentExposure,
+  type Wave2Analytics,
+  type Attribution,
+  type SizeOverrun,
+  type AssignmentExposure,
+} from "@/lib/risk-wave2";
+import {
+  calmar,
+  hitRate,
+  sluggingRatio,
+  turnover,
+  effectiveBetsPerSide,
+  alphaSplit,
+  type Metric,
+  type SideBets,
+  type AlphaSplit,
+  type ClosedTrade,
+} from "@/lib/risk-phase2";
 import type { RiskModel, SectorRow } from "@/lib/risk-engine";
 import { getRealizedPnl } from "@/lib/risk-history";
 import type { AlertLogRow } from "@/lib/risk-episodes";
@@ -135,6 +168,34 @@ export type ReportingModel = {
   activity: ActivityMetrics;
   /** Snapshots the period is built from — the audit trail for every figure. */
   snapshotCount: number;
+  /**
+   * Wave 2 metrics and the Phase 2 reporting set. Separate from `risk` above
+   * because none of it fires an alert and much of it is unavailable on a
+   * young book — keeping it in its own object means a null here can never be
+   * mistaken for a Wave 1 limit that failed to compute.
+   */
+  wave2: Wave2Section;
+};
+
+export type Wave2Section = {
+  analytics: Wave2Analytics;
+  /** Trailing realized volatility over the short window §3 asks for. */
+  vol20: VolatilityResult;
+  cvar: FundVar;
+  var10Day: FundVar;
+  sortino: WindowedMetric;
+  dollarVolPerDay: number | null;
+  drawdown: Drawdown;
+  attribution: Attribution;
+  overruns: SizeOverrun[];
+  assignment: AssignmentExposure;
+  /** Phase 2 of the alert specification. */
+  calmar: Metric;
+  hitRate: Metric;
+  slugging: Metric;
+  turnover: Metric;
+  effectiveBets: SideBets;
+  alphaSplit: AlphaSplit;
 };
 
 const DAY_MS = 86_400_000;
@@ -318,11 +379,15 @@ export async function buildReportingModel(params: {
   const to = today.toISOString().slice(0, 10);
   const from = periodStart(period, today);
 
-  const [snapshots, stopLossEvents, changes, realized] = await Promise.all([
+  const [snapshots, stopLossEvents, changes, realized, analytics, closedTrades, fills] = await Promise.all([
     loadSnapshots(from),
     loadStopLossEvents(from),
     loadPortfolioChanges(from),
     getRealizedPnl(from),
+    // Never allowed to fail the page: Wave 2 is reporting, Wave 1 is the board.
+    computeWave2(model).catch(() => null),
+    loadClosedTrades(from),
+    loadFills(from),
   ]);
 
   const windowed = sliceSeries(navSeries, from);
@@ -438,6 +503,110 @@ export async function buildReportingModel(params: {
     risk,
     activity,
     snapshotCount: snapshots.length,
+    wave2: buildWave2Section({
+      model, analytics, windowed, navSeries, riskFreePct,
+      closedTrades, fills, periodReturnPct, benchmarkReturnPct: bench,
+    }),
+  };
+}
+
+/** Closed trades in the period, for the Phase 2 hit rate and slugging ratio. */
+async function loadClosedTrades(from: string | null): Promise<ClosedTrade[]> {
+  try {
+    const admin = createAdminClient();
+    let query = admin.from("realized_gains").select("ticker, gain_loss, filled_at");
+    if (from) query = query.gte("filled_at", `${from}T00:00:00Z`);
+    const { data } = await query;
+    return (data ?? []).map((r) => ({
+      ticker: String((r as { ticker: string }).ticker),
+      gainLoss: Number((r as { gain_loss: number }).gain_loss),
+      filledAt: String((r as { filled_at: string }).filled_at),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Filled orders in the period, for turnover. */
+async function loadFills(
+  from: string | null,
+): Promise<{ quantity: number; fillPrice: number; orderTime: string }[]> {
+  try {
+    const admin = createAdminClient();
+    let query = admin.from("order_history").select("quantity, fill_price, order_time").eq("status", "FILLED");
+    if (from) query = query.gte("order_time", `${from}T00:00:00Z`);
+    const { data } = await query;
+    return (data ?? []).map((r) => ({
+      quantity: Number((r as { quantity: number }).quantity),
+      fillPrice: Number((r as { fill_price: number }).fill_price),
+      orderTime: String((r as { order_time: string }).order_time),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function buildWave2Section(input: {
+  model: RiskModel;
+  analytics: Wave2Analytics | null;
+  windowed: NavSeries;
+  navSeries: NavSeries;
+  riskFreePct: number | null;
+  closedTrades: ClosedTrade[];
+  fills: { quantity: number; fillPrice: number; orderTime: string }[];
+  periodReturnPct: number | null;
+  benchmarkReturnPct: number | null;
+}): Wave2Section {
+  const { model, analytics, windowed, navSeries, riskFreePct, closedTrades, fills } = input;
+  const positions = model.positions.map((r) => r.position);
+  const nav = model.nav ?? 0;
+
+  // VaR and CVaR read the full series rather than the selected period: a
+  // 95th-percentile loss estimated from one week of a young fund is not a
+  // shorter-horizon figure, it is an undefined one.
+  const allReturns = navSeries.returns;
+  const vol60 = annualizedVolatility(allReturns, 60);
+  const dd = drawdown(navSeries.points);
+  const oneDayVar = fundVaR(allReturns, nav, 250);
+
+  // Annualized from the period return, so Calmar's numerator and its
+  // drawdown denominator describe the same book.
+  const annualizedReturnPct =
+    input.periodReturnPct == null || windowed.returns.length === 0
+      ? null
+      : input.periodReturnPct * (252 / windowed.returns.length);
+
+  const empty: Wave2Analytics = {
+    beta: null, correlation: null, exAnte: null, factor: null,
+    concentration: { top: [], aboveThreshold: 0, threshold: 8, topFiveSharePct: null },
+    pricedSymbols: [], planRestricted: [], asOf: new Date().toISOString(),
+  };
+
+  return {
+    analytics: analytics ?? empty,
+    vol20: annualizedVolatility(allReturns, 20),
+    cvar: fundCVaR(allReturns, nav, 250),
+    var10Day: scaledVaR(oneDayVar, 10),
+    sortino: sortinoRatio(allReturns, riskFreePct, 60),
+    dollarVolPerDay: dollarVolatility(vol60, nav),
+    drawdown: dd,
+    attribution: attribution(positions, nav),
+    overruns: sizeOverruns(positions),
+    assignment: assignmentExposure(positions, model.exposure?.cashPct != null && nav > 0
+      ? (model.exposure.cashPct / 100) * nav
+      : null, new Date()),
+    calmar: calmar(annualizedReturnPct, dd.maxPct, allReturns.length),
+    hitRate: hitRate(closedTrades),
+    slugging: sluggingRatio(closedTrades),
+    turnover: turnover(fills, navSeries.points),
+    effectiveBets: effectiveBetsPerSide(positions),
+    alphaSplit: alphaSplit({
+      longReturnPct: null,
+      shortReturnPct: null,
+      longBeta: analytics?.beta?.long[60] ?? null,
+      shortBeta: analytics?.beta?.short[60] ?? null,
+      benchmarkReturnPct: input.benchmarkReturnPct,
+    }),
   };
 }
 

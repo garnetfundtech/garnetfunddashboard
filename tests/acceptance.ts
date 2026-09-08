@@ -251,3 +251,44 @@ check("an out-of-the-money short put is not at risk",
   assignmentExposure([pos({ ...shortPut, price: 12 })], 5_000, new Date("2026-09-08T14:00:00Z")).atRisk.length, 0);
 
 console.log(`\n${"═".repeat(64)}\n  TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);
+
+// ─────────────────────────────────────────────────────────────────────────
+section("Phase 2 — reporting metrics");
+import { calmar, hitRate, sluggingRatio, turnover, effectiveBets, alphaSplit } from "@/lib/risk-phase2";
+
+const trades = (wins: number, losses: number, winSize = 300, lossSize = 100) => [
+  ...Array.from({ length: wins }, (_, i) => ({ ticker: `W${i}`, gainLoss: winSize, filledAt: "2026-08-01" })),
+  ...Array.from({ length: losses }, (_, i) => ({ ticker: `L${i}`, gainLoss: -lossSize, filledAt: "2026-08-01" })),
+];
+check("hit rate over 10 wins and 10 losses", hitRate(trades(10, 10)).value, 50);
+check("hit rate withholds below 20 trades", hitRate(trades(3, 2)).value, null);
+check("...and says why", hitRate(trades(3, 2)).note, "needs 20 closed trades, has 5");
+check("slugging is average win over average loss", sluggingRatio(trades(10, 10, 300, 100)).value, 3);
+check("slugging withholds with no losers", sluggingRatio(trades(25, 0)).note, "no losing trades yet");
+check("a breakeven trade does not count as a win", hitRate([...trades(9, 10), { ticker: "B", gainLoss: 0, filledAt: "2026-08-01" }]).value, 45);
+
+check("Calmar withholds under a year", calmar(12, -6, 60).value, null);
+check("Calmar is return over the drawdown magnitude", calmar(12, -6, 250).value, 2);
+check("Calmar withholds with no drawdown", calmar(12, 0, 250).note, "no drawdown yet");
+
+check("effective bets: five equal positions are five bets", Number((effectiveBets([1, 1, 1, 1, 1]).value ?? 0).toFixed(6)), 5);
+check("effective bets: one dominant position is closer to one",
+  Number((effectiveBets([100, 1, 1, 1, 1]).value ?? 0).toFixed(2)), 1.08);
+check("effective bets counts shorts by magnitude", effectiveBets([-1, -1]).value, 2);
+check("effective bets on an empty side", effectiveBets([]).note, "no positions on this side");
+
+const navDays = (n: number) => Array.from({ length: n }, (_, i) => ({ captured_on: `d${i}`, nav: 100_000, external_flow: 0, source: "broker" as const, note: null }));
+check("turnover withholds under 60 NAV days", turnover([], navDays(30)).value, null);
+check("turnover of one full round trip over a year",
+  Number((turnover([{ quantity: 1000, fillPrice: 100, orderTime: "x" }], navDays(252)).value ?? 0).toFixed(1)), 100);
+
+const split = alphaSplit({ longReturnPct: 10, shortReturnPct: -2, longBeta: 1.0, shortBeta: -0.5, benchmarkReturnPct: 6 });
+check("long alpha is the return the beta does not explain", split.longAlphaPct, 4);
+check("short alpha likewise", split.shortAlphaPct, 1);
+check("what the index explains is reported separately, not as alpha", split.factorResiduePct, 3);
+check("no betas means no split, with a reason",
+  alphaSplit({ longReturnPct: 10, shortReturnPct: -2, longBeta: null, shortBeta: null, benchmarkReturnPct: 6 }).note,
+  "betas unavailable — no price history for one or more holdings");
+
+console.log(`\n${"═".repeat(64)}\n  GRAND TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);
+if (failures.length) { console.log("\nAll failures:"); failures.forEach((f) => console.log("  • " + f)); }
