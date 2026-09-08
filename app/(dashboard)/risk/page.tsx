@@ -81,23 +81,28 @@ export default async function RiskPage({
         row.subject ? model.positions.some((p) => p.position.symbol === row.subject) : false,
       );
 
+  // Both need the model, so they could not join the wave above — but they do
+  // not need each other, and running them in series put the catalyst feed's
+  // latency in front of the reporting model's on every load.
+  //
   // Catalysts are scoped to what the reader can see: an analyst gets the
-  // earnings dates of their own names, not the whole book's.
-  const catalysts = await getCatalysts(model.positions.map((p) => p.position.symbol));
-
-  // Built from the whole book, and only for the roles that can open Tab 2.
-  // An analyst never gets one, so the fund-wide figures never reach their
-  // browser as a serialized prop for a tab they cannot see.
-  const report = fullBoard
-    ? await buildReportingModel({
-        period,
-        model: fullModel,
-        navSeries,
-        alertLog: fullAlertLog,
-        config: fullModel.config,
-        riskFreePct: tbill?.month3 ?? null,
-      })
-    : null;
+  // earnings dates of their own names, not the whole book's. The reporting
+  // model is built from the whole book and only for the roles that can open
+  // Tab 2, so fund-wide figures never reach an analyst's browser as a
+  // serialized prop for a tab they cannot see.
+  const [catalysts, report] = await Promise.all([
+    getCatalysts(model.positions.map((p) => p.position.symbol)),
+    fullBoard
+      ? buildReportingModel({
+          period,
+          model: fullModel,
+          navSeries,
+          alertLog: fullAlertLog,
+          config: fullModel.config,
+          riskFreePct: tbill?.month3 ?? null,
+        })
+      : Promise.resolve(null),
+  ]);
 
   return (
     <RiskDashboard

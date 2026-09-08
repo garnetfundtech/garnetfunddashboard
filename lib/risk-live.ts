@@ -759,7 +759,13 @@ async function buildLiveRiskModel(): Promise<RiskModel> {
     details,
     degraded,
     staleIds,
-    fundVar: { dollars: varSet.fundDollars, pct: varSet.fundPct, observations: varSet.observations },
+    fundVar: {
+      dollars: varSet.fundDollars,
+      pct: varSet.fundPct,
+      observations: varSet.observations,
+      coveragePct: varSet.coveragePct,
+      missing: varSet.missing,
+    },
     feeds,
     config,
   });

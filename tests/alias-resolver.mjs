@@ -12,6 +12,9 @@ const CACHE_STUB = new URL("./next-cache-stub.mjs", import.meta.url).href;
 
 export async function resolve(specifier, context, next) {
   if (specifier === "next/cache") return { url: CACHE_STUB, shortCircuit: true };
+  // Next ships these without the extension its own bundler adds back; plain
+  // node needs the real filename.
+  if (specifier === "next/server") return next("next/server.js", context);
   if (specifier.startsWith("@/")) {
     return { url: pathToFileURL(`${ROOT}/${specifier.slice(2)}.ts`).href, shortCircuit: true };
   }

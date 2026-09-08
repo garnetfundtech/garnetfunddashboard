@@ -130,6 +130,10 @@ export type RiskMetrics = {
   var95Dollars: number | null;
   var95Pct: number | null;
   varObservations: number;
+  /** Why VaR is absent, when it is — an observation count alone is
+   *  misleading, because the usual blocker is unpriced exposure rather than
+   *  a short history. */
+  varUnavailableReason: string | null;
   exposureSeries: { date: string; net: number | null; gross: number | null }[];
   allocationSeries: { date: string; equities: number | null; alternatives: number | null }[];
   sectors: SectorRow[];
@@ -448,6 +452,12 @@ export async function buildReportingModel(params: {
     var95Dollars: model.fundVar?.dollars ?? null,
     var95Pct: model.fundVar?.pct ?? null,
     varObservations: model.fundVar?.observations ?? 0,
+    varUnavailableReason:
+      model.fundVar?.pct != null
+        ? null
+        : model.fundVar?.missing?.length
+          ? `Price history covers ${(model.fundVar.coveragePct ?? 0).toFixed(0)}% of gross exposure — ${model.fundVar.missing.join(", ")} unpriced`
+          : "Not enough price history yet",
     exposureSeries: snapshots.map((s) => ({ date: s.captured_on, net: s.net_pct, gross: s.gross_pct })),
     allocationSeries: snapshots.map((s) => ({
       date: s.captured_on,

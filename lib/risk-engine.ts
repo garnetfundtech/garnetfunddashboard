@@ -843,7 +843,15 @@ export type RiskModel = {
   /** Every red across both the limit strip and the position table. */
   breaches: { monitorId: string; label: string; subject: string | null; display: string; limitText: string }[];
   /** Fund one-day 95% VaR, in dollars and as % of NAV. */
-  fundVar: { dollars: number | null; pct: number | null; observations: number } | null;
+  fundVar: {
+    dollars: number | null;
+    pct: number | null;
+    observations: number;
+    /** Share of gross exposure that had usable price history. */
+    coveragePct?: number;
+    /** Holdings with no usable series, which is usually why VaR is null. */
+    missing?: string[];
+  } | null;
   /** §1 rule 2: every number carries a visible source and an as-of stamp. */
   feeds: DataFeed[];
   config: RiskConfig;
@@ -865,7 +873,15 @@ export function buildRiskModel(input: {
   details?: Record<string, string | null>;
   degraded?: Record<string, string | null>;
   staleIds?: string[];
-  fundVar?: { dollars: number | null; pct: number | null; observations: number } | null;
+  fundVar?: {
+    dollars: number | null;
+    pct: number | null;
+    observations: number;
+    /** Share of gross exposure that had usable price history. */
+    coveragePct?: number;
+    /** Holdings with no usable series, which is usually why VaR is null. */
+    missing?: string[];
+  } | null;
   feeds: DataFeed[];
   config: RiskConfig;
 }): RiskModel {

@@ -68,11 +68,20 @@ function ChartFrame({
   note,
   children,
   empty,
+  points = 0,
+  emptyNote,
 }: {
   title: string;
   note?: string;
   children: React.ReactElement;
   empty: boolean;
+  /** Stored days behind this chart, so an empty frame can say which kind of
+   *  empty it is. */
+  points?: number;
+  /** Overrides the generic message where the real reason is specific to the
+   *  series — volatility is absent because it needs a window, not because
+   *  the days are missing. */
+  emptyNote?: string;
 }) {
   return (
     <section className="panel flex flex-col p-3">
@@ -82,8 +91,14 @@ function ChartFrame({
       </div>
       <div className="h-52">
         {empty ? (
-          <div className="flex h-full items-center justify-center text-[12.5px] text-ink-3">
-            No stored snapshots for this period yet.
+          <div className="flex h-full items-center justify-center px-3 text-center text-[12.5px] text-ink-3">
+            {/* One stored day is not nothing, and saying "no snapshots" when
+                a day exists reads as a broken feed. A line needs two points;
+                week-to-date on a Tuesday only ever has one or two. */}
+            {emptyNote ??
+              (points === 1
+                ? "Only one day recorded in this period — a trend line needs two. Try a longer period."
+                : "No trading days recorded in this period yet.")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -100,14 +115,29 @@ export function RiskReportingTab({
   period,
   onPeriodChange,
   packs,
+  periodPending = false,
 }: {
   report: ReportingModel;
   period: PeriodKey;
   onPeriodChange: (p: PeriodKey) => void;
   packs: PackDef[];
+  /** A period change is in flight — the only interaction here that needs the
+   *  server, since a new window means a different slice of snapshots. */
+  periodPending?: boolean;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const { performance, risk, activity } = report;
+  const w = report.wave2;
+  const a = w.analytics;
+  const noPrices = a.pricedSymbols.length === 0;
+  // One sentence covering every regression-based figure, rather than the same
+  // caveat repeated on each of them.
+  const priceGap =
+    a.planRestricted.length > 0
+      ? `${a.planRestricted.join(", ")} not covered by the market-data plan`
+      : a.beta?.excluded.length
+        ? `no price series for ${a.beta.excluded.join(", ")}`
+        : null;
 
   const volStatus: RiskStatus =
     risk.annualizedVolPct == null || risk.volCap == null
@@ -123,9 +153,16 @@ export function RiskReportingTab({
         <div className="flex items-center gap-2">
           <span className="caps text-[11px] text-ink-3">Period</span>
           <FilterTabs options={PERIODS} value={period} onChange={onPeriodChange} />
+          {/* How much stored data this view rests on, in plain words. It
+              matters on a fund three weeks old — a figure drawn from two days
+              and one drawn from two hundred look identical otherwise — but
+              "12 stored snapshots" was the internal name for it, not an
+              answer to the reader's question. */}
           <span className="text-[11.5px] text-ink-3">
-            {report.from ?? "inception"} → {report.to} · {report.snapshotCount} stored snapshot
-            {report.snapshotCount === 1 ? "" : "s"}
+            {report.from ?? "since inception"} → {report.to} ·{" "}
+            {report.snapshotCount === 0
+              ? "no trading days recorded yet"
+              : `${report.snapshotCount} trading day${report.snapshotCount === 1 ? "" : "s"} of data`}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -180,6 +217,17 @@ export function RiskReportingTab({
           />
         </div>
 
+        {/* Quality of the process rather than the size of the result. These
+            need long samples to mean anything, so each says how far off it is
+            rather than showing a number it cannot support. */}
+        <div className="grid grid-cols-2 items-start gap-2 lg:grid-cols-5">
+          <Figure label="Sortino" value={num(w.sortino.value, 2)} reason={`needs 20 losing days, has ${w.sortino.observations}`} sub="return per unit of downside" />
+          <Figure label="Calmar" value={num(w.calmar.value, 2)} reason={w.calmar.note} sub="return per unit of drawdown" />
+          <Figure label="Hit rate" value={num(w.hitRate.value, 0, "%")} reason={w.hitRate.note} sub="closed trades that made money" />
+          <Figure label="Slugging ratio" value={num(w.slugging.value, 2)} reason={w.slugging.note} sub="average win ÷ average loss" />
+          <Figure label="Turnover" value={num(w.turnover.value, 0, "%")} reason={w.turnover.note} sub="annualized, of average NAV" />
+        </div>
+
         <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <ChartFrame
             title="NAV"
@@ -188,7 +236,7 @@ export function RiskReportingTab({
                 ? `Reference line at the ${fmtUsd(performance.disbursementThreshold, true)} disbursement threshold`
                 : undefined
             }
-            empty={performance.navSeries.length < 2}
+            empty={performance.navSeries.length < 2} points={performance.navSeries.length}
           >
             <AreaChart data={performance.navSeries} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
               <defs>
@@ -212,6 +260,12 @@ export function RiskReportingTab({
             title="Annualized volatility"
             note={risk.volCap != null ? `Cap at ${risk.volCap}%` : undefined}
             empty={risk.volSeries.filter((v) => v.value != null).length < 2}
+            points={risk.volSeries.filter((v) => v.value != null).length}
+            emptyNote={
+              risk.volSeries.length === 0
+                ? "No trading days recorded in this period yet."
+                : "Volatility needs 20 daily observations before it produces a value, so the stored days in this period have none to chart yet."
+            }
           >
             <LineChart data={risk.volSeries} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={THEME.line} vertical={false} />
@@ -243,7 +297,10 @@ export function RiskReportingTab({
           <Tile
             label="One-day 95% VaR"
             value={fmtUsd(risk.var95Dollars, true)}
-            sub={`${fmtPct(risk.var95Pct, 2)} of NAV · ${risk.varObservations} observations`}
+            sub={
+              risk.varUnavailableReason ??
+              `${fmtPct(risk.var95Pct, 2)} of NAV · ${risk.varObservations} observations`
+            }
           />
           <Tile
             label="Unrealized P&L"
@@ -257,8 +314,46 @@ export function RiskReportingTab({
           />
         </div>
 
+        {/* Loss beyond the VaR line, and the worst the fund has actually
+            been through. */}
+        <div className="grid grid-cols-2 items-start gap-2 lg:grid-cols-4">
+          <Figure label="Expected shortfall (CVaR)" value={num(w.cvar.pct, 2, "%")} reason={`needs 30 days, has ${w.cvar.observations}`} sub={w.cvar.dollars != null ? `${fmtUsd(w.cvar.dollars)} — average loss beyond the VaR` : "average loss on days worse than VaR"} />
+          <Figure label="Ten-day 95% VaR" value={num(w.var10Day.pct, 2, "%")} reason={`needs 30 days, has ${w.var10Day.observations}`} sub="one-day × √10" />
+          <Figure label="Maximum drawdown" value={num(w.drawdown.maxPct, 2, "%")} reason="no NAV history yet" sub={w.drawdown.peakDate ? `${w.drawdown.peakDate} → ${w.drawdown.troughDate}` : "no decline from the high-water mark yet"} />
+          <Figure label="Daily volatility" value={w.dollarVolPerDay != null ? fmtUsd(w.dollarVolPerDay) : null} reason={`needs 20 NAV days, has ${w.vol20.observations}`} sub={`in dollars, one standard deviation · 20-day ${num(w.vol20.value, 2, "%") ?? "—"}`} />
+        </div>
+
+        {/* How much of the book's movement is the market rather than the
+            fund's own choices, and how many independent bets it is running. */}
+        <div className="grid grid-cols-2 items-start gap-2 lg:grid-cols-4">
+          <Figure
+            label="Net beta to S&P 500"
+            value={num(a.beta?.net[60] ?? null, 3)}
+            reason={noPrices ? priceGap ?? "no price history" : null}
+            sub={a.beta?.long[60] != null ? `long ${a.beta.long[60]!.toFixed(2)} · short ${(a.beta.short[60] ?? 0).toFixed(2)} · 60-day` : "60-day regression"}
+          />
+          <Figure
+            label="Market-driven share"
+            value={num(a.factor?.systematicPct ?? null, 1, "%")}
+            reason={noPrices ? priceGap ?? "no price history" : null}
+            sub="the rest is stock selection"
+          />
+          <Figure
+            label="Forward-looking volatility"
+            value={num(a.exAnte?.annualizedPct ?? null, 2, "%")}
+            reason={noPrices ? priceGap ?? "no price history" : "needs 40 shared observations"}
+            sub="from what is held today, not what happened"
+          />
+          <Figure
+            label="Effective bets"
+            value={num(w.effectiveBets.long.value, 1)}
+            reason={w.effectiveBets.long.note}
+            sub={`long side${w.effectiveBets.short.value != null ? ` · short ${w.effectiveBets.short.value.toFixed(1)}` : ""} — independent positions, not line items`}
+          />
+        </div>
+
         <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
-          <ChartFrame title="Net and gross exposure" note="Band 20–60% net, 100% gross cap" empty={risk.exposureSeries.length < 2}>
+          <ChartFrame title="Net and gross exposure" note="Band 20–60% net, 100% gross cap" empty={risk.exposureSeries.length < 2} points={risk.exposureSeries.length}>
             <LineChart data={risk.exposureSeries} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={THEME.line} vertical={false} />
               <XAxis dataKey="date" tick={AXIS} tickLine={false} axisLine={false} minTickGap={40} />
@@ -273,7 +368,7 @@ export function RiskReportingTab({
             </LineChart>
           </ChartFrame>
 
-          <ChartFrame title="Allocation vs the 75/25 targets" empty={risk.allocationSeries.length < 2}>
+          <ChartFrame title="Allocation vs the 75/25 targets" empty={risk.allocationSeries.length < 2} points={risk.allocationSeries.length}>
             <LineChart data={risk.allocationSeries} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={THEME.line} vertical={false} />
               <XAxis dataKey="date" tick={AXIS} tickLine={false} axisLine={false} minTickGap={40} />
@@ -344,14 +439,95 @@ export function RiskReportingTab({
             </table>
           </TableShell>
         </div>
-      </section>
 
-      {/* Wave 2 analytics and the Phase 2 reporting set */}
-      <Wave2Panel wave2={report.wave2} />
+        {/* Two short tables, paired so neither wastes half a row on its own. */}
+        <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-2">
+          <TableShell
+            title="Largest positions"
+            count={a.concentration.top.length}
+            footer={
+              a.concentration.topFiveSharePct != null
+                ? `The five largest hold ${a.concentration.topFiveSharePct.toFixed(0)}% of gross exposure. ${a.concentration.aboveThreshold} above ${a.concentration.threshold}% of NAV.`
+                : "No positions to rank."
+            }
+          >
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+                  <th className="px-2.5 py-1.5 font-medium">Security</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">% of NAV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {a.concentration.top.map((t) => (
+                  <tr key={t.symbol} className="border-b border-line last:border-b-0">
+                    <td className="px-2.5 py-1.5 text-[13px] text-ink">{t.symbol}</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(t.weightPct, 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
+
+          <TableShell
+            title="Where the P&L came from"
+            count={w.attribution.bySide.length}
+            footer="Unrealized only. Realized results sit against their trade dates in the activity table below, and adding the two together here would double-count a position that has been partly closed."
+          >
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+                  <th className="px-2.5 py-1.5 font-medium">Book</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">P&L</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">% of NAV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {w.attribution.bySide.map((r) => (
+                  <tr key={r.label} className="border-b border-line last:border-b-0">
+                    <td className="px-2.5 py-1.5 text-[13px] text-ink">{r.label}</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtUsd(r.dollars)}</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(r.pctOfNav, 3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
+        </div>
+      </section>
 
       {/* §5.3 Activity and compliance */}
       <section className="flex flex-col gap-1.5">
         <h3 className="panel-title">Activity and compliance</h3>
+
+        {w.overruns.length > 0 && (
+          <TableShell
+            title="Positions larger than approved"
+            count={w.overruns.length}
+            footer="More than one percentage point above the size the Committee approved. A separate failure from the 10% cap: a position can double without anyone approving it, and no limit on the board notices."
+          >
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+                  <th className="px-2.5 py-1.5 font-medium">Security</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">Approved</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">Current</th>
+                  <th className="px-2.5 py-1.5 text-right font-medium">Over by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {w.overruns.map((r) => (
+                  <tr key={r.symbol} className="border-b border-line last:border-b-0">
+                    <td className="px-2.5 py-1.5 text-[13px] text-ink">{r.symbol}</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{r.approvedPct.toFixed(2)}%</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{r.currentPct.toFixed(2)}%</td>
+                    <td className="px-2.5 py-1.5 text-right num text-[13px] text-neg">{r.overshootPts.toFixed(2)} pts</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
+        )}
 
         <TableShell
           title="Portfolio changes"
@@ -610,142 +786,4 @@ const num = (v: number | null | undefined, digits = 2, suffix = "") =>
 
 function obs(n: number) {
   return `${n} observation${n === 1 ? "" : "s"}`;
-}
-
-function Wave2Panel({ wave2 }: { wave2: ReportingModel["wave2"] }) {
-  const { analytics: a } = wave2;
-  const beta60 = a.beta?.net[60] ?? null;
-  const noPrices = a.pricedSymbols.length === 0;
-
-  // One sentence covering every regression-based card, rather than repeating
-  // the same caveat on each of them.
-  const priceGap =
-    a.planRestricted.length > 0
-      ? `${a.planRestricted.join(", ")} not covered by the market-data plan`
-      : a.beta?.excluded.length
-        ? `no price series for ${a.beta.excluded.join(", ")}`
-        : null;
-
-  return (
-    <section className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="panel-title">Wave 2 analytics</h3>
-        <p className="text-[11.5px] text-ink-3">
-          Reporting metrics — none of these fire an alert.
-          {priceGap ? ` Regressions exclude ${priceGap}.` : ""}
-        </p>
-      </div>
-
-      <div className="grid items-start grid-cols-2 gap-1.5 md:grid-cols-4">
-        <Figure
-          label="Net beta (60d)"
-          value={num(beta60, 3)}
-          reason={noPrices ? priceGap ?? "no price history" : null}
-          sub={a.beta?.long[60] != null ? `long ${a.beta.long[60]!.toFixed(2)} · short ${(a.beta.short[60] ?? 0).toFixed(2)}` : undefined}
-        />
-        <Figure
-          label="Ex-ante volatility"
-          value={num(a.exAnte?.annualizedPct ?? null, 2, "%")}
-          reason={noPrices ? priceGap ?? "no price history" : "needs 40 shared observations"}
-          sub={a.exAnte ? obs(a.exAnte.observations) : undefined}
-        />
-        <Figure
-          label="Systematic share"
-          value={num(a.factor?.systematicPct ?? null, 1, "%")}
-          reason={noPrices ? priceGap ?? "no price history" : null}
-          sub="market model — R² vs S&P 500"
-        />
-        <Figure
-          label="Avg pairwise correlation"
-          value={num(a.correlation?.averagePairwise ?? null, 3)}
-          reason={a.correlation ? null : "needs two priced holdings"}
-        />
-
-        <Figure label="Realized vol (20d)" value={num(wave2.vol20.value, 2, "%")} reason={`needs 20 days, has ${wave2.vol20.observations}`} sub={obs(wave2.vol20.observations)} />
-        <Figure label="CVaR 95% (1d)" value={num(wave2.cvar.pct, 2, "%")} reason={`needs 30 days, has ${wave2.cvar.observations}`} sub={wave2.cvar.dollars != null ? fmtUsd(wave2.cvar.dollars) : undefined} />
-        <Figure label="VaR 95% (10d)" value={num(wave2.var10Day.pct, 2, "%")} reason={`needs 30 days, has ${wave2.var10Day.observations}`} sub="one-day × √10" />
-        <Figure label="Sortino" value={num(wave2.sortino.value, 2)} reason={`needs 20 losing days, has ${wave2.sortino.observations}`} />
-
-        <Figure
-          label="Max drawdown"
-          value={num(wave2.drawdown.maxPct, 2, "%")}
-          reason="no NAV history"
-          sub={wave2.drawdown.peakDate ? `${wave2.drawdown.peakDate} → ${wave2.drawdown.troughDate}` : "no drawdown yet"}
-        />
-        <Figure label="Dollar volatility" value={wave2.dollarVolPerDay != null ? fmtUsd(wave2.dollarVolPerDay) : null} reason="needs 20 NAV days" sub="per day, 1 s.d." />
-        <Figure
-          label="Effective bets"
-          value={num(wave2.effectiveBets.long.value, 1)}
-          reason={wave2.effectiveBets.long.note}
-          sub={`long side${wave2.effectiveBets.short.value != null ? ` · short ${wave2.effectiveBets.short.value.toFixed(1)}` : ""}`}
-        />
-        <Figure
-          label="Positions over 8%"
-          value={String(a.concentration.aboveThreshold)}
-          sub={a.concentration.topFiveSharePct != null ? `top five = ${a.concentration.topFiveSharePct.toFixed(0)}% of gross` : undefined}
-        />
-
-        <Figure label="Calmar" value={num(wave2.calmar.value, 2)} reason={wave2.calmar.note} />
-        <Figure label="Hit rate" value={num(wave2.hitRate.value, 0, "%")} reason={wave2.hitRate.note} />
-        <Figure label="Slugging ratio" value={num(wave2.slugging.value, 2)} reason={wave2.slugging.note} sub="avg win ÷ avg loss" />
-        <Figure label="Turnover" value={num(wave2.turnover.value, 0, "%")} reason={wave2.turnover.note} sub="annualized, of average NAV" />
-      </div>
-
-      {wave2.attribution.bySide.length > 0 && (
-        <TableShell
-          title="Unrealized P&L attribution"
-          count={wave2.attribution.bySide.length}
-          footer="Unrealized only. Realized results sit against trade dates in the activity table below; adding the two here would double-count a partly closed position."
-        >
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2.5 py-1.5 font-medium">Book</th>
-                <th className="px-2.5 py-1.5 text-right font-medium">P&L</th>
-                <th className="px-2.5 py-1.5 text-right font-medium">% of NAV</th>
-              </tr>
-            </thead>
-            <tbody>
-              {wave2.attribution.bySide.map((r) => (
-                <tr key={r.label} className="border-b border-line/60 last:border-0">
-                  <td className="px-2.5 py-1.5 text-[13px] text-ink">{r.label}</td>
-                  <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtUsd(r.dollars)}</td>
-                  <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{fmtPct(r.pctOfNav)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableShell>
-      )}
-
-      {wave2.overruns.length > 0 && (
-        <TableShell
-          title="Approved-size overruns"
-          count={wave2.overruns.length}
-          footer="More than one percentage point above the size the Committee approved [Wave 2 §3]. A separate failure from the 10% cap: a position can double without anyone approving it and no Wave 1 limit notices."
-        >
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2.5 py-1.5 font-medium">Symbol</th>
-                <th className="px-2.5 py-1.5 text-right font-medium">Approved</th>
-                <th className="px-2.5 py-1.5 text-right font-medium">Current</th>
-                <th className="px-2.5 py-1.5 text-right font-medium">Over by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {wave2.overruns.map((r) => (
-                <tr key={r.symbol} className="border-b border-line/60 last:border-0">
-                  <td className="px-2.5 py-1.5 text-[13px] text-ink">{r.symbol}</td>
-                  <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{r.approvedPct.toFixed(2)}%</td>
-                  <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{r.currentPct.toFixed(2)}%</td>
-                  <td className="px-2.5 py-1.5 text-right num text-[13px] text-ink-2">{r.overshootPts.toFixed(2)} pts</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableShell>
-      )}
-    </section>
-  );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,9 +25,18 @@ const TABS: { value: RiskTab; label: string }[] = [
 /**
  * The two-tab risk dashboard (§4 and §5).
  *
- * Tab and period live in the URL rather than in component state so that the
- * server can rebuild the reporting model for a new period, and so a link to a
- * specific view survives being pasted into a report.
+ * The period lives in the URL because changing it genuinely needs the server:
+ * a different window means a different slice of stored snapshots, and the
+ * reporting model is rebuilt around it.
+ *
+ * The tab does not. Both tabs' data arrives in the same payload, so routing a
+ * tab change through the server re-ran every upstream call — Schwab positions
+ * and orders, the alert log, the NAV series, the T-bill, the analyst list, the
+ * catalyst calendar and the whole reporting model — to render markup the
+ * browser already had. That was the lag on every switch, and worst on the
+ * first one, when none of those responses were cached yet. The tab is now
+ * local state, and the URL is kept in step with history.replaceState so a
+ * pasted link still opens the right view without costing a round trip.
  */
 export function RiskDashboard({
   model,
@@ -57,13 +66,26 @@ export function RiskDashboard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState<{ row: PositionRow | null } | null>(null);
+  const [activeTab, setActiveTab] = useState<RiskTab>(tab);
 
-  const navigate = (next: { tab?: RiskTab; period?: PeriodKey }) => {
+  // A server-rendered tab change (someone arriving on a link) still wins.
+  useEffect(() => setActiveTab(tab), [tab]);
+
+  const selectTab = (next: RiskTab) => {
+    setActiveTab(next);
+    // Deep-linkable without a navigation: replaceState updates the address
+    // bar and the history entry, and nothing re-renders on the server.
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", next);
+    window.history.replaceState(null, "", `${pathname}?${params}`);
+  };
+
+  const selectPeriod = (next: PeriodKey) => {
     const params = new URLSearchParams();
-    params.set("tab", next.tab ?? tab);
-    params.set("period", next.period ?? period);
+    params.set("tab", activeTab);
+    params.set("period", next);
     startTransition(() => router.replace(`${pathname}?${params}`, { scroll: false }));
   };
 
@@ -95,10 +117,10 @@ export function RiskDashboard({
             <button
               key={t.value}
               type="button"
-              onClick={() => navigate({ tab: t.value })}
+              onClick={() => selectTab(t.value)}
               className={cn(
                 "-mb-px border-b-2 px-3.5 py-2 text-[13.5px] transition-colors",
-                tab === t.value
+                activeTab === t.value
                   ? "border-garnet font-medium text-ink"
                   : "border-transparent text-ink-3 hover:text-ink",
               )}
@@ -137,7 +159,7 @@ export function RiskDashboard({
         </div>
       )}
 
-      {tab === "alerts" ? (
+      {activeTab === "alerts" ? (
         <RiskAlertsTab
           model={model}
           alertLog={alertLog}
@@ -147,12 +169,15 @@ export function RiskDashboard({
           onEditApproval={(row) => setEditing({ row })}
         />
       ) : report ? (
-        <RiskReportingTab
-          report={report}
-          period={period}
-          onPeriodChange={(p) => navigate({ period: p })}
-          packs={packs}
-        />
+        <div className={cn("transition-opacity", isPending && "pointer-events-none opacity-60")}>
+          <RiskReportingTab
+            report={report}
+            period={period}
+            periodPending={isPending}
+            onPeriodChange={selectPeriod}
+            packs={packs}
+          />
+        </div>
       ) : null}
 
       {/* Data provenance — §1 rule 2: every number carries a visible source. */}
