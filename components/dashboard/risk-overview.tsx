@@ -74,7 +74,7 @@ export function NavHeader({
 
   return (
     <section className="panel flex flex-col">
-      <div className="grid grid-cols-2 divide-x divide-line border-b border-line lg:grid-cols-4">
+      <div className="grid items-start grid-cols-2 divide-x divide-line border-b border-line lg:grid-cols-4">
         <Tile label="Net asset value" value={fmtUsd(nav)} sub="Total fund size · IPS denominator" />
         <Tile
           label="Day P&L"
@@ -222,7 +222,7 @@ export function VolatilityCard({
   const belowFloor = value != null && floor != null && value < floor;
 
   return (
-    <section className="panel flex flex-col px-3.5 py-3">
+    <section className="panel flex flex-col px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
         <p className="caps text-[11px] text-ink-3">Annualized volatility</p>
         {cap != null && floor != null && (
@@ -232,13 +232,13 @@ export function VolatilityCard({
         )}
       </div>
 
-      <p className={cn("mt-1.5 text-[27px] font-semibold leading-none tabular-nums", STATUS_TEXT[status])}>
+      <p className={cn("mt-1 text-[22px] font-semibold leading-none tabular-nums", STATUS_TEXT[status])}>
         {value == null ? "—" : fmtPct(value)}
       </p>
 
       {/* Where the reading sits between the two bounds, at a glance. */}
       {value != null && cap != null && (
-        <div className="relative mt-2.5 h-[6px] bg-paper-2">
+        <div className="relative mt-2 h-[6px] bg-paper-2">
           {floor != null && (
             <div
               className="absolute inset-y-0 bg-pos opacity-25"
@@ -253,9 +253,12 @@ export function VolatilityCard({
         </div>
       )}
 
-      <div className="mt-2 h-10">
+      {/* The 40px sparkline slot is reserved only when there is a sparkline.
+          Held open unconditionally it was empty space on every card in the
+          row, because the grid stretches siblings to the tallest one. */}
+      <div className={series.length < 2 ? "mt-1.5" : "mt-2 h-10"}>
         {series.length < 2 ? (
-          <p className="text-[11px] text-ink-3">
+          <p className="text-[11px] leading-snug text-ink-3">
             {note ?? "The trailing sparkline appears once stored volatility history exists."}
           </p>
         ) : (

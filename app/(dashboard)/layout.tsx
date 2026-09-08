@@ -27,10 +27,17 @@ export default async function DashboardLayout({
         }
       />
       <PageHeaderProvider>
-        <main className="flex h-full flex-1 flex-col gap-2">
+        {/* min-w-0 is load-bearing. A flex item defaults to min-width:auto,
+            which means it refuses to shrink below its content's intrinsic
+            width — so one wide table (the risk position table has twenty
+            columns) pushes this element past the viewport and every panel on
+            the page overflows to the right with it. With min-w-0 the main
+            column tracks the viewport and the scroll containers inside it do
+            their job. */}
+        <main className="flex h-full min-w-0 flex-1 flex-col gap-2">
           <PresenceHeartbeat />
           <DashboardTopRow searchIndex={searchIndex} />
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
         </main>
       </PageHeaderProvider>
     </div>

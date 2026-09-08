@@ -18,8 +18,8 @@ export function TableShell({
   className?: string;
 }) {
   return (
-    <div className={`panel flex flex-col overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between gap-2 border-b border-line-2 bg-paper-3 px-3 py-2">
+    <div className={`panel flex min-w-0 flex-col overflow-hidden ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-2 bg-paper-3 px-3 py-2">
         <div className="flex items-baseline gap-2">
           {kicker && <span className="caps text-[11px]">{kicker}</span>}
           <span className="panel-title">{title}</span>
@@ -29,7 +29,7 @@ export function TableShell({
         </div>
         {actions && <div className="flex items-center gap-1.5">{actions}</div>}
       </div>
-      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="min-w-0 flex-1 overflow-x-auto overflow-y-auto">{children}</div>
       {footer && (
         <div className="border-t border-line px-3 py-1.5 text-[12px] text-ink-3">{footer}</div>
       )}

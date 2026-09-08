@@ -149,7 +149,7 @@ export function RiskReportingTab({
       {/* §5.1 Performance */}
       <section className="flex flex-col gap-1.5">
         <h3 className="panel-title">Performance</h3>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid items-start grid-cols-2 gap-2 lg:grid-cols-4">
           <Tile
             label="NAV / AUM"
             value={fmtUsd(performance.nav, true)}
@@ -180,7 +180,7 @@ export function RiskReportingTab({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <ChartFrame
             title="NAV"
             note={
@@ -228,7 +228,7 @@ export function RiskReportingTab({
       {/* §5.2 Risk */}
       <section className="flex flex-col gap-1.5">
         <h3 className="panel-title">Risk</h3>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid items-start grid-cols-2 gap-2 lg:grid-cols-4">
           <Tile
             label="Annualized volatility"
             value={fmtPct(risk.annualizedVolPct, 2)}
@@ -257,7 +257,7 @@ export function RiskReportingTab({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <ChartFrame title="Net and gross exposure" note="Band 20–60% net, 100% gross cap" empty={risk.exposureSeries.length < 2}>
             <LineChart data={risk.exposureSeries} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={THEME.line} vertical={false} />
@@ -288,7 +288,7 @@ export function RiskReportingTab({
           </ChartFrame>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <TableShell
             title="Sector allocation"
             count={risk.sectors.length}
@@ -448,7 +448,7 @@ export function RiskReportingTab({
           </table>
         </TableShell>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <TableShell
             title="Alert summary"
             count={activity.alertSummary.length}
@@ -522,7 +522,7 @@ export function RiskReportingTab({
           </TableShell>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="grid items-start grid-cols-1 gap-2 lg:grid-cols-2">
           <TableShell title="Gain reviews" count={activity.gainReviews.length} footer="Routed to the Investment Committee [IPS V.a].">
             <table className="w-full">
               <tbody>
@@ -636,7 +636,7 @@ function Wave2Panel({ wave2 }: { wave2: ReportingModel["wave2"] }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+      <div className="grid items-start grid-cols-2 gap-1.5 md:grid-cols-4">
         <Figure
           label="Net beta (60d)"
           value={num(beta60, 3)}

@@ -34,7 +34,7 @@ import { acknowledgeEpisodeAction, confirmAllocationBreachAction } from "@/app/(
 
 function MonitorCard({ row, asOf }: { row: MonitorRow; asOf: string | null }) {
   return (
-    <article className="panel relative flex flex-col overflow-hidden px-3.5 py-3">
+    <article className="panel relative flex min-w-0 flex-col overflow-hidden px-3 py-2.5">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
         style={{ background: STATUS_VAR[row.status] }}
@@ -44,23 +44,23 @@ function MonitorCard({ row, asOf }: { row: MonitorRow; asOf: string | null }) {
         {row.stale ? <StaleTag /> : <StatusDot status={row.status} />}
       </div>
 
-      <p className={cn("mt-1.5 text-[27px] font-semibold leading-none tabular-nums", STATUS_TEXT[row.status])}>
+      <p className={cn("mt-1 text-[22px] font-semibold leading-none tabular-nums", STATUS_TEXT[row.status])}>
         {row.stale ? "—" : row.display}
       </p>
 
-      <p className="mt-1.5 text-[12px] text-ink-3">
+      <p className="mt-1 text-[12px] leading-snug text-ink-3">
         <span className="text-ink-2">Limit</span> {row.limitText}
       </p>
       {row.detail && <p className="mt-0.5 text-[11.5px] text-ink-3">{row.detail}</p>}
 
       {row.degradedReason && (
-        <p className="mt-1.5 flex items-start gap-1 text-[11px] text-warn">
+        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-warn">
           <AlertTriangle className="mt-[1px] h-3 w-3 shrink-0" />
           <span>{row.degradedReason}</span>
         </p>
       )}
 
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1.5">
         <AsOf iso={asOf} />
         <InfoTooltip
           text={[
@@ -90,7 +90,7 @@ function LimitStrip({ model }: { model: RiskModel }) {
             <h3 className="panel-title">{group.label}</h3>
             <p className="text-[12px] text-ink-3">{group.blurb}</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {group.rows
               .filter((row) => row.monitor.id !== "annualized-volatility")
               .map((row) => (
@@ -236,7 +236,7 @@ function PositionTable({
       title="Positions"
       count={rows.length}
       actions={
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
           <FilterTabs options={["All", "Equities", "Alternatives"] as TeamFilter[]} value={team} onChange={setTeam} />
           <FilterTabs options={["All", "Long", "Short"] as SideFilter[]} value={side} onChange={setSide} />
           <FilterTabs options={["All", "Breached", "Approaching"] as StateFilter[]} value={state} onChange={setState} />
@@ -261,9 +261,9 @@ function PositionTable({
       }
       footer="A stopped position pins to the top. A dash means the column is display only and carries no alert. Held is days since entry, reconstructed from the stored daily snapshots."
     >
-      <table className="w-full">
+      <table className="w-full min-w-[1180px]">
         <thead>
-          <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+          <tr className="whitespace-nowrap border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
             <th className="px-2.5 py-1.5 font-medium">Ticker</th>
             <th className="px-2.5 py-1.5 font-medium">Side</th>
             <th className="px-2.5 py-1.5 font-medium">Team</th>
@@ -578,7 +578,7 @@ export function RiskAlertsTab({
 
       {fullBoard && (
         <>
-          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+          <div className="grid items-start grid-cols-1 gap-2 xl:grid-cols-2">
             <ExposureHistoryChart
               history={model.history}
               grossCap={cfgv.gross_cap}
