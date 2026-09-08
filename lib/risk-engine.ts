@@ -427,12 +427,41 @@ export type StopCheck =
   | "missing"
   | "partial"
   | "mispriced"
+  /** A stop-limit, or a trailing stop, where §2 requires a plain stop. */
+  | "wrong-type"
+  /** A day order: it expires at the close and leaves the position naked. */
+  | "expiring"
   | "executed"
   /** The Alternatives book, while §8's open item about applying the −30% stop
    *  to options is unresolved and the config has the check switched off. */
   | "not-applicable"
   /** Open orders could not be read, so we cannot claim a stop is present. */
   | "unknown";
+
+/**
+ * §2: the stop must be "a plain stop rather than a stop-limit". A stop-limit
+ * becomes a limit order once triggered, so in the gap-down it exists to catch
+ * it can go unfilled entirely — which is the one scenario the −30% stop is
+ * for. A trailing stop tracks the price rather than sitting at cost − 30%.
+ */
+function isPlainStop(order: BrokerOrder): boolean {
+  const t = order.orderType.toUpperCase();
+  return t === "STOP" || t === "STOP_MARKET";
+}
+
+/**
+ * §2: the stop must be "resting good-till-cancelled". A DAY stop is cancelled
+ * at the close, so the position is unprotected overnight and every day after,
+ * while the board would show a stop present and green.
+ *
+ * An empty duration means the broker did not report one, which is absence of
+ * evidence rather than evidence of a day order — it does not fail the check.
+ */
+function isGoodTillCancelled(order: BrokerOrder): boolean {
+  const d = order.duration.toUpperCase().replace(/[\s-]/g, "_");
+  if (!d) return true;
+  return d.includes("GOOD_TILL_CANCEL") || d === "GTC";
+}
 
 const RESTING_STATUSES = new Set([
   "WORKING",
@@ -498,11 +527,23 @@ export function checkStopOrder(
   const resting = candidates.filter((o) => RESTING_STATUSES.has(o.status.toUpperCase()));
   if (!resting.length) return { state: "missing", order: null, expected };
 
+  const nearest = (list: BrokerOrder[]) =>
+    list.reduce((a, b) =>
+      Math.abs((a.stopPrice ?? 0) - expected) <= Math.abs((b.stopPrice ?? 0) - expected) ? a : b,
+    );
+
+  // A stop of the wrong kind is worse than an obviously missing one: it shows
+  // as protection on the board while not providing any. Reported distinctly so
+  // the fix is clear, and red either way.
+  const qualifying = resting.filter((o) => isPlainStop(o) && isGoodTillCancelled(o));
+  if (!qualifying.length) {
+    const best = nearest(resting);
+    return { state: isPlainStop(best) ? "expiring" : "wrong-type", order: best, expected };
+  }
+
   // Several partial stops can legitimately add up to full cover.
-  const covered = resting.reduce((s, o) => s + Math.abs(o.quantity), 0);
-  const best = resting.reduce((a, b) =>
-    Math.abs((a.stopPrice ?? 0) - expected) <= Math.abs((b.stopPrice ?? 0) - expected) ? a : b,
-  );
+  const covered = qualifying.reduce((s, o) => s + Math.abs(o.quantity), 0);
+  const best = nearest(qualifying);
 
   if (covered + 1e-6 < position.absQuantity) return { state: "partial", order: best, expected };
 
@@ -627,6 +668,8 @@ export function evaluatePosition(params: {
     missing: "Missing",
     partial: "Partial cover",
     mispriced: "Mispriced",
+    "wrong-type": "Stop-limit, not a plain stop",
+    expiring: "Day order, not GTC",
     executed: "Executed",
     "not-applicable": "n/a",
     unknown: "No order feed",

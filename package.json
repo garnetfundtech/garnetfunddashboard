@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:acceptance": "PROJECT_ROOT=\"$PWD\" node --experimental-strip-types --import ./tests/alias-hook.mjs tests/acceptance.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
