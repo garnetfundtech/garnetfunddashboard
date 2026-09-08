@@ -9,7 +9,7 @@ import {
   parseFilePath,
 } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
-import { isGicsSector } from "@/lib/sectors";
+import { isCoverageTeam } from "@/lib/sectors";
 import {
   TEAM_FILES_BUCKET,
   canWriteSector,
@@ -54,7 +54,7 @@ export async function createFolderAction(
   // Nested folders inherit the parent's sector; only a root folder takes the
   // sector straight from the request.
   const sector = parentId ? await sectorForFolder(parentId) : requestedSector;
-  if (!sector || !isGicsSector(sector)) {
+  if (!sector || !isCoverageTeam(sector)) {
     return { ok: false, error: "Unknown team." };
   }
   if (!canWriteSector(profile, sector)) {
@@ -184,7 +184,7 @@ export async function uploadTeamFileAction(
   if (!title) return { ok: false, error: "A title is required." };
 
   const sector = folderId ? await sectorForFolder(folderId) : requestedSector;
-  if (!sector || !isGicsSector(sector)) {
+  if (!sector || !isCoverageTeam(sector)) {
     return { ok: false, error: "Unknown team." };
   }
   if (!canWriteSector(profile, sector)) {

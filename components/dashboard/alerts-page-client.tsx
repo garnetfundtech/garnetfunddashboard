@@ -10,7 +10,7 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
-import { GICS_SECTORS } from "@/lib/sectors";
+import { COVERAGE_TEAMS } from "@/lib/sectors";
 
 function fmtPrice(n: number | null) {
   if (n == null) return "$XX.XX";
@@ -418,7 +418,7 @@ export function AlertsPageClient({
                 className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-ink outline-none"
               >
                 <option value="">Select sector</option>
-                {GICS_SECTORS.map((s) => (
+                {COVERAGE_TEAMS.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

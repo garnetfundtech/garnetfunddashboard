@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
 import { uploadResearchAction } from "@/app/(dashboard)/research/actions";
-import { GICS_SECTORS } from "@/lib/sectors";
+import { COVERAGE_TEAMS } from "@/lib/sectors";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
 
 export function ResearchUploadForm({
@@ -83,7 +83,7 @@ export function ResearchUploadForm({
         className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none"
       >
         <option value="" disabled>Select sector</option>
-        {GICS_SECTORS.map((s) => (
+        {COVERAGE_TEAMS.map((s) => (
           <option key={s} value={s}>{s}</option>
         ))}
       </select>

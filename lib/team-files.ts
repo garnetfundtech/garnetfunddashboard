@@ -12,7 +12,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseFilePath } from "@/lib/storage";
-import { GICS_SECTORS } from "@/lib/sectors";
+import { COVERAGE_TEAMS } from "@/lib/sectors";
 import type { UserRole } from "@/lib/types";
 
 export const TEAM_FILES_BUCKET = "team-files";
@@ -158,7 +158,7 @@ export async function getTeamBrowseData({
   const allFiles = filesRes.data ?? [];
 
   const sectorFileCounts: Record<string, number> = {};
-  for (const s of GICS_SECTORS) sectorFileCounts[s] = 0;
+  for (const s of COVERAGE_TEAMS) sectorFileCounts[s] = 0;
   for (const row of sectorCountsRes.data ?? []) {
     const key = (row as { sector: string }).sector;
     sectorFileCounts[key] = (sectorFileCounts[key] ?? 0) + 1;

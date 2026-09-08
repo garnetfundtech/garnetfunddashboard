@@ -2,7 +2,7 @@ import { requireProfile } from "@/lib/auth";
 import { getResearchItems } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { CoveragePageClient } from "@/components/dashboard/coverage-page-client";
-import { GICS_SECTORS } from "@/lib/sectors";
+import { COVERAGE_TEAMS, toCoverageTeam } from "@/lib/sectors";
 
 export type CoverageAnalyst = {
   id: string;
@@ -30,14 +30,15 @@ export default async function CoveragePage() {
       `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() ||
       "Unknown",
     role: p.role as string,
-    sector: p.coverage_sector ?? null,
+    // Legacy GICS values still resolve to their team until 0024 has run.
+    sector: toCoverageTeam(p.coverage_sector),
   }));
 
   return (
     <CoveragePageClient
       analysts={analysts}
       research={research}
-      sectors={[...GICS_SECTORS]}
+      sectors={[...COVERAGE_TEAMS]}
       viewerRole={profile.role}
     />
   );
