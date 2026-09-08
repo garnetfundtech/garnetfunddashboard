@@ -13,7 +13,13 @@
  * for periods; annualize by ×252 for returns and ×√252 for volatility.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { historicalVaR, stdSample } from "@/lib/portfolio-analytics";
+import {
+  historicalVaR,
+  historicalCVaR,
+  sortinoAnnualized,
+  drawdownStats,
+  stdSample,
+} from "@/lib/portfolio-analytics";
 
 export type NavPoint = {
   captured_on: string;
@@ -135,9 +141,9 @@ export function fundVaR(returns: number[], nav: number | null, lookbackDays: num
   if (window.length < 30 || nav == null || nav <= 0) {
     return { dollars: null, pct: null, observations: window.length };
   }
-  const q = historicalVaR(window, 0.95);
-  if (q == null) return { dollars: null, pct: null, observations: window.length };
-  const pct = Math.abs(q) * 100;
+  // historicalVaR already returns a positive percentage loss, not a fraction.
+  const pct = historicalVaR(window, 0.95);
+  if (pct == null) return { dollars: null, pct: null, observations: window.length };
   return { dollars: (pct / 100) * nav, pct, observations: window.length };
 }
 
@@ -420,4 +426,154 @@ export function benchmarkReturn(annualYieldPct: number | null, tradingDays: numb
   if (annualYieldPct == null || tradingDays <= 0) return null;
   const daily = Math.pow(1 + annualYieldPct / 100, 1 / TRADING_DAYS) - 1;
   return (Math.pow(1 + daily, tradingDays) - 1) * 100;
+}
+
+// ── Wave 2 metrics from the Fund's own NAV series ─────────────────────────
+//
+// Every one of these follows the Wave 1 rule that governs this file: use the
+// history that exists, report how much of it there was, and return null rather
+// than a number the window cannot support. Wave 2 §5 is blunt that "most of
+// these are meaningless until we have a year of data" and that early figures
+// "swing between green and red more or less at random" — so the observation
+// count travels with the value everywhere it is shown, and none of these fire
+// an alert. They are reporting metrics, not limits.
+
+/** Shared shape: a figure that knows how thin the evidence behind it is. */
+export type WindowedMetric = {
+  value: number | null;
+  observations: number;
+  /** Fewer observations than the window asked for. */
+  short: boolean;
+};
+
+const windowed = (value: number | null, observations: number, want: number): WindowedMetric => ({
+  value,
+  observations,
+  short: observations < want,
+});
+
+/**
+ * Expected shortfall: the average loss on days worse than the 95% VaR
+ * [Wave 2 §2, IPS III.e]. Same historical-simulation window as `fundVaR`, so
+ * the two are directly comparable — CVaR is always the larger number, and the
+ * gap between them is the fat tail VaR alone does not show.
+ */
+export function fundCVaR(returns: number[], nav: number | null, lookbackDays: number): FundVar {
+  const window = returns.slice(-lookbackDays);
+  if (window.length < 30 || nav == null || nav <= 0) {
+    return { dollars: null, pct: null, observations: window.length };
+  }
+  const pct = historicalCVaR(window, 0.95);
+  if (pct == null) return { dollars: null, pct: null, observations: window.length };
+  return { dollars: (pct / 100) * nav, pct, observations: window.length };
+}
+
+/**
+ * VaR scaled to a ten-day horizon by √10 [Wave 2 §3].
+ *
+ * The square-root-of-time rule assumes returns are independent and identically
+ * distributed day to day. They are not — volatility clusters — so this
+ * understates a ten-day loss in exactly the stressed conditions it would be
+ * consulted in. Kept because §3 asks for it by that definition, and because
+ * every desk computes it the same way, but it is a convention rather than a
+ * measurement.
+ */
+export function scaledVaR(oneDay: FundVar, days = 10): FundVar {
+  const k = Math.sqrt(days);
+  return {
+    dollars: oneDay.dollars == null ? null : oneDay.dollars * k,
+    pct: oneDay.pct == null ? null : oneDay.pct * k,
+    observations: oneDay.observations,
+  };
+}
+
+/**
+ * Sortino: excess return over the T-bill divided by downside deviation
+ * [Wave 2 §2, IPS III.e].
+ *
+ * Needs enough *losing* days, not merely enough days — a series with two down
+ * days has a downside deviation drawn from two observations however long it
+ * is. Both counts are checked, and the observation count reported is the
+ * downside one, because that is the binding constraint.
+ */
+export function sortinoRatio(
+  returns: number[],
+  annualRiskFreePct: number | null,
+  minObservations: number,
+  minDownside = 20,
+): WindowedMetric {
+  const downside = returns.filter((r) => r < 0).length;
+  if (returns.length < minObservations || downside < minDownside) {
+    return { value: null, observations: downside, short: true };
+  }
+  const rfDaily = (annualRiskFreePct ?? 0) / 100 / TRADING_DAYS;
+  return windowed(sortinoAnnualized(returns, rfDaily), downside, minDownside);
+}
+
+/** Daily volatility × NAV, in dollars [Wave 2 §2, IPS III.e]. */
+export function dollarVolatility(vol: VolatilityResult, nav: number | null): number | null {
+  if (vol.value == null || nav == null || nav <= 0) return null;
+  // vol.value is annualized; §2 asks for the daily figure in dollars.
+  return (vol.value / 100 / Math.sqrt(TRADING_DAYS)) * nav;
+}
+
+export type Drawdown = {
+  /** Current decline from the high-water mark, a negative percentage. */
+  currentPct: number | null;
+  /** Deepest peak-to-trough decline in the window, negative. */
+  maxPct: number | null;
+  /** The dates bracketing the maximum drawdown, for §3's "with dates". */
+  peakDate: string | null;
+  troughDate: string | null;
+  observations: number;
+};
+
+/**
+ * Largest peak-to-trough decline in NAV, with the dates it ran between
+ * [Wave 2 §3].
+ *
+ * Walks the NAV series directly rather than compounding the return series,
+ * because the high-water mark is a property of NAV. External flows are
+ * removed first: a $100,000 donation is not a gain, and without netting it out
+ * the seeding day would reset the high-water mark and erase every drawdown
+ * before it.
+ */
+export function drawdown(points: NavPoint[]): Drawdown {
+  if (points.length < 2) {
+    return { currentPct: null, maxPct: null, peakDate: null, troughDate: null, observations: points.length };
+  }
+
+  // Rebuild an index from flow-adjusted daily returns so donations do not
+  // register as performance.
+  const returns = dailyReturns(points);
+  const stats = drawdownStats(returns);
+
+  let index = 1;
+  let peak = 1;
+  let peakDate = points[0].captured_on;
+  let bestPeakDate: string | null = null;
+  let troughDate: string | null = null;
+  let worst = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    index *= 1 + (returns[i - 1] ?? 0);
+    if (index > peak) {
+      peak = index;
+      peakDate = points[i].captured_on;
+    }
+    const dd = index / peak - 1;
+    if (dd < worst) {
+      worst = dd;
+      bestPeakDate = peakDate;
+      troughDate = points[i].captured_on;
+    }
+  }
+
+  return {
+    currentPct: stats ? stats.current : null,
+    maxPct: worst < 0 ? worst * 100 : 0,
+    peakDate: bestPeakDate,
+    troughDate,
+    observations: points.length,
+  };
 }

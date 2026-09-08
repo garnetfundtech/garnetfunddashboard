@@ -120,3 +120,64 @@ export async function fetchTreasuryRate(): Promise<TreasuryRates | null> {
     return null;
   }
 }
+
+// ── Daily price history (Wave 2) ──────────────────────────────────────────
+
+export type DailyClose = { date: string; close: number };
+
+/** The index every Wave 2 regression is run against [Wave 2 §3]. */
+export const BENCHMARK_SYMBOL = "^GSPC";
+
+export type PriceHistory = {
+  closes: DailyClose[];
+  /**
+   * Why the series is empty, when it is. "plan" means the symbol exists but
+   * daily history for it is not included in the current FMP subscription —
+   * the feed answers 402 rather than 404. Worth distinguishing from an
+   * unknown symbol: one is a billing decision the fund can reverse, the other
+   * is an instrument that will never have an equity price series.
+   */
+  unavailable: "none" | "plan" | "empty";
+};
+
+/**
+ * Daily closes for one symbol, oldest first.
+ *
+ * Wave 2 §2 needs a return series per instrument for beta, the correlation
+ * matrix and the factor decomposition. The Fund's own NAV series cannot
+ * supply these — it is one number per day, and it began on 2026-07-16 — so
+ * the regressions run on instrument prices, where a full 250-day window
+ * already exists.
+ *
+ * Returns [] rather than throwing when a symbol has no price history: a
+ * Treasury CUSIP or an option OSI symbol will not resolve here, and one
+ * unpriceable holding must not take down the whole board.
+ */
+export async function fetchDailyCloses(
+  symbol: string,
+  from: string,
+  to: string,
+): Promise<PriceHistory> {
+  const key = process.env.FMP_API_KEY;
+  if (!key) throw new Error("Missing FMP_API_KEY");
+  const url =
+    `${FMP_BASE}/historical-price-eod/full?symbol=${encodeURIComponent(symbol)}` +
+    `&from=${from}&to=${to}&apikey=${encodeURIComponent(key)}`;
+  try {
+    // Yesterday's closes never change; an hour is well inside one trading day.
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    // 402 is FMP's answer for a symbol outside the subscription's universe.
+    if (res.status === 402) return { closes: [], unavailable: "plan" };
+    if (!res.ok) return { closes: [], unavailable: "empty" };
+    const data = (await res.json()) as Record<string, unknown>[];
+    if (!Array.isArray(data)) return { closes: [], unavailable: "empty" };
+    const closes = data
+      .map((row) => ({ date: String(row.date ?? "").slice(0, 10), close: Number(row.close) }))
+      .filter((r) => r.date && Number.isFinite(r.close) && r.close > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return { closes, unavailable: closes.length ? "none" : "empty" };
+  } catch {
+    // One unpriceable holding must never take the whole board down.
+    return { closes: [], unavailable: "empty" };
+  }
+}

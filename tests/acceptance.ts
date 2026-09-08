@@ -161,3 +161,93 @@ check("net = 40%", exp.netPct, 40);
 
 console.log(`\n${"═".repeat(64)}\n  ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);
 if (failures.length) { console.log("\nFailures:"); failures.forEach((f) => console.log("  • " + f)); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Wave 2 analytics. Deterministic properties only — no network, no fixtures
+// of real prices, just the invariants the maths has to satisfy.
+import { regress, correlation, exAnteVolatility, factorSplit, toReturns, align } from "@/lib/risk-factor";
+import { attribution, sizeOverruns, assignmentExposure } from "@/lib/risk-wave2";
+import { fundVaR, fundCVaR, scaledVaR, drawdown, sortinoRatio, dollarVolatility } from "@/lib/risk-nav";
+import { annualizedVolatility } from "@/lib/risk-nav";
+
+section("Wave 2 — regression");
+// y = 2x exactly: beta 2, R² 1.
+const x = Array.from({ length: 60 }, (_, i) => Math.sin(i) / 100);
+check("exact linear relationship recovers the slope", regress(x.map((v) => 2 * v), x)?.beta.toFixed(6), (2).toFixed(6));
+check("...and explains all the variance", regress(x.map((v) => 2 * v), x)?.rSquared.toFixed(6), (1).toFixed(6));
+check("too few observations refuses to fit", regress([1, 2, 3], [1, 2, 3]), null);
+check("a flat benchmark cannot explain anything", regress(x, Array(60).fill(0.001)), null);
+check("perfectly correlated series", correlation(x, x.map((v) => 3 * v))?.toFixed(6), (1).toFixed(6));
+check("perfectly inverted series", correlation(x, x.map((v) => -3 * v))?.toFixed(6), (-1).toFixed(6));
+
+section("Wave 2 — ex-ante volatility and the hedging property");
+const rng = (seed: number) => { let s = seed; return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5; };
+const r1 = rng(7), r2 = rng(99);
+const dates = Array.from({ length: 120 }, (_, i) => `2026-0${1 + Math.floor(i / 40)}-${String((i % 40) + 1).padStart(2, "0")}`);
+const common = dates.map((d) => d);
+const marketFactor = common.map(() => r1() * 0.02);
+const seriesA = new Map(common.map((d, i) => [d, marketFactor[i] + r2() * 0.005]));
+const seriesB = new Map(common.map((d, i) => [d, marketFactor[i] + r2() * 0.005]));
+const returns = new Map([["A", seriesA], ["B", seriesB]]);
+const longOnly = exAnteVolatility([{ symbol: "A", weight: 1 }], returns).annualizedPct ?? 0;
+const hedged = exAnteVolatility([{ symbol: "A", weight: 1 }, { symbol: "B", weight: -1 }], returns).annualizedPct ?? 0;
+check("shorting a correlated name reduces portfolio volatility", hedged < longOnly, true);
+const contribs = exAnteVolatility([{ symbol: "A", weight: 0.6 }, { symbol: "B", weight: 0.4 }], returns).contributions;
+check("variance contributions sum to 100%", Number(contribs.reduce((s, c) => s + c.sharePct, 0).toFixed(4)), 100);
+check("an unpriceable holding is named, not silently dropped",
+  exAnteVolatility([{ symbol: "A", weight: 1 }, { symbol: "NOPRICE", weight: 1 }], returns).excluded, ["NOPRICE"]);
+
+section("Wave 2 — factor split");
+const fs = factorSplit(seriesA, new Map(common.map((d, i) => [d, marketFactor[i]])));
+check("systematic and idiosyncratic shares sum to 100%",
+  Number(((fs.systematicPct ?? 0) + (fs.idiosyncraticPct ?? 0)).toFixed(6)), 100);
+check("a series driven by the factor is mostly systematic", (fs.systematicPct ?? 0) > 50, true);
+
+section("Wave 2 — VaR, CVaR and the scaling that was 100x out");
+const losses = Array.from({ length: 250 }, (_, i) => (i % 5 === 0 ? -0.03 : 0.001));
+const v = fundVaR(losses, 100_000, 250);
+check("VaR is a percent, not a fraction ×100", v.pct != null && v.pct > 0 && v.pct < 100, true);
+check("VaR dollars agree with VaR percent", Number((((v.pct ?? 0) / 100) * 100_000).toFixed(4)), Number((v.dollars ?? 0).toFixed(4)));
+check("CVaR is at least as large as VaR", (fundCVaR(losses, 100_000, 250).pct ?? 0) >= (v.pct ?? 0), true);
+check("ten-day VaR scales by √10", Number((scaledVaR(v, 10).pct ?? 0).toFixed(6)), Number(((v.pct ?? 0) * Math.sqrt(10)).toFixed(6)));
+check("VaR refuses a window under 30 observations", fundVaR(losses.slice(0, 25), 100_000, 250).pct, null);
+
+section("Wave 2 — drawdown, Sortino, dollar volatility");
+const nav = (vals: number[]) => vals.map((n, i) => ({ captured_on: `2026-08-${String(i + 1).padStart(2, "0")}`, nav: n, external_flow: 0, source: "broker" as const, note: null }));
+const dd = drawdown(nav([100, 110, 99, 105]));
+check("max drawdown is the deepest peak-to-trough", Number((dd.maxPct ?? 0).toFixed(2)), -10);
+check("drawdown reports the peak date", dd.peakDate, "2026-08-02");
+check("drawdown reports the trough date", dd.troughDate, "2026-08-03");
+const seeded = nav([500, 500, 100_500]);
+seeded[2].external_flow = 100_000;
+check("a donation is not a gain, so it opens no drawdown", Number((drawdown(seeded).maxPct ?? 0).toFixed(2)), 0);
+check("Sortino refuses without enough losing days", sortinoRatio(Array(200).fill(0.001), 4, 60).value, null);
+check("dollar volatility is null when volatility is", dollarVolatility({ value: null, observations: 0, short: true }, 100_000), null);
+
+section("Wave 2 — attribution, overruns, assignment");
+const attrPositions = [
+  pos({ symbol: "L1", unrealizedPnl: 500, sector: "Technology" }),
+  pos({ symbol: "S1", side: "short", exposure: -5_000, unrealizedPnl: -200, sector: "Technology" }),
+  pos({ symbol: "BOND", assetClass: "Fixed Income", team: "alternatives", unrealizedPnl: -50, sector: "Other" }),
+];
+const attr = attribution(attrPositions, NAV);
+check("attribution totals the unrealized P&L", attr.totalDollars, 250);
+check("longs and shorts are separated", attr.bySide.map((r) => r.label).sort(), ["Equities long", "Equities short", "Fixed income"]);
+check("sector rollup nets long against short", attr.bySector.find((r) => r.label === "Technology")?.dollars, 300);
+check("a position 1pt over approved size is not yet an overrun",
+  sizeOverruns([pos({ exposure: 3_000, approval: appr({ approved_size_pct: 2 }) })]).length, 0);
+check("more than 1pt over is an overrun",
+  sizeOverruns([pos({ exposure: 3_100, approval: appr({ approved_size_pct: 2 }) })]).length, 1);
+check("a position with no approval cannot overrun", sizeOverruns([pos()]).length, 0);
+const shortPut = pos({
+  symbol: "PUT", side: "short", assetClass: "Option", team: "alternatives", absQuantity: 2, price: 8,
+  option: { longPremium: false, expiry: "2026-09-11", delta: -0.6, theta: 1, vega: -2, multiplier: 100, strike: 10, putCall: "PUT" } as never,
+});
+const ax = assignmentExposure([shortPut], 5_000, new Date("2026-09-08T14:00:00Z"));
+check("short put assignment cost is strike × contracts × 100", ax.totalShortPutCost, 2_000);
+check("an in-the-money short put inside the window is flagged", ax.atRisk.length, 1);
+check("cash buffer is cash minus assignment cost", ax.bufferDollars, 3_000);
+check("an out-of-the-money short put is not at risk",
+  assignmentExposure([pos({ ...shortPut, price: 12 })], 5_000, new Date("2026-09-08T14:00:00Z")).atRisk.length, 0);
+
+console.log(`\n${"═".repeat(64)}\n  TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);
