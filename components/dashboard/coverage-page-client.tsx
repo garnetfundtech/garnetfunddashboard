@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Eye, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, ExternalLink, Eye, Plus, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
@@ -12,6 +12,8 @@ import { assignSectorAction } from "@/app/(dashboard)/admin/actions";
 import {
   addCoverageTickerAction,
   deleteCoverageTickerAction,
+  transferAllCoverageAction,
+  transferCoverageTickerAction,
 } from "@/app/(dashboard)/coverage/actions";
 import { signFile } from "@/lib/sign-client";
 import { useClickOutside } from "@/lib/use-click-outside";
@@ -141,6 +143,13 @@ export function CoveragePageClient({
       clearTimeout(timer);
     };
   }, [tickerInput, addOpen, picked]);
+
+  // Handover dialog: one ticker, or everything a person covers.
+  const [handover, setHandover] = useState<
+    | { kind: "ticker"; id: string; ticker: string; sector: string }
+    | { kind: "all"; fromId: string; fromName: string; count: number }
+    | null
+  >(null);
 
   // The suggestion list overlays the company field, so it has to be
   // dismissable without picking something.
@@ -551,6 +560,99 @@ export function CoveragePageClient({
         </div>
       )}
 
+      {handover && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6">
+          <div className="w-full max-w-sm border border-line bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="panel-title">
+                {handover.kind === "ticker"
+                  ? `Hand over ${handover.ticker}`
+                  : `Hand over ${handover.fromName}'s coverage`}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setHandover(null)}
+                className="text-ink-3 hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {handover.kind === "all" && (
+              <p className="mb-3 text-[13px] text-ink-3">
+                Moves all {handover.count} name{handover.count === 1 ? "" : "s"} to
+                someone else. Anything they already cover is merged, not duplicated.
+              </p>
+            )}
+
+            <form
+              action={(fd) => {
+                if (handover.kind === "ticker") {
+                  fd.set("id", handover.id);
+                  runAction(transferCoverageTickerAction, fd, () => setHandover(null));
+                } else {
+                  fd.set("fromAnalystId", handover.fromId);
+                  runAction(transferAllCoverageAction, fd, () => setHandover(null));
+                }
+              }}
+              className="flex flex-col gap-3"
+            >
+              <label className="flex flex-col gap-1">
+                <span className="caps">Hand to</span>
+                <select
+                  name="toAnalystId"
+                  required
+                  defaultValue=""
+                  className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                >
+                  <option value="" disabled>
+                    Pick a member…
+                  </option>
+                  {analysts
+                    .filter((a) => handover.kind !== "all" || a.id !== handover.fromId)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                        {a.sector ? ` · ${a.sector}` : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              {handover.kind === "ticker" && (
+                <label className="flex flex-col gap-1">
+                  <span className="caps">Team</span>
+                  <select
+                    name="sector"
+                    defaultValue={handover.sector}
+                    className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
+                  >
+                    {sectors.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[12px] text-ink-3">
+                    Also refiles the ticker if the new owner sits on another team.
+                  </span>
+                </label>
+              )}
+
+              {formError && <p className="text-[13px] text-neg">{formError}</p>}
+              <div className="flex items-center justify-end gap-1.5 pt-1">
+                <GhostBtn type="button" onClick={() => setHandover(null)}>
+                  Cancel
+                </GhostBtn>
+                <PrimaryBtn type="submit" disabled={isPending}>
+                  {isPending ? "Handing over…" : "Hand over"}
+                </PrimaryBtn>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {opened && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6">
           <div className="panel flex h-[85vh] w-full max-w-5xl flex-col p-3">
@@ -767,11 +869,48 @@ export function CoveragePageClient({
                         className="flex items-center justify-between gap-2 text-[13.5px] text-ink"
                       >
                         <span className="truncate">
-                          {analystNameById.get(row.analystId) ?? "Unknown"}
+                          {row.analystId
+                            ? analystNameById.get(row.analystId) ?? "Unknown"
+                            : "Unclaimed"}
                           <span className="ml-1.5 text-[12px] text-ink-3">
                             {row.sector} · {fmtDate(row.createdAt)}
                           </span>
                         </span>
+                        <span className="flex shrink-0 items-center gap-0.5">
+                        {row.analystId === null && (
+                          <button
+                            type="button"
+                            title={`Take ${selectedDetail.ticker} on`}
+                            disabled={isPending}
+                            onClick={() => {
+                              const fd = new FormData();
+                              fd.set("id", row.id);
+                              fd.set("toAnalystId", viewerId);
+                              runAction(transferCoverageTickerAction, fd);
+                            }}
+                            className="shrink-0 px-1.5 py-0.5 text-[12px] text-garnet transition hover:underline disabled:opacity-50"
+                          >
+                            Claim
+                          </button>
+                        )}
+                        {(mine || canManageAnyTicker) && (
+                          <button
+                            type="button"
+                            title="Hand over to someone else"
+                            disabled={isPending}
+                            onClick={() =>
+                              setHandover({
+                                kind: "ticker",
+                                id: row.id,
+                                ticker: selectedDetail.ticker,
+                                sector: row.sector,
+                              })
+                            }
+                            className="shrink-0 p-1 text-ink-3 transition hover:text-ink disabled:opacity-50"
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {(mine || canManageAnyTicker) && (
                           <button
                             type="button"
@@ -796,6 +935,7 @@ export function CoveragePageClient({
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
+                        </span>
                       </li>
                     );
                   })}
@@ -947,8 +1087,28 @@ export function CoveragePageClient({
                             {a.sector ?? "Unassigned"}
                           </span>
                         </span>
-                        <span className="ml-2 shrink-0 tabular-nums text-[12px] text-ink-3">
-                          {load} ticker{load === 1 ? "" : "s"}
+                        <span className="ml-2 flex shrink-0 items-center gap-1">
+                          <span className="tabular-nums text-[12px] text-ink-3">
+                            {load} ticker{load === 1 ? "" : "s"}
+                          </span>
+                          {load > 0 && (canManageAnyTicker || a.id === viewerId) && (
+                            <button
+                              type="button"
+                              title={`Hand over everything ${a.name} covers`}
+                              disabled={isPending}
+                              onClick={() =>
+                                setHandover({
+                                  kind: "all",
+                                  fromId: a.id,
+                                  fromName: a.name,
+                                  count: load,
+                                })
+                              }
+                              className="p-0.5 text-ink-3 transition hover:text-ink disabled:opacity-50"
+                            >
+                              <ArrowRightLeft className="h-3 w-3" />
+                            </button>
+                          )}
                         </span>
                       </div>
                       <div className="mt-0.5 h-[3px] w-full rounded-none bg-paper-2">

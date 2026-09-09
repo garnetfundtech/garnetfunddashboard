@@ -16,7 +16,8 @@ export type CoverageTickerRow = {
   ticker: string;
   companyName: string | null;
   sector: string;
-  analystId: string;
+  /** Null once the owner's account is gone — the name stays, unclaimed. */
+  analystId: string | null;
   createdAt: string;
 };
 
@@ -89,7 +90,7 @@ export async function getCoverageTickers(): Promise<CoverageTickerRow[]> {
       ticker: string;
       company_name: string | null;
       sector: string;
-      analyst_id: string;
+      analyst_id: string | null;
       created_at: string;
     };
     return {
