@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, User, BookOpen, FolderKanban, Bookmark } from "lucide-react";
+import { Search, User, BookOpen, FolderKanban, Bookmark, Compass } from "lucide-react";
 import { AvatarInitials } from "@/components/dashboard/avatar-initials";
 import { useClickOutside } from "@/lib/use-click-outside";
 import type { SearchItem, SearchItemType } from "@/lib/search";
@@ -11,6 +11,7 @@ const TYPE_ICON: Record<Exclude<SearchItemType, "user">, typeof BookOpen> = {
   research: BookOpen,
   resource: FolderKanban,
   watchlist: Bookmark,
+  coverage: Compass,
 };
 
 const MAX_RESULTS = 8;

@@ -1,4 +1,5 @@
 import { getFundUsers, getResearchItems, getResourcesWithUrls, getWatchlistRows } from "@/lib/data";
+import { getCoverageTickers } from "@/lib/coverage-tickers";
 import type { UserRole } from "@/lib/types";
 
 const ROLE_SEARCH_TERMS: Record<UserRole, string> = {
@@ -10,7 +11,12 @@ const ROLE_SEARCH_TERMS: Record<UserRole, string> = {
   developer: "developer dev",
 };
 
-export type SearchItemType = "user" | "research" | "resource" | "watchlist";
+export type SearchItemType =
+  | "user"
+  | "research"
+  | "resource"
+  | "watchlist"
+  | "coverage";
 
 export type SearchItem = {
   id: string;
@@ -32,11 +38,12 @@ export type SearchItem = {
  * handles instantly.
  */
 export async function getSearchIndex(): Promise<SearchItem[]> {
-  const [users, research, resources, watchlist] = await Promise.all([
+  const [users, research, resources, watchlist, coverage] = await Promise.all([
     getFundUsers().catch(() => []),
     getResearchItems().catch(() => []),
     getResourcesWithUrls().catch(() => []),
     getWatchlistRows().catch(() => []),
+    getCoverageTickers().catch(() => []),
   ]);
 
   const items: SearchItem[] = [];
@@ -83,6 +90,22 @@ export async function getSearchIndex(): Promise<SearchItem[]> {
       subtitle: "Watchlist",
       searchable: [w.ticker, w.notes ?? ""].join(" "),
       href: "/watchlist",
+    });
+  }
+
+  // One entry per ticker, not per person covering it — searching "AAPL" should
+  // offer the name once and land on its coverage panel.
+  const seenTickers = new Set<string>();
+  for (const row of coverage) {
+    if (seenTickers.has(row.ticker)) continue;
+    seenTickers.add(row.ticker);
+    items.push({
+      id: `coverage-${row.ticker}`,
+      type: "coverage",
+      label: row.ticker,
+      subtitle: row.companyName ? `Coverage · ${row.companyName}` : `Coverage · ${row.sector}`,
+      searchable: [row.ticker, row.companyName ?? "", row.sector].join(" "),
+      href: `/coverage?ticker=${encodeURIComponent(row.ticker)}`,
     });
   }
 
