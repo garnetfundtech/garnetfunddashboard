@@ -62,6 +62,20 @@ export type TeamBrowseData = {
   canWrite: boolean;
 };
 
+/**
+ * Who may delete a folder — pm/admin/developer only, never a team's own
+ * analysts.
+ *
+ * Deliberately stricter than canWriteSector, which still governs uploads,
+ * folder creation and renames. Deleting a folder takes every file beneath it
+ * with it (see collectFolderStoragePaths), so one wrong click by any member of
+ * a team could remove a whole season of that team's work. Requested by the
+ * fund after the coverage rollout.
+ */
+export function canDeleteFolder(role: UserRole) {
+  return CROSS_SECTOR_ROLES.includes(role);
+}
+
 export function canWriteSector(
   profile: { role: UserRole; coverage_sector: string | null },
   sector: string,

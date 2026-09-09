@@ -277,10 +277,12 @@ export function CoveragePageClient({
     (s) => sectorStatus(s, analysts, tickersOf(s)) === "uncovered",
   ).length;
 
+  // Load is what each person actually claimed, not what their team holds
+  // between them: crediting every member of a group with the whole group's
+  // tickers made one analyst's name look like five people's coverage.
   const loadMap: Record<string, number> = {};
   for (const a of activeAnalysts) {
-    if (!a.sector) continue;
-    loadMap[a.id] = tickersOf(a.sector).length;
+    loadMap[a.id] = coverageTickers.filter((r) => r.analystId === a.id).length;
   }
   const avgLoad =
     activeAnalysts.length > 0
@@ -917,7 +919,7 @@ export function CoveragePageClient({
               User Load
             </p>
             <p className="mt-0.5 text-[15px] font-semibold text-ink">
-              Tickers per user
+              Tickers each person added
             </p>
             <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
               {activeAnalysts.length === 0 && (
@@ -946,7 +948,7 @@ export function CoveragePageClient({
                           </span>
                         </span>
                         <span className="ml-2 shrink-0 tabular-nums text-[12px] text-ink-3">
-                          {load} tickers
+                          {load} ticker{load === 1 ? "" : "s"}
                         </span>
                       </div>
                       <div className="mt-0.5 h-[3px] w-full rounded-none bg-paper-2">

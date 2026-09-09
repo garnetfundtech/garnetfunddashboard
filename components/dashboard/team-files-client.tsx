@@ -26,6 +26,7 @@ import { canManageContent } from "@/lib/roles";
 import { signFile } from "@/lib/sign-client";
 import type { UserRole } from "@/lib/types";
 import type { TeamBrowseData, TeamFileRow } from "@/lib/team-files";
+import { canDeleteFolder } from "@/lib/team-files";
 import {
   createFolderAction,
   deleteFolderAction,
@@ -144,6 +145,9 @@ export function TeamFilesClient({
       router.refresh();
     });
   }
+
+  // Folders are pm/admin only to delete, unlike everything else here.
+  const mayDeleteFolders = canDeleteFolder(actor.role);
 
   function canDeleteFile(file: TeamFileRow) {
     if (!canWrite) return false;
@@ -366,21 +370,23 @@ export function TeamFilesClient({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDialog({
-                              kind: "confirm-folder-delete",
-                              id: folder.id,
-                              name: folder.name,
-                              fileCount: folder.fileCount,
-                            });
-                          }}
-                          className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {mayDeleteFolders && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDialog({
+                                kind: "confirm-folder-delete",
+                                id: folder.id,
+                                name: folder.name,
+                                fileCount: folder.fileCount,
+                              });
+                            }}
+                            className="rounded-none p-1 text-ink-3 hover:bg-paper-2 hover:text-neg"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </span>
                     )}
                   </td>

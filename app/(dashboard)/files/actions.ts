@@ -12,6 +12,7 @@ import { logAuditEvent } from "@/lib/audit";
 import { isCoverageTeam, toCoverageTeam } from "@/lib/sectors";
 import {
   TEAM_FILES_BUCKET,
+  canDeleteFolder,
   canWriteSector,
   collectFolderStoragePaths,
 } from "@/lib/team-files";
@@ -140,11 +141,18 @@ export async function deleteFolderAction(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { ok: false, error: "Folder not found." };
 
+  // Folder deletes are pm/admin only — a folder takes every file beneath it
+  // when it goes, so this is stricter than the write check used everywhere
+  // else on this page.
+  if (!canDeleteFolder(profile.role)) {
+    return {
+      ok: false,
+      error: "Only PMs and admins can delete folders. Ask one to remove it.",
+    };
+  }
+
   const { sector, objectPaths } = await collectFolderStoragePaths(id);
   if (!sector) return { ok: false, error: "Folder not found." };
-  if (!canWriteSector(profile, sector)) {
-    return { ok: false, error: "You can only delete folders in your own team." };
-  }
 
   const admin = createAdminClient();
 
