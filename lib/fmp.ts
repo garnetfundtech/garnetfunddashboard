@@ -85,6 +85,72 @@ export async function fetchProfile(symbol: string): Promise<FmpProfile | null> {
   };
 }
 
+export type SymbolMatch = { symbol: string; name: string; exchange: string };
+
+/**
+ * Where the fund actually trades. FMP answers a search for "AAPL" with the
+ * London tracker ETC and the XETRA line as well, which is noise in a ticker
+ * picker — those are ranked out below rather than dropped outright, so a
+ * genuinely foreign name still resolves.
+ */
+const US_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "CBOE", "OTC"]);
+
+/**
+ * Ticker/company search for the coverage picker.
+ *
+ * Queries both FMP search endpoints — by symbol and by company name — because
+ * neither alone covers the way people type: "AAPL" misses on the name search,
+ * "Exxon" misses on the symbol search. Results are merged, deduped on symbol,
+ * and US listings float to the top.
+ */
+export async function searchSymbols(
+  query: string,
+  limit = 8,
+): Promise<SymbolMatch[]> {
+  const key = process.env.FMP_API_KEY;
+  const q = query.trim();
+  if (!key || q.length < 1) return [];
+
+  const call = async (path: string) => {
+    const url =
+      `${FMP_BASE}/${path}?query=${encodeURIComponent(q)}` +
+      `&limit=${limit}&apikey=${encodeURIComponent(key)}`;
+    try {
+      // A company's name and listing don't change intraday.
+      const res = await fetch(url, { next: { revalidate: 3600 } });
+      if (!res.ok) return [] as Record<string, unknown>[];
+      const rows = await res.json();
+      return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+    } catch {
+      return [] as Record<string, unknown>[];
+    }
+  };
+
+  const [bySymbol, byName] = await Promise.all([
+    call("search-symbol"),
+    call("search-name"),
+  ]);
+
+  const seen = new Set<string>();
+  const matches: SymbolMatch[] = [];
+  for (const row of [...bySymbol, ...byName]) {
+    const symbol = String(row.symbol ?? "").toUpperCase();
+    if (!symbol || seen.has(symbol)) continue;
+    seen.add(symbol);
+    matches.push({
+      symbol,
+      name: String(row.name ?? ""),
+      exchange: String(row.exchange ?? ""),
+    });
+  }
+
+  const rank = (m: SymbolMatch) => {
+    if (m.symbol.toUpperCase() === q.toUpperCase()) return 0;
+    return US_EXCHANGES.has(m.exchange.toUpperCase()) ? 1 : 2;
+  };
+  return matches.sort((a, b) => rank(a) - rank(b)).slice(0, limit);
+}
+
 export type TreasuryRates = { date: string; month3: number | null };
 
 /**

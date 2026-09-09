@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Eye, Plus, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -14,8 +14,10 @@ import {
   deleteCoverageTickerAction,
 } from "@/app/(dashboard)/coverage/actions";
 import { signFile } from "@/lib/sign-client";
+import { useClickOutside } from "@/lib/use-click-outside";
 import type { CoverageAnalyst } from "@/app/(dashboard)/coverage/page";
 import type { CoverageTickerRow, TickerFile } from "@/lib/coverage-tickers";
+import type { SymbolMatch } from "@/lib/fmp";
 import type { ResearchItem, UserRole } from "@/lib/types";
 import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
 
@@ -102,6 +104,58 @@ export function CoveragePageClient({
   const [opened, setOpened] = useState<{ title: string; url: string } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Add-ticker form. Ticker and company are controlled so picking a suggestion
+  // can fill both at once; `picked` stops the list reopening on that write.
+  const [tickerInput, setTickerInput] = useState("");
+  const [companyInput, setCompanyInput] = useState("");
+  const [matches, setMatches] = useState<SymbolMatch[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [picked, setPicked] = useState(false);
+
+  // Ticker lookup, debounced. Every state write happens inside the timeout, so
+  // an open form never re-renders on the keystroke itself.
+  useEffect(() => {
+    if (!addOpen || picked) return;
+    const q = tickerInput.trim();
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      if (q.length < 1) {
+        setMatches([]);
+        return;
+      }
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/fmp/search?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        // A slower earlier request must not overwrite a newer one's results.
+        if (!cancelled) setMatches(json.ok ? (json.matches as SymbolMatch[]) : []);
+      } catch {
+        if (!cancelled) setMatches([]);
+      }
+      if (!cancelled) setSearching(false);
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [tickerInput, addOpen, picked]);
+
+  // The suggestion list overlays the company field, so it has to be
+  // dismissable without picking something.
+  const comboRef = useRef<HTMLDivElement>(null);
+  const closeMatches = useCallback(() => setMatches([]), []);
+  useClickOutside(comboRef, matches.length > 0, closeMatches);
+
+  function openAddForm() {
+    setFormError("");
+    setTickerInput("");
+    setCompanyInput("");
+    setMatches([]);
+    setPicked(false);
+    setAddOpen(true);
+  }
 
   const analystNameById = useMemo(
     () => new Map(analysts.map((a) => [a.id, a.name])),
@@ -162,6 +216,32 @@ export function CoveragePageClient({
     }
     return map;
   }, [analysts, research, sectors, coverageTickers]);
+
+  /**
+   * Research tickers that belong to no team — the post has no sector, or one
+   * that isn't a coverage team any more. They used to appear nowhere at all,
+   * which made a write-up effectively invisible on this page.
+   */
+  const unassignedEntries = useMemo(() => {
+    const known = new Set(sectors.map((s) => s.toLowerCase()));
+    const byTicker = new Map<string, TickerEntry>();
+
+    for (const r of research) {
+      if (r.sector && known.has(r.sector.toLowerCase())) continue;
+      const ticker = r.ticker?.trim().toUpperCase();
+      if (!ticker || ticker === "—") continue;
+      const entry = byTicker.get(ticker) ?? {
+        ticker,
+        companyName: null,
+        rows: [],
+        researchCount: 0,
+      };
+      entry.researchCount += 1;
+      byTicker.set(ticker, entry);
+    }
+
+    return [...byTicker.values()].sort((a, b) => a.ticker.localeCompare(b.ticker));
+  }, [research, sectors]);
 
   /** Everything known about the ticker in the detail panel, across all teams. */
   const selectedDetail = useMemo(() => {
@@ -279,12 +359,7 @@ export function CoveragePageClient({
                 Assign analyst
               </GhostBtn>
             )}
-            <PrimaryBtn
-              onClick={() => {
-                setFormError("");
-                setAddOpen(true);
-              }}
-            >
+            <PrimaryBtn onClick={openAddForm}>
               <Plus className="h-3.5 w-3.5" />
               Add ticker
             </PrimaryBtn>
@@ -373,23 +448,72 @@ export function CoveragePageClient({
               }
               className="flex flex-col gap-3"
             >
-              <label className="flex flex-col gap-1">
+              <div className="relative flex flex-col gap-1" ref={comboRef}>
                 <span className="caps">Ticker</span>
                 <input
                   name="ticker"
                   required
                   autoFocus
+                  autoComplete="off"
                   maxLength={12}
-                  placeholder="AAPL"
+                  placeholder="Start typing AAPL or Apple"
+                  value={tickerInput}
+                  onChange={(e) => {
+                    setPicked(false);
+                    setTickerInput(e.target.value.toUpperCase());
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && matches.length > 0) {
+                      // Close the list, don't let the keypress reach the modal.
+                      e.stopPropagation();
+                      setMatches([]);
+                    }
+                  }}
                   className="border border-line bg-surface px-2.5 py-2 text-[13px] uppercase text-ink outline-none"
                 />
-              </label>
+                {searching && !picked && (
+                  <span className="absolute right-2 top-[30px] text-[12px] text-ink-3">
+                    Searching…
+                  </span>
+                )}
+                {!picked && matches.length > 0 && (
+                  <ul className="absolute top-[58px] z-10 max-h-56 w-full overflow-y-auto border border-line bg-surface shadow-sm">
+                    {matches.map((match) => (
+                      <li key={match.symbol}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Fill both fields at once: the company name is what
+                            // widens the file match beyond the symbol itself, and
+                            // nobody types it by hand.
+                            setPicked(true);
+                            setTickerInput(match.symbol);
+                            setCompanyInput(match.name);
+                            setMatches([]);
+                          }}
+                          className="flex w-full items-baseline justify-between gap-2 px-2.5 py-1.5 text-left transition hover:bg-paper-2"
+                        >
+                          <span className="text-[13px] font-medium text-ink">
+                            {match.symbol}
+                          </span>
+                          <span className="truncate text-[12px] text-ink-3">
+                            {match.name}
+                            {match.exchange ? ` · ${match.exchange}` : ""}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <label className="flex flex-col gap-1">
                 <span className="caps">Company name</span>
                 <input
                   name="companyName"
                   maxLength={120}
                   placeholder="Apple Inc. (optional)"
+                  value={companyInput}
+                  onChange={(e) => setCompanyInput(e.target.value)}
                   className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
                 />
                 <span className="text-[12px] text-ink-3">
@@ -546,6 +670,53 @@ export function CoveragePageClient({
                   </tr>
                 );
               })}
+
+              {unassignedEntries.length > 0 && (
+                <tr className="border-t border-line-2 transition hover:bg-paper-3">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-none"
+                        style={{ background: SECTOR_FALLBACK_COLOR }}
+                      />
+                      <span className="text-[14px] text-ink-2">No team</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-[14px] text-ink-3">—</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[14px] text-ink-3">
+                    0
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {unassignedEntries.map((entry) => {
+                        const fileCount = (filesByTicker[entry.ticker] ?? []).length;
+                        return (
+                          <button
+                            key={entry.ticker}
+                            type="button"
+                            onClick={() => setSelected(entry.ticker)}
+                            title={`${entry.ticker} — from research, no team set`}
+                            className="rounded-none transition hover:opacity-80"
+                          >
+                            <StatusPill
+                              label={
+                                fileCount > 0
+                                  ? `${entry.ticker} · ${fileCount}`
+                                  : entry.ticker
+                              }
+                              tone={selected === entry.ticker ? "accent" : "neutral"}
+                              dot={false}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <StatusPill label="From research" tone="neutral" dot={false} />
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </TableShell>
@@ -691,7 +862,58 @@ export function CoveragePageClient({
           </div>
         ) : (
           <div className="panel flex h-full min-h-0 flex-col p-3">
-            <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
+            <div className="flex items-baseline justify-between">
+              <p className="text-[11px] uppercase tracking-[0.08em] text-ink-3">
+                My coverage
+              </p>
+              <span className="tabular-nums text-[12px] text-ink-3">
+                {myTickers.length}
+              </span>
+            </div>
+            {myTickers.length === 0 ? (
+              <button
+                type="button"
+                onClick={openAddForm}
+                className="mt-1 text-left text-[13px] text-ink-3 transition hover:text-ink"
+              >
+                You haven&apos;t added any tickers yet — add one.
+              </button>
+            ) : (
+              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto">
+                {myTickers.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(row.ticker)}
+                      className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
+                    >
+                      <span className="text-[13.5px] font-medium text-ink">
+                        {row.ticker}
+                      </span>
+                      <span className="truncate text-[12px] text-ink-3">
+                        {row.companyName ?? row.sector}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove from my coverage"
+                      disabled={isPending}
+                      onClick={() => {
+                        const fd = new FormData();
+                        fd.set("id", row.id);
+                        runAction(deleteCoverageTickerAction, fd);
+                      }}
+                      className="shrink-0 p-1 text-ink-3 transition hover:text-neg disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {formError && <p className="pt-1 text-[13px] text-neg">{formError}</p>}
+
+            <p className="mt-3 border-t border-line pt-3 text-[11px] uppercase tracking-[0.08em] text-ink-3">
               User Load
             </p>
             <p className="mt-0.5 text-[15px] font-semibold text-ink">
