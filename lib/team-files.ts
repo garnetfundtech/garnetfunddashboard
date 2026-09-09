@@ -12,7 +12,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseFilePath } from "@/lib/storage";
-import { COVERAGE_TEAMS } from "@/lib/sectors";
+import { COVERAGE_TEAMS, toCoverageTeam } from "@/lib/sectors";
 import type { UserRole } from "@/lib/types";
 
 export const TEAM_FILES_BUCKET = "team-files";
@@ -67,7 +67,12 @@ export function canWriteSector(
   sector: string,
 ) {
   if (CROSS_SECTOR_ROLES.includes(profile.role)) return true;
-  return profile.coverage_sector === sector;
+  // Compare on the coverage team, not the raw stored string: a profile still
+  // holding a pre-0024 GICS value ("Technology") covers the team it maps to
+  // ("TMT"), which is also the team /files lands that user on. Comparing raw
+  // dropped them to read-only on their own team.
+  const covers = toCoverageTeam(profile.coverage_sector);
+  return covers !== null && covers === toCoverageTeam(sector);
 }
 
 type RawFolder = {

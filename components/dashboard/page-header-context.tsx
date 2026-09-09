@@ -9,9 +9,12 @@ type HeaderContent = {
   actions?: ReactNode;
 };
 
+/** What's actually stored: the content plus the route that registered it. */
+type Registration = HeaderContent & { pathname: string };
+
 type Ctx = {
-  content: HeaderContent | null;
-  setContent: (c: HeaderContent | null) => void;
+  content: Registration | null;
+  setContent: (update: (current: Registration | null) => Registration | null) => void;
 };
 
 const PageHeaderCtx = createContext<Ctx | null>(null);
@@ -21,17 +24,16 @@ const PageHeaderCtx = createContext<Ctx | null>(null);
  * layout's top row, so the title can sit in the same row (and share the same
  * border line) as the sidebar logo, instead of each page rendering its own
  * separate bordered header lower down.
+ *
+ * Content is tagged with the pathname that registered it and read back only
+ * for the current route, so the outgoing page's header can't linger into the
+ * next one. This provider deliberately does NOT clear on navigation itself:
+ * effects run children-first, so a clear here would land *after* the incoming
+ * page registered and wipe it — leaving the row blank (no title, no Upload
+ * button) until something happened to re-render that page.
  */
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
-  const [content, setContent] = useState<HeaderContent | null>(null);
-  const pathname = usePathname();
-
-  // Clear immediately on navigation so the outgoing page's title never lingers
-  // into the next page, even for the one tick before the new page's own
-  // effect fires.
-  useEffect(() => {
-    setContent(null);
-  }, [pathname]);
+  const [content, setContent] = useState<Registration | null>(null);
 
   return <PageHeaderCtx.Provider value={{ content, setContent }}>{children}</PageHeaderCtx.Provider>;
 }
@@ -39,24 +41,28 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 /** Reads the currently-registered header content, for the layout's top row to render. */
 export function usePageHeaderContent(): HeaderContent | null {
   const ctx = useContext(PageHeaderCtx);
-  return ctx?.content ?? null;
+  const pathname = usePathname();
+  const content = ctx?.content ?? null;
+  return content && content.pathname === pathname ? content : null;
 }
 
 /** Called by <PageHeader> to register this page's title/meta/actions. */
 export function useRegisterPageHeader(content: HeaderContent) {
   const ctx = useContext(PageHeaderCtx);
+  const pathname = usePathname();
   const { title, meta, actions } = content;
-  const lastRef = useRef<HeaderContent | null>(null);
+  const setContent = ctx?.setContent;
+  const lastRef = useRef<Registration | null>(null);
 
   useEffect(() => {
-    if (!ctx) return;
-    lastRef.current = { title, meta, actions };
-    ctx.setContent(lastRef.current);
+    if (!setContent) return;
+    const entry: Registration = { pathname, title, meta, actions };
+    lastRef.current = entry;
+    setContent(() => entry);
     return () => {
-      // Only clear if we're still the registered content (avoids a race where
-      // a newly-mounted page's cleanup fires after the old page unmounts).
-      if (ctx.content === lastRef.current) ctx.setContent(null);
+      // Only clear if we're still the registered content, so a newly-mounted
+      // page's registration survives the outgoing page's cleanup.
+      setContent((current) => (current === entry ? null : current));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ctx identity is stable from the provider
-  }, [title, meta, actions]);
+  }, [setContent, pathname, title, meta, actions]);
 }

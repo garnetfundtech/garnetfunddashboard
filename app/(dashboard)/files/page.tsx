@@ -32,7 +32,9 @@ export default async function FilesPage({
       actor={{
         id: profile.id,
         role: profile.role,
-        sector: profile.coverage_sector,
+        // The team, not the raw stored value, so the "Mine" pill on the rail
+        // matches the team this viewer can actually write to.
+        sector: toCoverageTeam(profile.coverage_sector),
       }}
     />
   );

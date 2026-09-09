@@ -9,7 +9,7 @@ import {
   parseFilePath,
 } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
-import { isCoverageTeam } from "@/lib/sectors";
+import { isCoverageTeam, toCoverageTeam } from "@/lib/sectors";
 import {
   TEAM_FILES_BUCKET,
   canWriteSector,
@@ -58,7 +58,10 @@ export async function createFolderAction(
     return { ok: false, error: "Unknown team." };
   }
   if (!canWriteSector(profile, sector)) {
-    return { ok: false, error: `You can only add folders to ${profile.coverage_sector ?? "your own team"}.` };
+    return {
+      ok: false,
+      error: `You can only add folders to ${toCoverageTeam(profile.coverage_sector) ?? "your own team"}.`,
+    };
   }
 
   const admin = createAdminClient();
@@ -190,7 +193,7 @@ export async function uploadTeamFileAction(
   if (!canWriteSector(profile, sector)) {
     return {
       ok: false,
-      error: `You can only upload to ${profile.coverage_sector ?? "your own team"}.`,
+      error: `You can only upload to ${toCoverageTeam(profile.coverage_sector) ?? "your own team"}.`,
     };
   }
 
