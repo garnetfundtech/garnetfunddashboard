@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
+import { canAdministerContent } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 
 export async function addWatchlistItemAction(formData: FormData) {
@@ -13,7 +14,7 @@ export async function addWatchlistItemAction(formData: FormData) {
   if (!ticker) return;
 
   const supabase = await createClient();
-  const elevated = profile.role === "pm" || profile.role === "admin" || profile.role === "developer";
+  const elevated = profile.role === "pm" || canAdministerContent(profile.role);
 
   const { error: insErr } = await supabase.from("watchlist_items").insert({
     ticker,
@@ -56,7 +57,7 @@ export async function removeWatchlistItemAction(formData: FormData) {
   const supabase = await createClient();
   const { data: row } = await supabase.from("watchlist_items").select("added_by").eq("id", id).maybeSingle();
   if (!row) return;
-  const elevated = profile.role === "pm" || profile.role === "admin" || profile.role === "developer";
+  const elevated = profile.role === "pm" || canAdministerContent(profile.role);
   if (row.added_by !== profile.id && !elevated) return;
 
   await supabase.from("watchlist_items").delete().eq("id", id);

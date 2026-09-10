@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { runSchwabTokenAlert, humaniseDuration } from "@/lib/schwab-token-alert";
 import { getCurrentProfile } from "@/lib/auth";
 import { requireSessionUser } from "@/lib/require-session";
+import { canAdministerContent } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,9 @@ async function handle(request: NextRequest) {
     if (session.response) return session.response;
 
     const profile = await getCurrentProfile();
-    if (!profile || (profile.role !== "developer" && profile.role !== "admin")) {
+    if (!profile || !canAdministerContent(profile.role)) {
       return NextResponse.json(
-        { ok: false, message: "Admins and developers only." },
+        { ok: false, message: "Admins and risk managers only." },
         { status: 403 },
       );
     }

@@ -1,4 +1,5 @@
 import type { UserRole } from "@/lib/types";
+import { canAdministerContent, canAdministerUsers } from "@/lib/roles";
 
 /** Routes shown in sidebar + used for page guards */
 export const ROUTES = {
@@ -86,7 +87,7 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
       return role === "pm" || isRiskManager(role);
     }
     if (ADMIN_ONLY.has(item.href)) {
-      return role === "admin" || role === "developer";
+      return canAdministerUsers(role);
     }
     return false;
   });
@@ -95,10 +96,14 @@ export function getSidebarNavItems(role: UserRole): { href: string; label: strin
 export function canAccessDashboardPath(role: UserRole, pathname: string): boolean {
   const base = pathname.split("?")[0] ?? pathname;
   if (base === ROUTES.admin) {
-    return role === "admin" || role === "developer";
+    // The Risk Manager reaches /admin for the integration health panel; the
+    // membership sections on it are hidden from them there. /users is a
+    // different matter — it carries the invite flow, so it stays with the
+    // roles that may change who is in the fund.
+    return canAdministerContent(role);
   }
   if (ADMIN_ONLY.has(base)) {
-    return role === "admin" || role === "developer";
+    return canAdministerUsers(role);
   }
   if (ANALYST_PATHS.has(base)) return true;
   if (PM_EXTRA.has(base)) {

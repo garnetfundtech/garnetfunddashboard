@@ -18,7 +18,7 @@ import type { UserRole } from "@/lib/types";
 export const TEAM_FILES_BUCKET = "team-files";
 
 /** Roles that may write into any sector, not just their own. */
-const CROSS_SECTOR_ROLES: UserRole[] = ["pm", "admin", "developer"];
+const CROSS_SECTOR_ROLES: UserRole[] = ["pm", "risk_manager", "admin", "developer"];
 
 export type TeamFolderRow = {
   id: string;
@@ -71,6 +71,9 @@ export type TeamBrowseData = {
  * with it (see collectFolderStoragePaths), so one wrong click by any member of
  * a team could remove a whole season of that team's work. Requested by the
  * fund after the coverage rollout.
+ *
+ * Mirrored by can_delete_team_folder() in the database — see migration 0029,
+ * which added the Risk Manager to both this list and that function.
  */
 export function canDeleteFolder(role: UserRole) {
   return CROSS_SECTOR_ROLES.includes(role);

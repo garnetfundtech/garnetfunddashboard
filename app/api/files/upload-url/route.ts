@@ -6,6 +6,7 @@ import { TEAM_FILES_BUCKET, canWriteSector } from "@/lib/team-files";
 import { isCoverageTeam } from "@/lib/sectors";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/uploads";
 import { issueUploadGrant } from "@/lib/upload-grant";
+import { canAdministerContent } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,10 @@ type UploadKind = keyof typeof BUCKETS;
  * a grant so step two cannot be talked into something else. The three areas
  * differ only in that authorization rule:
  *
- *   team       your own coverage team, or anywhere for pm/admin/developer
+ *   team       your own coverage team, or anywhere for pm/risk_manager/
+ *              admin/developer
  *   research   any approved member, filed under a team they pick
- *   resources  developer/admin only — these are fund-wide documents
+ *   resources  content administrators only — these are fund-wide documents
  */
 export async function POST(request: NextRequest) {
   const profile = await getCurrentProfile();
@@ -116,9 +118,9 @@ export async function POST(request: NextRequest) {
     sector = requestedSector;
   }
 
-  if (kind === "resources" && profile.role !== "developer" && profile.role !== "admin") {
+  if (kind === "resources" && !canAdministerContent(profile.role)) {
     return NextResponse.json(
-      { ok: false, message: "Only admins can upload resources." },
+      { ok: false, message: "Only admins and risk managers can upload resources." },
       { status: 403 },
     );
   }

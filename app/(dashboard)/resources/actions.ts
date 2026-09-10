@@ -27,7 +27,7 @@ const RESOURCES_BUCKET = "resources";
 export async function recordResourceAction(
   formData: FormData,
 ): Promise<ActionResult> {
-  const profile = await requireRole(["developer", "admin"]);
+  const profile = await requireRole(["risk_manager", "developer", "admin"]);
 
   const title = String(formData.get("title") ?? "").trim();
   const category = String(formData.get("category") ?? "training");
@@ -91,7 +91,7 @@ export async function recordResourceAction(
 }
 
 export async function toggleResourceDownloadAction(formData: FormData) {
-  await requireRole(["developer", "admin"]);
+  await requireRole(["risk_manager", "developer", "admin"]);
   const id = String(formData.get("id") ?? "");
   const downloadEnabled = formData.get("downloadEnabled") === "true";
   if (!id) return;
@@ -114,7 +114,7 @@ export async function toggleResourceDownloadAction(formData: FormData) {
 }
 
 export async function updateResourceAction(formData: FormData) {
-  const actor = await requireRole(["developer", "admin"]);
+  const actor = await requireRole(["risk_manager", "developer", "admin"]);
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const category = String(formData.get("category") ?? "training");
@@ -151,7 +151,7 @@ export async function updateResourceAction(formData: FormData) {
 }
 
 export async function deleteResourceAction(formData: FormData) {
-  const actor = await requireRole(["developer", "admin"]);
+  const actor = await requireRole(["risk_manager", "developer", "admin"]);
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 

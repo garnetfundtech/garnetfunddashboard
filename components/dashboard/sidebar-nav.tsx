@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { canAdministerContent } from "@/lib/roles";
 import { LogoMark } from "@/components/dashboard/logo-mark";
 import { AvatarInitials } from "@/components/dashboard/avatar-initials";
 import { SchwabStatus } from "@/components/dashboard/schwab-status";
@@ -95,7 +96,7 @@ export function SidebarNav({
         </div>
         {isMenuOpen ? (
           <div className="mb-1 border border-line">
-            {(role === "developer" || role === "admin") && (
+            {canAdministerContent(role) && (
               <Link
                 href="/admin"
                 className="flex items-center gap-2 px-2.5 py-2 text-[13.5px] text-ink-2 hover:bg-paper-2 hover:text-ink"

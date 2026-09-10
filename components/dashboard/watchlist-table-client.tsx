@@ -10,6 +10,7 @@ import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Spark } from "@/components/dashboard/spark";
 import type { SchwabQuoteResponse } from "@/lib/schwab";
+import { canAdministerContent } from "@/lib/roles";
 import type { WatchlistRow, UserRole } from "@/lib/types";
 import { addWatchlistItemAction, removeWatchlistItemAction } from "@/app/(dashboard)/watchlist/actions";
 import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
@@ -73,7 +74,7 @@ export function WatchlistTableClient({
   const [newTicker, setNewTicker] = useState("");
 
   const elevated =
-    actor.role === "pm" || actor.role === "admin" || actor.role === "developer";
+    actor.role === "pm" || canAdministerContent(actor.role);
 
   const merged = useMemo(() => {
     return rows.map((r) => {

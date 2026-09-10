@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { AdminExportButton } from "@/components/admin/admin-export-button";
 import { getAdminUsers, getSchwabDiagnostics } from "@/lib/data";
 import { requireRole } from "@/lib/auth";
+import { canAdministerUsers } from "@/lib/roles";
 import { ExternalApiStatusPanel } from "@/components/admin/external-api-status-panel";
 import { RoleSelect } from "@/components/admin/role-select";
 import { SectorSelect } from "@/components/admin/sector-select";
@@ -12,7 +13,14 @@ import { fetchPortfolioSummary, fetchMarketOverview } from "@/lib/market-data";
 import { getExternalApiStatus } from "@/lib/external-api-status";
 
 export default async function AdminPage() {
-  await requireRole(["developer", "admin"]);
+  // The Risk Manager reaches this page for the integration health panel — in
+  // particular the Schwab re-auth button, which is a standing weekly chore
+  // and the one thing here that takes the whole dashboard down when nobody
+  // does it. Everything on the page that changes a person is hidden from
+  // them below, and the actions behind those controls refuse them anyway
+  // (see app/(dashboard)/admin/actions.ts, which stays admin/developer).
+  const viewer = await requireRole(["risk_manager", "developer", "admin"]);
+  const mayEditUsers = canAdministerUsers(viewer.role);
 
   const [users, schwabDiagnostics, livePortfolio, liveMarket, apiStatus] = await Promise.all([
     getAdminUsers(),
@@ -45,13 +53,17 @@ export default async function AdminPage() {
       <PageHeader
         title="Admin"
         meta={
-          pending.length > 0
-            ? `${pending.length} awaiting approval · ${decided.length} member${decided.length === 1 ? "" : "s"}`
-            : `${decided.length} member${decided.length === 1 ? "" : "s"}`
+          !mayEditUsers
+            ? "Integration health"
+            : pending.length > 0
+              ? `${pending.length} awaiting approval · ${decided.length} member${decided.length === 1 ? "" : "s"}`
+              : `${decided.length} member${decided.length === 1 ? "" : "s"}`
         }
-        actions={<AdminExportButton users={users} />}
+        actions={mayEditUsers ? <AdminExportButton users={users} /> : null}
       />
 
+      {mayEditUsers && (
+      <>
       <section className="panel overflow-hidden">
         <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
           <h2 className="panel-title">Pending approvals</h2>
@@ -179,6 +191,9 @@ export default async function AdminPage() {
           </tbody>
         </table>
       </section>
+
+      </>
+      )}
 
       <ExternalApiStatusPanel rows={apiStatus} schwabDiagnostics={schwabDiagnostics} liveVerification={liveVerification} />
     </div>

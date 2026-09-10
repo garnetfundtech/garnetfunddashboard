@@ -10,7 +10,7 @@ import type { UserRole } from "@/lib/types";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /** Roles that may add or remove a ticker on someone else's behalf. */
-const MANAGE_ANY_ROLES: UserRole[] = ["pm", "admin", "developer"];
+const MANAGE_ANY_ROLES: UserRole[] = ["pm", "risk_manager", "admin", "developer"];
 
 const TICKER_RE = /^[A-Z0-9.\-]{1,12}$/;
 
