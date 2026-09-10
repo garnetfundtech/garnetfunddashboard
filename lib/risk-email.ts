@@ -64,8 +64,18 @@ function shell(params: {
   body: string;
   footnote: string;
   recipients: string[];
+  /** Masthead right-hand label. Defaults to the risk alerts' own rubric. */
+  rubric?: string;
+  /** Closing note in the foot. Defaults to the threshold explanation, which
+   *  only makes sense for a limit breach. */
+  closing?: string;
 }): string {
   const { kicker, heading, accent, body, footnote, recipients } = params;
+  const rubric = params.rubric ?? "Risk Monitor";
+  const closing =
+    params.closing ??
+    "Thresholds are set in Risk Admin and every change is logged. Only a red notifies; yellow states appear on " +
+      "the dashboard and in the alert log and send nothing.";
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"/>
@@ -89,7 +99,7 @@ function shell(params: {
         Garnet&nbsp;Fund
       </td>
       <td align="right" style="font-family:${FONT};font-size:11px;color:#f0d5d4;letter-spacing:0.1em;text-transform:uppercase;">
-        Risk&nbsp;Monitor
+        ${esc(rubric).replace(/ /g, "&nbsp;")}
       </td>
     </tr></table>
   </td></tr>
@@ -120,8 +130,7 @@ function shell(params: {
     <div style="font-family:${FONT};font-size:11px;line-height:1.6;color:${C.ink3};">
       <strong style="color:${C.ink2};font-weight:600;">Sent to</strong> ${esc(recipients.join(", ") || "no recipient configured")}<br/>
       Generated ${esc(new Date().toUTCString())}<br/>
-      Thresholds are set in Risk Admin and every change is logged. Only a red notifies; yellow states appear on
-      the dashboard and in the alert log and send nothing.
+      ${closing}
     </div>
   </td></tr>
 
@@ -396,5 +405,113 @@ export function testAlertEmail(params: {
       ``,
       `Only a red notifies. Yellow states appear on the dashboard and in the alert log and send nothing.`,
     ].join("\n"),
+  };
+}
+
+/**
+ * The Schwab re-authentication notice.
+ *
+ * Not a limit breach — an operational one, so it carries its own rubric and
+ * drops the threshold footer the risk alerts use. Two stages, one message
+ * each: `warning` while the refresh token is still alive and the dashboard is
+ * still live, `expired` once it has lapsed and every live figure has gone
+ * blank.
+ *
+ * The whole point is the button, so the copy stays short and the action is
+ * unmissable: this is a chore someone does in about thirty seconds, and the
+ * only reason it ever became an outage is that nobody knew the clock existed.
+ */
+export function schwabReauthEmail(params: {
+  stage: "warning" | "expired";
+  /** Humanised time to (or since) the refresh token's expiry. */
+  remainingText: string;
+  expiresAt: string | null;
+  recipients: string[];
+  adminUrl: string | null;
+}): AlertEmail {
+  const { stage, remainingText, expiresAt, recipients, adminUrl } = params;
+  const expiring = stage === "warning";
+
+  const heading = expiring
+    ? "Schwab access expires in " + remainingText
+    : "Schwab access has expired";
+
+  const lead = expiring
+    ? `The Schwab connection is still live, but its refresh token lapses in ${remainingText}. ` +
+      `Re-authenticate before then and nothing goes down.`
+    : `The Schwab connection is down. Positions, balances, P&L and the risk board are showing the last ` +
+      `snapshot taken before it lapsed${remainingText ? `, ${remainingText} ago` : ""} — or nothing at all ` +
+      `since the last deploy.`;
+
+  const expiryLabel = expiring ? "Refresh token expires" : "Refresh token expired";
+
+  const rows = `
+  <tr><td style="padding:14px 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${C.line};">
+      <tr>
+        <td style="padding:9px 13px;border-bottom:1px solid ${C.line};font-family:${FONT};font-size:11.5px;color:${C.ink3};width:38%;">${expiryLabel}</td>
+        <td style="padding:9px 13px;border-bottom:1px solid ${C.line};font-family:${MONO};font-size:11.5px;color:${C.ink};">${esc(expiresAt ? new Date(expiresAt).toUTCString() : "unknown")}</td>
+      </tr>
+      <tr>
+        <td style="padding:9px 13px;border-bottom:1px solid ${C.line};font-family:${FONT};font-size:11.5px;color:${C.ink3};">Who can fix it</td>
+        <td style="padding:9px 13px;border-bottom:1px solid ${C.line};font-family:${FONT};font-size:11.5px;color:${C.ink};">Any admin or developer</td>
+      </tr>
+      <tr>
+        <td style="padding:9px 13px;font-family:${FONT};font-size:11.5px;color:${C.ink3};">How long it takes</td>
+        <td style="padding:9px 13px;font-family:${FONT};font-size:11.5px;color:${C.ink};">About 30 seconds — sign in to Schwab and approve</td>
+      </tr>
+    </table>
+  </td></tr>`;
+
+  const link = adminUrl
+    ? `<tr><td style="padding:16px 20px 0;">
+        <a href="${esc(adminUrl)}" style="display:inline-block;background:${C.garnet};color:#ffffff;font-family:${FONT};font-size:13px;font-weight:600;text-decoration:none;padding:10px 18px;">Re-authenticate Schwab</a>
+       </td></tr>`
+    : "";
+
+  const body =
+    `<tr><td style="padding:6px 20px 0;">
+       <div style="font-family:${FONT};font-size:13.5px;line-height:1.6;color:${C.ink2};">${lead}</div>
+     </td></tr>` +
+    rows +
+    link;
+
+  return {
+    subject: expiring
+      ? `[Garnet Fund] Schwab re-auth needed — ${remainingText} left`
+      : `[Garnet Fund] Schwab access has expired — dashboard is not live`,
+    html: shell({
+      kicker: expiring ? "Action needed · expiring" : "Action needed · expired",
+      heading,
+      accent: expiring ? C.warn : C.neg,
+      body,
+      footnote:
+        "Schwab caps a refresh token at seven days and will not extend it, so this is a standing chore rather " +
+        "than a fault to fix once. One message is sent per token: this is the only reminder you will get " +
+        "before it lapses, and re-authenticating resets the clock and this notice with it.",
+      recipients,
+      rubric: "Operations",
+      closing:
+        "Sent by the daily integration check. It only writes when the token is inside its last two days, so a " +
+        "quiet inbox means the connection is healthy.",
+    }),
+    text: [
+      `GARNET FUND — ${expiring ? "SCHWAB RE-AUTH NEEDED" : "SCHWAB ACCESS EXPIRED"}`,
+      ``,
+      lead,
+      ``,
+      `  ${expiryLabel.toLowerCase()}: ${expiresAt ? new Date(expiresAt).toUTCString() : "unknown"}`,
+      `  who can fix it:       any admin or developer`,
+      `  how long it takes:    about 30 seconds`,
+      ``,
+      adminUrl ? `Re-authenticate: ${adminUrl}` : "",
+      ``,
+      `Schwab caps a refresh token at seven days and will not extend it. One message is sent per token,`,
+      `so this is the only reminder before it lapses. Re-authenticating resets the clock and this notice.`,
+      ``,
+      `Sent to: ${recipients.join(", ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
   };
 }

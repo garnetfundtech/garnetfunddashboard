@@ -399,3 +399,36 @@ export async function sendTestAlert(to: string[]): Promise<{ ok: boolean; messag
     return { ok: false, message: err instanceof Error ? err.message : "Send failed." };
   }
 }
+
+/**
+ * Sends one operational message — something about the system itself rather
+ * than about a limit — through the same transport the risk alerts use.
+ *
+ * Kept deliberately thin. The §4.4 routing table decides who hears about a
+ * breach; an ops message has no tier and no episode state, so the caller owns
+ * both the recipients and whatever de-duplication it needs. Sharing the
+ * transport is the whole point: if the reds can leave the building, so can
+ * this, and there is only one set of SMTP credentials to get wrong.
+ */
+export async function sendOpsEmail(params: {
+  to: string[];
+  subject: string;
+  text: string;
+  html?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const { to, subject, text, html } = params;
+  if (!to.length) return { ok: false, message: "No recipient configured." };
+
+  const diag = inspectEmailConfig();
+  if (!diag.configured) {
+    return { ok: false, message: diag.problems.join(" ") || "Mailer is not configured." };
+  }
+
+  try {
+    const sent = await sendEmail(to, subject, text, html);
+    if (!sent) return { ok: false, message: "The mailer declined to send. Check SMTP credentials." };
+    return { ok: true, message: `Sent to ${to.join(", ")}.` };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Send failed." };
+  }
+}

@@ -61,6 +61,10 @@ function refreshTraderTokenSingleFlight(
           refresh_token: refreshed.refresh_token ?? refreshToken,
           expires_at: newExpiresAt,
           needs_reauth: false,
+          // See the callback: this column has no trigger behind it, so a
+          // refresh that did not stamp it left /admin showing a stale
+          // "last refreshed" long after the connection had been renewed.
+          updated_at: new Date().toISOString(),
         })
         .eq("id", "trader");
       return refreshed.access_token as string;

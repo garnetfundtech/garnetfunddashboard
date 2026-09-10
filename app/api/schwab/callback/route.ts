@@ -50,7 +50,29 @@ export async function GET(request: NextRequest) {
     expires_at: expiresAt,
     refresh_expires_at: refreshExpiresAt,
     needs_reauth: false,
+    // Nothing maintains this column on its own — no trigger, and the refresh
+    // path omitted it too — so /admin was reporting "last refreshed" as the
+    // day the row was first written, months out of date.
+    updated_at: new Date().toISOString(),
   });
+
+  // A fresh token means the re-auth warning has been acted on, so clear it
+  // rather than waiting for the next cron to notice the new expiry: otherwise
+  // re-authenticating inside the warning window leaves a stale 'warning' on
+  // the row and suppresses the next cycle's notice.
+  //
+  // Deliberately a separate, swallowed write rather than two more fields on
+  // the upsert above. These columns arrive with migration 0028, and folding
+  // them into the token write would mean an unapplied migration takes the
+  // whole OAuth flow down — breaking the one thing this route exists to do,
+  // to keep an alert's bookkeeping tidy. Worst case the stale stage costs one
+  // missed reminder, which the next expiry cycle corrects on its own.
+  // The error is discarded, not thrown: supabase-js reports a missing column
+  // in the result rather than by rejecting, so this is inert until 0028 runs.
+  await admin
+    .from("schwab_tokens")
+    .update({ reauth_alert_stage: null, reauth_alert_sent_for: null })
+    .eq("id", provider);
 
   return NextResponse.json({
     ok: true,

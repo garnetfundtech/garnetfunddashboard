@@ -77,9 +77,16 @@ export function ExternalApiStatusPanel({
   const marketOk = liveVerification?.spyPrice != null;
 
   const refreshTarget = token?.refreshExpiresAt ?? token?.expiresAt ?? null;
+  // nowMs is 0 until the mount effect runs, which would read as "expired by 56
+  // years" and flash the warning on every load.
   const refreshRemaining =
-    refreshTarget != null ? new Date(refreshTarget).getTime() - nowMs : null;
+    nowMs > 0 && refreshTarget != null ? new Date(refreshTarget).getTime() - nowMs : null;
   const refreshExpired = refreshRemaining != null ? refreshRemaining <= 0 : false;
+  // Schwab caps the refresh token at 7 days, so the last two are the window
+  // where someone has to act. Matches WARN_WITHIN_MS in lib/schwab-token-alert.ts,
+  // which is when the reminder email goes out.
+  const refreshExpiringSoon =
+    refreshRemaining != null && refreshRemaining > 0 && refreshRemaining <= 48 * 3600000;
 
   async function reauthSchwab() {
     try {
@@ -119,19 +126,76 @@ export function ExternalApiStatusPanel({
             </div>
 
             {r.key === "schwab" && schwabDiagnostics ? (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge ok={authOk} label="Auth" />
-                  <StatusBadge ok={traderOk} label="Trader" />
-                  <StatusBadge ok={marketOk} label="API market data" />
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge ok={authOk} label="Auth" />
+                    <StatusBadge ok={traderOk} label="Trader" />
+                    <StatusBadge ok={marketOk} label="API market data" />
+                  </div>
+                  <div className="text-[12.5px] text-ink-3">
+                    Last sync:{" "}
+                    <span className="text-ink-2">
+                      {schwabDiagnostics.lastSync?.finishedAt ? fmt(schwabDiagnostics.lastSync.finishedAt) : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[12.5px] text-ink-3">
-                  Last sync:{" "}
-                  <span className="text-ink-2">
-                    {schwabDiagnostics.lastSync?.finishedAt ? fmt(schwabDiagnostics.lastSync.finishedAt) : "—"}
-                  </span>
+
+                {/*
+                  The seven-day clock, in the open. This countdown and its
+                  button used to sit inside the "Endpoints in use" disclosure
+                  below, where nobody looked — so the first sign the token had
+                  lapsed was the dashboard going blank. It is the one thing on
+                  this panel that needs a human on a schedule, so it reads as a
+                  row of its own and turns amber, then red, as the deadline
+                  arrives. The reminder email is the backstop, not this.
+                */}
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-2 border px-3 py-2",
+                    refreshExpired
+                      ? "border-neg-line bg-neg-soft"
+                      : refreshExpiringSoon
+                        ? "border-warn-line bg-warn-soft"
+                        : "border-line bg-paper-2",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] text-ink-2">
+                      Schwab re-auth{" "}
+                      <span
+                        className={cn(
+                          "tabular-nums font-medium",
+                          refreshExpired
+                            ? "text-neg"
+                            : refreshExpiringSoon
+                              ? "text-warn"
+                              : "text-ink",
+                        )}
+                      >
+                        {refreshRemaining != null ? fmtRemaining(refreshRemaining) : "—"}
+                      </span>
+                    </p>
+                    <p className="text-[11.5px] text-ink-3">
+                      {refreshExpired
+                        ? "Live data is stale until someone signs in to Schwab again."
+                        : "Schwab caps the refresh token at 7 days and will not extend it."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void reauthSchwab()}
+                    className={cn(
+                      "shrink-0 rounded-none px-3 py-1.5 text-[12.5px] font-medium transition",
+                      refreshExpired || refreshExpiringSoon
+                        ? "bg-garnet text-white hover:bg-garnet-hover"
+                        : "bg-paper-3 text-ink hover:bg-paper-2",
+                    )}
+                  >
+                    Re-authenticate
+                  </button>
                 </div>
-              </div>
+              </>
             ) : null}
 
             <details className="group">
@@ -147,25 +211,11 @@ export function ExternalApiStatusPanel({
               </ul>
 
               {r.key === "schwab" && schwabDiagnostics ? (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[12.5px] text-ink-3">
-                    Refresh token:{" "}
-                    <span className={cn("tabular-nums", refreshExpired ? "text-neg" : "text-ink-2")}>
-                      {refreshRemaining != null ? fmtRemaining(refreshRemaining) : "—"}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void reauthSchwab()}
-                    className={cn(
-                      "rounded-none px-2.5 py-1.5 text-[12.5px] font-medium transition",
-                      refreshExpired
-                        ? "bg-neg-soft text-neg animate-pulse hover:bg-neg-soft"
-                        : "bg-paper-2 text-ink hover:bg-paper-2",
-                    )}
-                  >
-                    Refresh token
-                  </button>
+                <div className="mt-3 text-[12.5px] text-ink-3">
+                  Refresh token expires{" "}
+                  <span className="text-ink-2">{fmt(token?.refreshExpiresAt ?? null)}</span>
+                  {" · "}last refreshed{" "}
+                  <span className="text-ink-2">{fmt(token?.updatedAt ?? null)}</span>
                 </div>
               ) : null}
             </details>
