@@ -26,7 +26,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 const GRANT_TTL_MS = 30 * 60 * 1000;
 
 export type UploadGrant = {
+  /** Storage bucket the object was signed into. Part of the signature so a
+   *  grant for one area cannot be replayed to record a row in another. */
+  bucket: string;
   objectPath: string;
+  /** Coverage team for a team file or research post; empty for resources,
+   *  which are fund-wide. */
   sector: string;
   folderId: string | null;
   expiresAt: number;
@@ -50,7 +55,13 @@ function signingKey(): string {
 /** Canonical string form. Field order is fixed, and the separator cannot
  *  appear in a UUID-based path, a sector name or a UUID folder id. */
 function payload(grant: UploadGrant): string {
-  return [grant.objectPath, grant.sector, grant.folderId ?? "", String(grant.expiresAt)].join("\n");
+  return [
+    grant.bucket,
+    grant.objectPath,
+    grant.sector,
+    grant.folderId ?? "",
+    String(grant.expiresAt),
+  ].join("\n");
 }
 
 function digest(grant: UploadGrant): string {
@@ -59,6 +70,7 @@ function digest(grant: UploadGrant): string {
 
 /** Issues a grant for an upload the caller has already authorized. */
 export function issueUploadGrant(params: {
+  bucket: string;
   objectPath: string;
   sector: string;
   folderId: string | null;
@@ -84,6 +96,7 @@ export function verifyUploadGrant(token: string): UploadGrant | null {
   try {
     const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
     if (
+      typeof parsed?.bucket !== "string" ||
       typeof parsed?.objectPath !== "string" ||
       typeof parsed?.sector !== "string" ||
       typeof parsed?.expiresAt !== "number" ||

@@ -3,12 +3,15 @@
 import { useRef, useState, useTransition } from "react";
 import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
-import { uploadResourceAction } from "@/app/(dashboard)/resources/actions";
+import { recordResourceAction } from "@/app/(dashboard)/resources/actions";
+import { MAX_UPLOAD_LABEL, checkUploadSize } from "@/lib/uploads";
+import { uploadToStorage } from "@/lib/upload-client";
 
 export function ResourcesUploadModal() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [downloadEnabled, setDownloadEnabled] = useState(false);
+  const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -16,15 +19,38 @@ export function ResourcesUploadModal() {
     setOpen(false);
     setFile(null);
     setDownloadEnabled(false);
+    setError("");
     formRef.current?.reset();
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const problem = file ? checkUploadSize(file) : "Choose a file to upload.";
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     formData.set("downloadEnabled", downloadEnabled ? "on" : "");
+    const picked = file as File;
+    setError("");
+
     startTransition(async () => {
-      await uploadResourceAction(formData);
+      // Bytes go straight to storage; only the metadata comes back through
+      // the server. See lib/upload-client.ts.
+      const sent = await uploadToStorage({ kind: "resources", file: picked });
+      if (!sent.ok) {
+        setError(sent.error);
+        return;
+      }
+
+      formData.set("grant", sent.grant);
+      const result = await recordResourceAction(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       handleClose();
     });
   }
@@ -61,15 +87,26 @@ export function ResourcesUploadModal() {
                 ) : (
                   <span className="text-sm text-ink-2">Click to select a PDF</span>
                 )}
+                <span className="text-[12px] text-ink-3">PDF, up to {MAX_UPLOAD_LABEL}</span>
                 <input
                   name="file"
                   type="file"
                   accept="application/pdf"
                   required
                   className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => {
+                    const next = e.target.files?.[0] ?? null;
+                    setFile(next);
+                    setError(next ? (checkUploadSize(next) ?? "") : "");
+                  }}
                 />
               </label>
+
+              {error && (
+                <p className="border border-neg-line bg-neg-soft px-3 py-2 text-[13px] text-neg">
+                  {error}
+                </p>
+              )}
 
               {/* Title */}
               <input

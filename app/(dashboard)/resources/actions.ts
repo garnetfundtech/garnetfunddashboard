@@ -3,40 +3,69 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureStorageBuckets, buildStorageObjectPath, parseFilePath } from "@/lib/storage";
+import { parseFilePath, statStorageObject } from "@/lib/storage";
+import { verifyUploadGrant } from "@/lib/upload-grant";
 import { logAuditEvent } from "@/lib/audit";
 import { isRoleHigher } from "@/lib/roles";
 
-export async function uploadResourceAction(formData: FormData) {
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/** Bucket fund-wide resource documents live in. */
+const RESOURCES_BUCKET = "resources";
+
+/**
+ * Records a resource whose file is already in storage.
+ *
+ * Same move as research and team files: the bytes go straight to Supabase so
+ * the upload is not capped by what fits in a Server Action request, and only
+ * this metadata comes back through the server. See lib/uploads.ts.
+ *
+ * Still admin-only — that is re-checked here rather than trusted from the
+ * grant, so a role revoked between authorizing the upload and saving it
+ * takes effect.
+ */
+export async function recordResourceAction(
+  formData: FormData,
+): Promise<ActionResult> {
   const profile = await requireRole(["developer", "admin"]);
-  const file = formData.get("file");
+
   const title = String(formData.get("title") ?? "").trim();
   const category = String(formData.get("category") ?? "training");
   const downloadEnabled = formData.get("downloadEnabled") === "on";
+  const grantToken = String(formData.get("grant") ?? "");
+
+  if (!title) return { ok: false, error: "A file title is required." };
+
+  const grant = verifyUploadGrant(grantToken);
+  if (!grant) {
+    return {
+      ok: false,
+      error: "That upload expired before it was saved. Try uploading again.",
+    };
+  }
+  if (grant.bucket !== RESOURCES_BUCKET) {
+    return { ok: false, error: "That upload wasn't for resources." };
+  }
+
+  const { objectPath } = grant;
+  const admin = createAdminClient();
+
+  const stored = await statStorageObject(RESOURCES_BUCKET, objectPath);
+  if (!stored) {
+    return { ok: false, error: "That file didn't finish uploading. Try again." };
+  }
+
   const uploaderName =
-    (profile as { full_name?: string; first_name?: string; last_name?: string }).full_name ||
-    `${(profile as { first_name?: string }).first_name ?? ""} ${(profile as { last_name?: string }).last_name ?? ""}`.trim() ||
+    profile.full_name ||
+    `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
     "Unknown";
 
-  if (!(file instanceof File) || !title) return;
-
-  await ensureStorageBuckets();
-  const admin = createAdminClient();
-  const objectPath = buildStorageObjectPath(file);
-  const fullPath = `resources/${objectPath}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  await admin.storage.from("resources").upload(objectPath, bytes, {
-    contentType: file.type || "application/pdf",
-    upsert: false,
-  });
-
-  const { data } = await admin
+  const { data, error } = await admin
     .from("resources_files")
     .insert({
       title,
       category,
-      file_path: fullPath,
+      file_path: `${RESOURCES_BUCKET}/${objectPath}`,
       download_enabled: downloadEnabled,
       created_by: profile.id,
       uploader_name: uploaderName,
@@ -45,14 +74,20 @@ export async function uploadResourceAction(formData: FormData) {
     .select("id")
     .single();
 
+  if (error) {
+    await admin.storage.from(RESOURCES_BUCKET).remove([objectPath]);
+    return { ok: false, error: "Could not save the file." };
+  }
+
   await logAuditEvent({
     action: "resource.upload",
     entity_type: "resource_file",
     entity_id: data?.id ?? null,
-    metadata: { title, category, downloadEnabled },
+    metadata: { title, category, downloadEnabled, size: stored.size },
   });
 
   revalidatePath("/resources");
+  return { ok: true };
 }
 
 export async function toggleResourceDownloadAction(formData: FormData) {

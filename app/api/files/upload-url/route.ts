@@ -9,19 +9,33 @@ import { issueUploadGrant } from "@/lib/upload-grant";
 
 export const dynamic = "force-dynamic";
 
+/** The three places a file can land, and the bucket behind each. */
+const BUCKETS = {
+  team: TEAM_FILES_BUCKET,
+  research: "research",
+  resources: "resources",
+} as const;
+
+type UploadKind = keyof typeof BUCKETS;
+
 /**
- * Step one of a team file upload: authorize it, and hand back somewhere to
- * put the bytes.
+ * Step one of any upload: authorize it, and hand back somewhere to put the
+ * bytes.
  *
  * The bytes themselves never come here. Vercel caps a function request body
- * at 4.5 MB, so a 20 MB upload cannot pass through the server at all — this
+ * at 4.5 MB, so anything larger cannot pass through the server at all — this
  * returns a Supabase signed upload URL and the browser sends the file
- * straight to storage. Step two is recordTeamFileAction, which turns the
- * uploaded object into a row.
+ * straight to storage. Step two is the matching record*Action, which turns
+ * the uploaded object into a row.
  *
  * Everything that decides *whether* the upload is allowed happens here, while
  * there is still a session to check it against, and the answer is sealed into
- * a grant so step two cannot be talked into something else.
+ * a grant so step two cannot be talked into something else. The three areas
+ * differ only in that authorization rule:
+ *
+ *   team       your own coverage team, or anywhere for pm/admin/developer
+ *   research   any approved member, filed under a team they pick
+ *   resources  developer/admin only — these are fund-wide documents
  */
 export async function POST(request: NextRequest) {
   const profile = await getCurrentProfile();
@@ -36,12 +50,15 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
+  const kind = String(body.kind ?? "team") as UploadKind;
   const filename = String(body.filename ?? "").trim();
   const size = Number(body.size);
-  const contentType = String(body.contentType ?? "").trim();
   const folderId = String(body.folderId ?? "").trim() || null;
   const requestedSector = String(body.sector ?? "").trim();
 
+  if (!BUCKETS[kind]) {
+    return NextResponse.json({ ok: false, message: "Unknown upload type." }, { status: 400 });
+  }
   if (!filename) {
     return NextResponse.json({ ok: false, message: "A filename is required." }, { status: 400 });
   }
@@ -60,38 +77,58 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  let sector = "";
 
-  // The folder's own sector wins over anything the client claimed, so a
-  // forged field cannot aim a write at a team the uploader can't write to.
-  let sector = requestedSector;
-  if (folderId) {
-    const { data } = await admin
-      .from("team_folders")
-      .select("sector")
-      .eq("id", folderId)
-      .maybeSingle();
-    const found = (data as { sector: string } | null)?.sector ?? null;
-    if (!found) {
-      return NextResponse.json({ ok: false, message: "Folder not found." }, { status: 404 });
+  if (kind === "team") {
+    // The folder's own sector wins over anything the client claimed, so a
+    // forged field cannot aim a write at a team the uploader can't write to.
+    sector = requestedSector;
+    if (folderId) {
+      const { data } = await admin
+        .from("team_folders")
+        .select("sector")
+        .eq("id", folderId)
+        .maybeSingle();
+      const found = (data as { sector: string } | null)?.sector ?? null;
+      if (!found) {
+        return NextResponse.json({ ok: false, message: "Folder not found." }, { status: 404 });
+      }
+      sector = found;
     }
-    sector = found;
+    if (!sector || !isCoverageTeam(sector)) {
+      return NextResponse.json({ ok: false, message: "Unknown team." }, { status: 400 });
+    }
+    if (!canWriteSector(profile, sector)) {
+      return NextResponse.json(
+        { ok: false, message: "You can only upload to your own team." },
+        { status: 403 },
+      );
+    }
   }
 
-  if (!sector || !isCoverageTeam(sector)) {
-    return NextResponse.json({ ok: false, message: "Unknown team." }, { status: 400 });
+  if (kind === "research") {
+    // Research is open to every approved member — the sector is which team
+    // the write-up is filed under, not a permission — but it still has to be
+    // a real team, so a bad value can't create a phantom one.
+    if (!isCoverageTeam(requestedSector)) {
+      return NextResponse.json({ ok: false, message: "Pick a sector." }, { status: 400 });
+    }
+    sector = requestedSector;
   }
-  if (!canWriteSector(profile, sector)) {
+
+  if (kind === "resources" && profile.role !== "developer" && profile.role !== "admin") {
     return NextResponse.json(
-      { ok: false, message: `You can only upload to your own team.` },
+      { ok: false, message: "Only admins can upload resources." },
       { status: 403 },
     );
   }
 
   await ensureStorageBuckets();
 
+  const bucket = BUCKETS[kind];
   const objectPath = buildStorageObjectPath({ name: filename });
   const { data: signed, error } = await admin.storage
-    .from(TEAM_FILES_BUCKET)
+    .from(bucket)
     .createSignedUploadUrl(objectPath);
 
   if (error || !signed) {
@@ -101,18 +138,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { grant, expiresAt } = issueUploadGrant({ objectPath, sector, folderId });
+  const { grant, expiresAt } = issueUploadGrant({
+    bucket,
+    objectPath,
+    sector,
+    folderId: kind === "team" ? folderId : null,
+  });
 
   return NextResponse.json({
     ok: true,
-    bucket: TEAM_FILES_BUCKET,
+    bucket,
     path: signed.path ?? objectPath,
     token: signed.token,
     grant,
     expiresAt,
-    // Echoed so the dialog can say which team the file is actually landing
-    // in, which may not be the one the client guessed.
+    // Echoed so a dialog can say where the file is actually landing, which
+    // may not be where the client guessed.
     sector,
-    contentType: contentType || "application/octet-stream",
   });
 }

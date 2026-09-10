@@ -3,30 +3,67 @@
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureStorageBuckets, buildStorageObjectPath, parseFilePath } from "@/lib/storage";
+import { parseFilePath, statStorageObject } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
 import { isRoleHigher } from "@/lib/roles";
-import { MAX_ACTION_UPLOAD_BYTES, MAX_ACTION_UPLOAD_LABEL } from "@/lib/uploads";
+import { verifyUploadGrant } from "@/lib/upload-grant";
+import { isCoverageTeam } from "@/lib/sectors";
 
-export async function uploadResearchAction(formData: FormData) {
+/** Bucket research PDFs live in. */
+const RESEARCH_BUCKET = "research";
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Records a research post whose PDF is already in storage.
+ *
+ * Research used to send its bytes through this action, which capped it at
+ * whatever a Server Action body allows — 1 MB by default, and never more
+ * than Vercel's 4.5 MB. Write-ups routinely exceed that, and the rejection
+ * happened before this code ran, so it surfaced as an error page. The file
+ * now goes straight to Supabase Storage and only this small payload comes
+ * back through the server. See lib/uploads.ts.
+ *
+ * The sector is taken from the signed grant rather than the form, and the
+ * file's size and type are read back off the stored object, so the only
+ * client-supplied values that survive are the write-up's own metadata.
+ */
+export async function recordResearchAction(
+  formData: FormData,
+): Promise<ActionResult> {
   const profile = await requireProfile();
-  const file = formData.get("file");
+
   const title = String(formData.get("title") ?? "").trim();
   const ticker = String(formData.get("ticker") ?? "").trim().toUpperCase();
-  const downloadEnabled = formData.get("downloadEnabled") === "true";
-  const sector = String(formData.get("sector") ?? "").trim() || null;
-  const analystName = String(formData.get("analystName") ?? "").trim() || null;
   const companyName = String(formData.get("companyName") ?? "").trim() || null;
+  const analystName = String(formData.get("analystName") ?? "").trim();
+  const downloadEnabled = formData.get("downloadEnabled") === "true";
+  const grantToken = String(formData.get("grant") ?? "");
 
-  if (!(file instanceof File)) return { ok: false, error: "Choose a file to upload." };
   if (!title) return { ok: false, error: "A report title is required." };
-  if (!sector) return { ok: false, error: "Pick a sector." };
   if (!analystName) return { ok: false, error: "An analyst name is required." };
-  // Same ceiling as the team files, for the same reason: over the
-  // bodySizeLimit in next.config.ts this action never runs and the upload
-  // fails as an error page instead of a message. See lib/uploads.ts.
-  if (file.size === 0 || file.size > MAX_ACTION_UPLOAD_BYTES) {
-    return { ok: false, error: `Files must be ${MAX_ACTION_UPLOAD_LABEL} or smaller.` };
+
+  const grant = verifyUploadGrant(grantToken);
+  if (!grant) {
+    return {
+      ok: false,
+      error: "That upload expired before it was saved. Try uploading again.",
+    };
+  }
+  if (grant.bucket !== RESEARCH_BUCKET) {
+    return { ok: false, error: "That upload wasn't for research." };
+  }
+
+  const { objectPath, sector } = grant;
+  if (!isCoverageTeam(sector)) {
+    return { ok: false, error: "Pick a sector." };
+  }
+
+  const admin = createAdminClient();
+
+  const stored = await statStorageObject(RESEARCH_BUCKET, objectPath);
+  if (!stored) {
+    return { ok: false, error: "That file didn't finish uploading. Try again." };
   }
 
   const authorName =
@@ -35,22 +72,11 @@ export async function uploadResearchAction(formData: FormData) {
     `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
     "Unknown";
 
-  await ensureStorageBuckets();
-  const admin = createAdminClient();
-  const objectPath = buildStorageObjectPath(file);
-  const fullPath = `research/${objectPath}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  await admin.storage.from("research").upload(objectPath, bytes, {
-    contentType: file.type || "application/pdf",
-    upsert: false,
-  });
-
-  await admin.from("research_posts").insert({
+  const { error } = await admin.from("research_posts").insert({
     title,
     ticker: ticker || null,
     company_name: companyName,
-    file_path: fullPath,
+    file_path: `${RESEARCH_BUCKET}/${objectPath}`,
     created_by: profile.id,
     author_override: authorName,
     download_enabled: downloadEnabled,
@@ -60,13 +86,20 @@ export async function uploadResearchAction(formData: FormData) {
     thesis_status: "active",
   });
 
+  if (error) {
+    // Don't leave the object behind if the row never landed.
+    await admin.storage.from(RESEARCH_BUCKET).remove([objectPath]);
+    return { ok: false, error: "Could not save the report." };
+  }
+
   await logAuditEvent({
     action: "research.upload",
     entity_type: "research_post",
-    metadata: { title, ticker, downloadEnabled },
+    metadata: { title, ticker, downloadEnabled, size: stored.size },
   });
 
   revalidatePath("/research");
+  return { ok: true };
 }
 
 export async function updateResearchAction(formData: FormData) {

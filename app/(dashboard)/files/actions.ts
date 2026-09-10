@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseFilePath } from "@/lib/storage";
+import { parseFilePath, statStorageObject } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
 import { isCoverageTeam, toCoverageTeam } from "@/lib/sectors";
 import {
@@ -208,7 +208,14 @@ export async function recordTeamFileAction(
     };
   }
 
-  const { objectPath, sector, folderId } = grant;
+  const { bucket, objectPath, sector, folderId } = grant;
+
+  // A grant issued for research or resources must not be able to record a
+  // team file. The bucket is inside the signature, so this is a check that a
+  // client cannot route around.
+  if (bucket !== TEAM_FILES_BUCKET) {
+    return { ok: false, error: "That upload wasn't for the team workspace." };
+  }
 
   // Re-checked rather than assumed from the grant: a role or coverage change
   // between authorizing the upload and saving it should take effect.
@@ -224,23 +231,11 @@ export async function recordTeamFileAction(
   // Confirm the object is really there, and take its size and type from
   // storage. A client could otherwise record a row for a file it never
   // finished uploading, or understate the size of one it did.
-  const lastSlash = objectPath.lastIndexOf("/");
-  const dir = lastSlash === -1 ? "" : objectPath.slice(0, lastSlash);
-  const name = objectPath.slice(lastSlash + 1);
-  const { data: listed } = await admin.storage
-    .from(TEAM_FILES_BUCKET)
-    .list(dir, { search: name, limit: 1 });
-
-  const stored = (listed ?? []).find((entry) => entry.name === name);
+  const stored = await statStorageObject(TEAM_FILES_BUCKET, objectPath);
   if (!stored) {
-    return {
-      ok: false,
-      error: "That file didn't finish uploading. Try again.",
-    };
+    return { ok: false, error: "That file didn't finish uploading. Try again." };
   }
-
-  const meta = (stored.metadata ?? {}) as { size?: number; mimetype?: string };
-  const fileSize = Number(meta.size ?? 0);
+  const fileSize = stored.size;
 
   // Belt and braces: the bucket enforces this itself, so reaching here means
   // the limits have drifted apart. Refuse and clean up rather than record a
@@ -263,7 +258,7 @@ export async function recordTeamFileAction(
       title,
       file_path: `${TEAM_FILES_BUCKET}/${objectPath}`,
       file_size: fileSize || null,
-      mime_type: meta.mimetype || null,
+      mime_type: stored.mimeType,
       download_enabled: downloadEnabled,
       created_by: profile.id,
       uploader_name: uploaderName,

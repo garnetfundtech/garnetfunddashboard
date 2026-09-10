@@ -10,19 +10,15 @@ const nextConfig: NextConfig = {
       static: 300,
     },
     serverActions: {
-      // The default is 1 MB, which was small enough that no research deck or
-      // scanned article had ever reached storage — and because the framework
-      // rejects an oversized body before application code runs, it surfaced
-      // as a bare "A server error occurred" page rather than a message.
+      // No upload depends on this any more. All three surfaces — team files,
+      // research and resources — send their bytes straight to Supabase
+      // Storage and pass only metadata through an action, because Vercel caps
+      // a function request body at 4.5 MB and the stock 1 MB default here was
+      // silently failing every real file (see lib/uploads.ts).
       //
-      // Team files no longer rely on this at all: they upload straight to
-      // Supabase Storage via a signed URL and only a small JSON payload comes
-      // back through an action (see app/api/files/upload-url). This limit now
-      // governs research uploads, which still carry their bytes inside the
-      // request, and it cannot usefully go above ~4.5 MB because that is
-      // Vercel's own function body cap.
-      //
-      // Keep in step with MAX_ACTION_UPLOAD_BYTES in lib/uploads.ts.
+      // Kept, raised, as headroom for ordinary form actions: the default 1 MB
+      // is easy to trip with a large form payload, and doing so produces the
+      // same unexplainable error page rather than a handled error.
       bodySizeLimit: "4mb",
     },
   },
