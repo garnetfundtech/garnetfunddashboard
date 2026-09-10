@@ -26,14 +26,16 @@ import { canManageContent } from "@/lib/roles";
 import { signFile } from "@/lib/sign-client";
 import type { UserRole } from "@/lib/types";
 import type { TeamBrowseData, TeamFileRow } from "@/lib/team-files";
+import { MAX_UPLOAD_LABEL, checkUploadSize } from "@/lib/uploads";
 import { canDeleteFolder } from "@/lib/team-files";
 import {
   createFolderAction,
   deleteFolderAction,
   deleteTeamFileAction,
   renameFolderAction,
-  uploadTeamFileAction,
+  recordTeamFileAction,
 } from "@/app/(dashboard)/files/actions";
+import { createClient } from "@/lib/supabase/client";
 
 const ACTION_BTN =
   "flex w-full items-center justify-center gap-2 rounded-none bg-paper-2 px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-2";
@@ -125,6 +127,63 @@ export function TeamFilesClient({
     setDialog(null);
     setError("");
     setPickedFile(null);
+  }
+
+  /**
+   * Uploads a file without sending it through the server.
+   *
+   * Three steps: ask /api/files/upload-url whether this is allowed and where
+   * to put it, PUT the bytes straight to Supabase Storage with the signed
+   * token it returns, then hand the grant to recordTeamFileAction to create
+   * the row. The bytes skip Vercel entirely, which is the only way past its
+   * 4.5 MB function body limit — see lib/uploads.ts.
+   *
+   * Any step can fail, and each failure leaves the dialog open with a reason
+   * rather than closing or throwing to the error boundary.
+   */
+  async function uploadDirect(file: File, title: string): Promise<string | null> {
+    const res = await fetch("/api/files/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        size: file.size,
+        contentType: file.type || "application/octet-stream",
+        sector,
+        folderId,
+      }),
+    }).catch(() => null);
+
+    if (!res) return "Could not reach the server. Check your connection.";
+
+    const json = (await res.json().catch(() => null)) as
+      | { ok: true; bucket: string; path: string; token: string; grant: string }
+      | { ok: false; message?: string }
+      | null;
+
+    if (!json) return "The server sent back something unreadable.";
+    if (!json.ok) return json.message ?? "Upload was refused.";
+
+    const supabase = createClient();
+    const { error: putError } = await supabase.storage
+      .from(json.bucket)
+      .uploadToSignedUrl(json.path, json.token, file, {
+        contentType: file.type || "application/octet-stream",
+      });
+
+    if (putError) {
+      // The bucket's own size limit lands here, so say so in those terms
+      // rather than repeating the raw storage message.
+      return /exceeded the maximum allowed size/i.test(putError.message)
+        ? `That file is larger than the ${MAX_UPLOAD_LABEL} limit.`
+        : "The file didn't finish uploading. Try again.";
+    }
+
+    const fd = new FormData();
+    fd.set("title", title);
+    fd.set("grant", json.grant);
+    const recorded = await recordTeamFileAction(fd);
+    return recorded.ok ? null : recorded.error;
   }
 
   /** Runs a server action and keeps the dialog open when it reports a problem. */
@@ -719,10 +778,33 @@ export function TeamFilesClient({
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              fd.set("sector", sector);
-              if (folderId) fd.set("folderId", folderId);
-              submit(uploadTeamFileAction, fd);
+              const problem = pickedFile
+                ? checkUploadSize(pickedFile)
+                : "Choose a file to upload.";
+              if (problem) {
+                setError(problem);
+                return;
+              }
+
+              const titleInput = e.currentTarget.elements.namedItem("title");
+              const title =
+                titleInput instanceof HTMLInputElement ? titleInput.value.trim() : "";
+              if (!title) {
+                setError("A title is required.");
+                return;
+              }
+
+              const file = pickedFile as File;
+              setError("");
+              startTransition(async () => {
+                const failure = await uploadDirect(file, title);
+                if (failure) {
+                  setError(failure);
+                  return;
+                }
+                closeDialog();
+                router.refresh();
+              });
             }}
           >
             <label className="glass-input flex cursor-pointer flex-col items-center justify-center gap-2 px-4 py-6 text-center transition-colors hover:bg-paper-2">
@@ -734,7 +816,7 @@ export function TeamFilesClient({
                   Click to select a file: model, memo, or deck
                 </span>
               )}
-              <span className="text-[12px] text-ink-3">Up to 20 MB</span>
+              <span className="text-[12px] text-ink-3">Up to {MAX_UPLOAD_LABEL}</span>
               <input
                 name="file"
                 type="file"
@@ -743,6 +825,7 @@ export function TeamFilesClient({
                 onChange={(e) => {
                   const next = e.target.files?.[0] ?? null;
                   setPickedFile(next);
+                  setError(next ? (checkUploadSize(next) ?? "") : "");
                   // Pre-fill the title from the filename so uploads aren't blocked
                   // on typing one; still editable below.
                   const titleInput =

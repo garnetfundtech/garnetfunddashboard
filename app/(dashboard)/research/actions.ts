@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureStorageBuckets, buildStorageObjectPath, parseFilePath } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
 import { isRoleHigher } from "@/lib/roles";
+import { MAX_ACTION_UPLOAD_BYTES, MAX_ACTION_UPLOAD_LABEL } from "@/lib/uploads";
 
 export async function uploadResearchAction(formData: FormData) {
   const profile = await requireProfile();
@@ -17,7 +18,16 @@ export async function uploadResearchAction(formData: FormData) {
   const analystName = String(formData.get("analystName") ?? "").trim() || null;
   const companyName = String(formData.get("companyName") ?? "").trim() || null;
 
-  if (!(file instanceof File) || !title || !sector || !analystName) return;
+  if (!(file instanceof File)) return { ok: false, error: "Choose a file to upload." };
+  if (!title) return { ok: false, error: "A report title is required." };
+  if (!sector) return { ok: false, error: "Pick a sector." };
+  if (!analystName) return { ok: false, error: "An analyst name is required." };
+  // Same ceiling as the team files, for the same reason: over the
+  // bodySizeLimit in next.config.ts this action never runs and the upload
+  // fails as an error page instead of a message. See lib/uploads.ts.
+  if (file.size === 0 || file.size > MAX_ACTION_UPLOAD_BYTES) {
+    return { ok: false, error: `Files must be ${MAX_ACTION_UPLOAD_LABEL} or smaller.` };
+  }
 
   const authorName =
     analystName ||

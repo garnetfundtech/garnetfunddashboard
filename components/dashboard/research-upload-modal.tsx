@@ -5,6 +5,7 @@ import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
 import { uploadResearchAction } from "@/app/(dashboard)/research/actions";
 import { COVERAGE_TEAMS } from "@/lib/sectors";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
+import { MAX_ACTION_UPLOAD_LABEL, checkActionUploadSize } from "@/lib/uploads";
 
 export function ResearchUploadForm({
   onSuccess,
@@ -15,15 +16,33 @@ export function ResearchUploadForm({
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [downloadEnabled, setDownloadEnabled] = useState(false);
+  const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Refuse an oversized file here rather than letting it reach the Server
+    // Action, where Next rejects the whole request body and the user gets an
+    // error page with a reference code instead of a reason. See lib/uploads.ts.
+    const tooBig = file ? checkActionUploadSize(file) : "Choose a file to upload.";
+    if (tooBig) {
+      setError(tooBig);
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     formData.set("downloadEnabled", String(downloadEnabled));
+    setError("");
     startTransition(async () => {
-      await uploadResearchAction(formData);
+      const result = await uploadResearchAction(formData);
+      // The action returns nothing on success. A refusal comes back as a
+      // reason, and the form stays open holding what was typed — it used to
+      // close and report success either way.
+      if (result && result.ok === false) {
+        setError(result.error);
+        return;
+      }
       formRef.current?.reset();
       setFile(null);
       setDownloadEnabled(false);
@@ -41,15 +60,26 @@ export function ResearchUploadForm({
         ) : (
           <span className="text-sm text-ink-2">Click to select a PDF</span>
         )}
+        <span className="text-[12px] text-ink-3">PDF, up to {MAX_ACTION_UPLOAD_LABEL}</span>
         <input
           name="file"
           type="file"
           accept="application/pdf"
           required
           className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const next = e.target.files?.[0] ?? null;
+            setFile(next);
+            setError(next ? (checkActionUploadSize(next) ?? "") : "");
+          }}
         />
       </label>
+
+      {error && (
+        <p className="border border-neg-line bg-neg-soft px-3 py-2 text-[13px] text-neg">
+          {error}
+        </p>
+      )}
 
       {/* Title */}
       <input

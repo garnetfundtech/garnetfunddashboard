@@ -3,11 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  ensureStorageBuckets,
-  buildStorageObjectPath,
-  parseFilePath,
-} from "@/lib/storage";
+import { parseFilePath } from "@/lib/storage";
 import { logAuditEvent } from "@/lib/audit";
 import { isCoverageTeam, toCoverageTeam } from "@/lib/sectors";
 import {
@@ -17,12 +13,13 @@ import {
   collectFolderStoragePaths,
 } from "@/lib/team-files";
 import { canManageContent } from "@/lib/roles";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/uploads";
+import { verifyUploadGrant } from "@/lib/upload-grant";
 import type { UserRole } from "@/lib/types";
 
 /** Shape returned to the client so the UI can surface a reason on refusal. */
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 /**
  * Resolves the sector a folder belongs to. Every write is authorized against
@@ -176,53 +173,87 @@ export async function deleteFolderAction(
   return { ok: true };
 }
 
-export async function uploadTeamFileAction(
+/**
+ * Step two of a team file upload: the bytes are already in storage, this
+ * turns them into a row.
+ *
+ * The file never passes through here — see app/api/files/upload-url and
+ * lib/uploads.ts for why a 20 MB upload cannot travel inside a Server Action
+ * request at all. What arrives instead is the grant that route issued, which
+ * carries the object path, team and folder the server itself authorized.
+ *
+ * Nothing the client says about *where* the file belongs is trusted: the
+ * sector and folder come out of the grant, and the file's size and type are
+ * read back off the stored object rather than taken from the form. The only
+ * client-supplied value that survives is the title.
+ */
+export async function recordTeamFileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const profile = await requireProfile();
-  const file = formData.get("file");
   const title = String(formData.get("title") ?? "").trim();
-  const folderId = String(formData.get("folderId") ?? "").trim() || null;
-  const requestedSector = String(formData.get("sector") ?? "").trim();
+  const grantToken = String(formData.get("grant") ?? "");
   const downloadEnabled = formData.get("downloadEnabled") !== "false";
 
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose a file to upload." };
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    return { ok: false, error: "Files must be 20 MB or smaller." };
-  }
   if (!title) return { ok: false, error: "A title is required." };
-
-  const sector = folderId ? await sectorForFolder(folderId) : requestedSector;
-  if (!sector || !isCoverageTeam(sector)) {
-    return { ok: false, error: "Unknown team." };
+  if (title.length > 200) {
+    return { ok: false, error: "Title must be 200 characters or fewer." };
   }
-  if (!canWriteSector(profile, sector)) {
+
+  const grant = verifyUploadGrant(grantToken);
+  if (!grant) {
+    return {
+      ok: false,
+      error: "That upload expired before it was saved. Try uploading again.",
+    };
+  }
+
+  const { objectPath, sector, folderId } = grant;
+
+  // Re-checked rather than assumed from the grant: a role or coverage change
+  // between authorizing the upload and saving it should take effect.
+  if (!isCoverageTeam(sector) || !canWriteSector(profile, sector)) {
     return {
       ok: false,
       error: `You can only upload to ${toCoverageTeam(profile.coverage_sector) ?? "your own team"}.`,
     };
   }
 
+  const admin = createAdminClient();
+
+  // Confirm the object is really there, and take its size and type from
+  // storage. A client could otherwise record a row for a file it never
+  // finished uploading, or understate the size of one it did.
+  const lastSlash = objectPath.lastIndexOf("/");
+  const dir = lastSlash === -1 ? "" : objectPath.slice(0, lastSlash);
+  const name = objectPath.slice(lastSlash + 1);
+  const { data: listed } = await admin.storage
+    .from(TEAM_FILES_BUCKET)
+    .list(dir, { search: name, limit: 1 });
+
+  const stored = (listed ?? []).find((entry) => entry.name === name);
+  if (!stored) {
+    return {
+      ok: false,
+      error: "That file didn't finish uploading. Try again.",
+    };
+  }
+
+  const meta = (stored.metadata ?? {}) as { size?: number; mimetype?: string };
+  const fileSize = Number(meta.size ?? 0);
+
+  // Belt and braces: the bucket enforces this itself, so reaching here means
+  // the limits have drifted apart. Refuse and clean up rather than record a
+  // file nobody intended to allow.
+  if (fileSize > MAX_UPLOAD_BYTES) {
+    await admin.storage.from(TEAM_FILES_BUCKET).remove([objectPath]);
+    return { ok: false, error: `Files must be ${MAX_UPLOAD_LABEL} or smaller.` };
+  }
+
   const uploaderName =
     profile.full_name ||
     `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
     "Unknown";
-
-  await ensureStorageBuckets();
-  const admin = createAdminClient();
-  const objectPath = buildStorageObjectPath(file);
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  const { error: uploadError } = await admin.storage
-    .from(TEAM_FILES_BUCKET)
-    .upload(objectPath, bytes, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-
-  if (uploadError) return { ok: false, error: "Upload failed." };
 
   const { data, error } = await admin
     .from("team_files")
@@ -231,8 +262,8 @@ export async function uploadTeamFileAction(
       folder_id: folderId,
       title,
       file_path: `${TEAM_FILES_BUCKET}/${objectPath}`,
-      file_size: file.size,
-      mime_type: file.type || null,
+      file_size: fileSize || null,
+      mime_type: meta.mimetype || null,
       download_enabled: downloadEnabled,
       created_by: profile.id,
       uploader_name: uploaderName,
@@ -251,7 +282,7 @@ export async function uploadTeamFileAction(
     action: "team_file.upload",
     entity_type: "team_file",
     entity_id: data?.id ?? null,
-    metadata: { sector, folderId, title, size: file.size },
+    metadata: { sector, folderId, title, size: fileSize },
   });
 
   revalidatePath("/files");

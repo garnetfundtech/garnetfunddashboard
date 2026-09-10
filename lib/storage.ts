@@ -20,7 +20,9 @@ export async function ensureStorageBuckets() {
   }
 }
 
-export function buildStorageObjectPath(file: File) {
+/** Takes anything with a name, so a caller that only knows the filename (the
+ *  signed-upload route, which never receives the File itself) can use it. */
+export function buildStorageObjectPath(file: { name: string }) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   return `${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${safeName}`;
 }
