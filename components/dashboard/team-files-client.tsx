@@ -35,7 +35,7 @@ import {
   renameFolderAction,
   recordTeamFileAction,
 } from "@/app/(dashboard)/files/actions";
-import { createClient } from "@/lib/supabase/client";
+import { uploadToStorage } from "@/lib/upload-client";
 
 const ACTION_BTN =
   "flex w-full items-center justify-center gap-2 rounded-none bg-paper-2 px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-2";
@@ -127,63 +127,6 @@ export function TeamFilesClient({
     setDialog(null);
     setError("");
     setPickedFile(null);
-  }
-
-  /**
-   * Uploads a file without sending it through the server.
-   *
-   * Three steps: ask /api/files/upload-url whether this is allowed and where
-   * to put it, PUT the bytes straight to Supabase Storage with the signed
-   * token it returns, then hand the grant to recordTeamFileAction to create
-   * the row. The bytes skip Vercel entirely, which is the only way past its
-   * 4.5 MB function body limit — see lib/uploads.ts.
-   *
-   * Any step can fail, and each failure leaves the dialog open with a reason
-   * rather than closing or throwing to the error boundary.
-   */
-  async function uploadDirect(file: File, title: string): Promise<string | null> {
-    const res = await fetch("/api/files/upload-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: file.name,
-        size: file.size,
-        contentType: file.type || "application/octet-stream",
-        sector,
-        folderId,
-      }),
-    }).catch(() => null);
-
-    if (!res) return "Could not reach the server. Check your connection.";
-
-    const json = (await res.json().catch(() => null)) as
-      | { ok: true; bucket: string; path: string; token: string; grant: string }
-      | { ok: false; message?: string }
-      | null;
-
-    if (!json) return "The server sent back something unreadable.";
-    if (!json.ok) return json.message ?? "Upload was refused.";
-
-    const supabase = createClient();
-    const { error: putError } = await supabase.storage
-      .from(json.bucket)
-      .uploadToSignedUrl(json.path, json.token, file, {
-        contentType: file.type || "application/octet-stream",
-      });
-
-    if (putError) {
-      // The bucket's own size limit lands here, so say so in those terms
-      // rather than repeating the raw storage message.
-      return /exceeded the maximum allowed size/i.test(putError.message)
-        ? `That file is larger than the ${MAX_UPLOAD_LABEL} limit.`
-        : "The file didn't finish uploading. Try again.";
-    }
-
-    const fd = new FormData();
-    fd.set("title", title);
-    fd.set("grant", json.grant);
-    const recorded = await recordTeamFileAction(fd);
-    return recorded.ok ? null : recorded.error;
   }
 
   /** Runs a server action and keeps the dialog open when it reports a problem. */
@@ -797,9 +740,25 @@ export function TeamFilesClient({
               const file = pickedFile as File;
               setError("");
               startTransition(async () => {
-                const failure = await uploadDirect(file, title);
-                if (failure) {
-                  setError(failure);
+                // Bytes go straight to storage; only the title and the
+                // grant come back through the server. See lib/upload-client.ts.
+                const sent = await uploadToStorage({
+                  kind: "team",
+                  file,
+                  sector,
+                  folderId,
+                });
+                if (!sent.ok) {
+                  setError(sent.error);
+                  return;
+                }
+
+                const fd = new FormData();
+                fd.set("title", title);
+                fd.set("grant", sent.grant);
+                const recorded = await recordTeamFileAction(fd);
+                if (!recorded.ok) {
+                  setError(recorded.error);
                   return;
                 }
                 closeDialog();
