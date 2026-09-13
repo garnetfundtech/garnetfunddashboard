@@ -9,13 +9,13 @@ import { isRoleHigher } from "@/lib/roles";
 import { verifyUploadGrant } from "@/lib/upload-grant";
 import { isCoverageTeam } from "@/lib/sectors";
 
-/** Bucket research PDFs live in. */
+/** Bucket research write-ups live in — any file type, not just PDFs. */
 const RESEARCH_BUCKET = "research";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Records a research post whose PDF is already in storage.
+ * Records a research post whose file is already in storage.
  *
  * Research used to send its bytes through this action, which capped it at
  * whatever a Server Action body allows — 1 MB by default, and never more

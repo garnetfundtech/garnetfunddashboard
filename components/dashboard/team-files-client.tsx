@@ -20,13 +20,16 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
-import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
-import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { StatusPill } from "@/components/dashboard/status-pill";
+import { FileTypeChip } from "@/components/dashboard/file-type-chip";
+import { usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { FilePreview } from "@/components/dashboard/file-preview";
 import { canManageContent } from "@/lib/roles";
 import { signFile } from "@/lib/sign-client";
 import type { UserRole } from "@/lib/types";
 import type { TeamBrowseData, TeamFileRow } from "@/lib/team-files";
 import { MAX_UPLOAD_LABEL, checkUploadSize } from "@/lib/uploads";
+import { canPreview, previewKindOf } from "@/lib/file-types";
 import { canDeleteFolder } from "@/lib/team-files";
 import {
   createFolderAction,
@@ -58,29 +61,12 @@ function fmtDate(iso: string) {
   }
 }
 
-function extOf(file: TeamFileRow) {
-  return file.title.split(".").pop()?.toLowerCase() ?? "";
+function fileKind(file: TeamFileRow) {
+  return previewKindOf({ path: file.filePath, mimeType: file.mimeType });
 }
 
-function isPdf(file: TeamFileRow) {
-  return file.mimeType === "application/pdf" || extOf(file) === "pdf";
-}
-
-function typeChip(file: TeamFileRow) {
-  const map: Record<string, Tone> = {
-    pdf: "rose",
-    xlsx: "emerald",
-    xlsm: "emerald",
-    xls: "emerald",
-    csv: "emerald",
-    docx: "blue",
-    doc: "blue",
-    pptx: "amber",
-    mp4: "blue",
-  };
-  const ext = extOf(file);
-  const tone = map[ext] ?? "neutral";
-  return <StatusPill label={ext.toUpperCase() || "FILE"} tone={tone} dot={false} />;
+function hasPreview(file: TeamFileRow) {
+  return canPreview({ path: file.filePath, mimeType: file.mimeType });
 }
 
 type Dialog =
@@ -404,7 +390,9 @@ export function TeamFilesClient({
                   <td className="px-3 py-2 text-[14px] font-medium text-ink">
                     {file.title}
                   </td>
-                  <td className="px-3 py-2">{typeChip(file)}</td>
+                  <td className="px-3 py-2">
+                    <FileTypeChip source={file.filePath} />
+                  </td>
                   <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                     {fmtSize(file.fileSize)}
                   </td>
@@ -446,11 +434,13 @@ export function TeamFilesClient({
       )}
 
       {/* ── File preview ──────────────────────────────────────────────────── */}
-      {opened && isPdf(opened) && (
+      {opened && hasPreview(opened) && (
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
-            <PdfViewer
+            <FilePreview
+              kind={fileKind(opened)}
               url={opened.viewUrl}
+              name={opened.title}
               scale={zoom}
               onLoadTotalPages={(n) => setTotalPages(n)}
               onPageChange={setCurrentPage}
@@ -499,47 +489,56 @@ export function TeamFilesClient({
                 </dl>
               </div>
               <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
-                <div className="flex w-full gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))
-                    }
-                    className={ACTION_BTN}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
-                    {Math.round(zoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))
-                    }
-                    className={ACTION_BTN}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
+                {/* Zooming only means something where there's a rendered
+                    page or picture to scale. */}
+                {(fileKind(opened) === "pdf" || fileKind(opened) === "image") && (
+                  <div className="flex w-full gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))
+                      }
+                      className={ACTION_BTN}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
+                      {Math.round(zoom * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))
+                      }
+                      className={ACTION_BTN}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 {opened.downloadUrl && (
                   <a href={opened.downloadUrl} className={ACTION_BTN}>
                     <Download className="h-4 w-4" />
                     Download
                   </a>
                 )}
-                <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
-                  <Printer className="h-4 w-4" />
-                  Print
-                </button>
+                {/* Print drives a hidden iframe of the PDF; there's nothing
+                    equivalent for a spreadsheet or a video. */}
+                {fileKind(opened) === "pdf" && (
+                  <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Non-PDF files (models, decks, docs) can't render inline — offer the file. */}
-      {opened && !isPdf(opened) && (
+      {/* Formats with no renderer worth trusting — .pptx, .doc, archives — get
+          the file itself rather than an empty frame. */}
+      {opened && !hasPreview(opened) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6 backdrop-blur-md">
           <div className="panel w-full max-w-sm p-6">
             <div className="mb-5 flex items-start justify-between gap-3">
@@ -569,6 +568,12 @@ export function TeamFilesClient({
                 <dt className="text-ink-3">Size</dt>
                 <dd className="tabular-nums text-ink">
                   {fmtSize(opened.fileSize)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-ink-3">Type</dt>
+                <dd>
+                  <FileTypeChip source={opened.filePath} />
                 </dd>
               </div>
             </dl>
@@ -775,7 +780,9 @@ export function TeamFilesClient({
                   Click to select a file: model, memo, or deck
                 </span>
               )}
-              <span className="text-[12px] text-ink-3">Up to {MAX_UPLOAD_LABEL}</span>
+              <span className="text-[12px] text-ink-3">
+                Any file type, up to {MAX_UPLOAD_LABEL}
+              </span>
               <input
                 name="file"
                 type="file"

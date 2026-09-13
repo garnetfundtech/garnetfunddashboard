@@ -358,6 +358,100 @@ h4,
   border-bottom: 1px solid var(--line-2);
 }
 
+/*
+ * Rendered document body — the shared look for a .docx converted by mammoth
+ * and a .md rendered by react-markdown in the file preview.
+ *
+ * These two produce ordinary HTML (h1, ul, table, img) with no classes on it,
+ * and this project carries no typography plugin, so without this the content
+ * arrives completely unstyled: headings the same size as body text, list
+ * markers missing, table borders gone. Scoped to .doc-body so it can never
+ * leak into the app's own markup.
+ */
+.doc-body > :first-child {
+  margin-top: 0;
+}
+.doc-body p {
+  margin: 0 0 0.85em;
+}
+.doc-body h1,
+.doc-body h2,
+.doc-body h3,
+.doc-body h4,
+.doc-body h5,
+.doc-body h6 {
+  margin: 1.6em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.doc-body h1 { font-size: 1.5em; }
+.doc-body h2 { font-size: 1.28em; }
+.doc-body h3 { font-size: 1.12em; }
+.doc-body h4,
+.doc-body h5,
+.doc-body h6 { font-size: 1em; }
+.doc-body ul,
+.doc-body ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.5em;
+}
+.doc-body ul { list-style: disc; }
+.doc-body ol { list-style: decimal; }
+.doc-body li { margin: 0.2em 0; }
+.doc-body blockquote {
+  margin: 0 0 0.85em;
+  border-left: 2px solid var(--line-2);
+  padding-left: 1em;
+  color: var(--ink-2);
+}
+.doc-body a {
+  color: var(--garnet);
+  text-decoration: underline;
+}
+.doc-body code {
+  background: var(--paper-2);
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+.doc-body pre {
+  margin: 0 0 0.85em;
+  background: var(--paper-2);
+  padding: 0.75em;
+  overflow-x: auto;
+}
+.doc-body pre code {
+  background: none;
+  padding: 0;
+}
+.doc-body hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+/* An embedded picture is sized for a Word page, not this panel. */
+.doc-body img {
+  max-width: 100%;
+  height: auto;
+}
+/* Wide tables scroll the panel rather than the page. */
+.doc-body table {
+  margin: 0 0 0.85em;
+  border-collapse: collapse;
+  max-width: 100%;
+}
+.doc-body th,
+.doc-body td {
+  border: 1px solid var(--line);
+  padding: 0.35em 0.6em;
+  text-align: left;
+  vertical-align: top;
+}
+.doc-body th {
+  background: var(--paper-2);
+  font-weight: 600;
+}
+
 /* Underline-on-hover link, as used throughout the reference site. */
 .rule-link {
   border-bottom: 1px solid var(--line-2);

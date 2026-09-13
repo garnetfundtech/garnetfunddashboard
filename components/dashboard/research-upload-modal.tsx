@@ -39,7 +39,7 @@ export function ResearchUploadForm({
     setError("");
 
     startTransition(async () => {
-      // The PDF goes straight to storage; only its metadata comes back
+      // The file goes straight to storage; only its metadata comes back
       // through the server. See lib/upload-client.ts.
       const sent = await uploadToStorage({ kind: "research", file: picked, sector });
       if (!sent.ok) {
@@ -70,13 +70,14 @@ export function ResearchUploadForm({
         {file ? (
           <span className="text-sm text-ink">{file.name}</span>
         ) : (
-          <span className="text-sm text-ink-2">Click to select a PDF</span>
+          <span className="text-sm text-ink-2">Click to select a file</span>
         )}
-        <span className="text-[12px] text-ink-3">PDF, up to {MAX_UPLOAD_LABEL}</span>
+        <span className="text-[12px] text-ink-3">
+          Any file type, up to {MAX_UPLOAD_LABEL}
+        </span>
         <input
           name="file"
           type="file"
-          accept="application/pdf"
           required
           className="hidden"
           onChange={(e) => {

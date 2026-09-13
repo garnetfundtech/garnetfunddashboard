@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Minus, Plus, Printer, Trash2, X } from "lucide-react";
+import { Download, ExternalLink, Minus, Plus, Printer, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
-import { PdfViewer, usePdfPrint } from "@/components/dashboard/pdf-viewer";
-import { StatusPill, type Tone } from "@/components/dashboard/status-pill";
+import { usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { FilePreview } from "@/components/dashboard/file-preview";
+import { FileTypeChip } from "@/components/dashboard/file-type-chip";
 import { signFile } from "@/lib/sign-client";
+import { canPreview, previewKindOf } from "@/lib/file-types";
 import type { ResourceWithLinks } from "@/lib/data";
 import type { UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
@@ -20,21 +22,6 @@ import {
 } from "@/app/(dashboard)/resources/actions";
 
 type CategoryFilter = "All" | string;
-
-function typeChip(title: string) {
-  const ext = title.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, Tone> = {
-    pdf: "rose",
-    xlsx: "emerald",
-    xls: "emerald",
-    docx: "blue",
-    doc: "blue",
-    mp4: "blue",
-  };
-  const tone = map[ext] ?? "neutral";
-  const label = ext.toUpperCase() || "FILE";
-  return <StatusPill label={label} tone={tone} dot={false} />;
-}
 
 function fmtSize(bytes?: number) {
   if (!bytes) return "—";
@@ -235,7 +222,9 @@ export function ResourcesTableClient({
                 <td className="px-3 py-2 text-[14px] text-ink-2">
                   {titleCase(item.category)}
                 </td>
-                <td className="px-3 py-2">{typeChip(item.title)}</td>
+                <td className="px-3 py-2">
+                  <FileTypeChip source={item.file_path} />
+                </td>
                 <td className="px-3 py-2 tabular-nums text-[14px] text-ink-2">
                   {fmtDate(item.updatedAt)}
                 </td>
@@ -263,12 +252,14 @@ export function ResourcesTableClient({
         </table>
       </TableShell>
 
-      {/* PDF viewer modal */}
-      {opened && (
+      {/* Preview modal — the renderer depends on the file. */}
+      {opened && canPreview({ path: opened.file_path }) && (
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
-            <PdfViewer
+            <FilePreview
+              kind={previewKindOf({ path: opened.file_path })}
               url={opened.viewUrl}
+              name={opened.title}
               scale={zoom}
               onLoadTotalPages={(n) => setTotalPages(n)}
               onPageChange={setCurrentPage}
@@ -311,29 +302,33 @@ export function ResourcesTableClient({
                 </dl>
               </div>
               <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
-                <div className="flex w-full gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))
-                    }
-                    className={ACTION_BTN}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
-                    {Math.round(zoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))
-                    }
-                    className={ACTION_BTN}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
+                {/* Zooming only means something where there's a rendered
+                    page or picture to scale. */}
+                {(previewKindOf({ path: opened.file_path }) === "pdf" || previewKindOf({ path: opened.file_path }) === "image") && (
+                  <div className="flex w-full gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))
+                      }
+                      className={ACTION_BTN}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="flex flex-1 items-center justify-center rounded-none bg-paper-2 px-3 py-2.5 text-sm tabular-nums text-ink">
+                      {Math.round(zoom * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))
+                      }
+                      className={ACTION_BTN}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 {canManage(opened) && (
                   <button
                     type="button"
@@ -343,14 +338,18 @@ export function ResourcesTableClient({
                     Edit details
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => doPrint()}
-                  className={ACTION_BTN}
-                >
-                  <Printer className="h-4 w-4" />
-                  Print
-                </button>
+                {/* Print drives a hidden iframe of the PDF; there's nothing
+                    equivalent for a spreadsheet or a video. */}
+                {previewKindOf({ path: opened.file_path }) === "pdf" && (
+                  <button
+                    type="button"
+                    onClick={() => doPrint()}
+                    className={ACTION_BTN}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </button>
+                )}
                 {canManage(opened) && (
                   <button
                     type="button"
@@ -363,6 +362,90 @@ export function ResourcesTableClient({
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Formats with no renderer worth trusting — .pptx, .doc, archives —
+          get the file itself rather than an empty frame. */}
+      {opened && !canPreview({ path: opened.file_path }) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-6 backdrop-blur-md">
+          <div className="panel w-full max-w-sm p-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <p className="caps-label">{titleCase(opened.category)}</p>
+                <h2 className="mt-0.5 text-base font-semibold leading-snug text-ink">
+                  {opened.title}
+                </h2>
+              </div>
+              <button
+                onClick={() => setOpened(null)}
+                className="mt-0.5 shrink-0 rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <dl className="mb-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-ink-3">Uploaded by</dt>
+                <dd className="font-medium text-ink">{opened.uploadedBy}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-ink-3">Date</dt>
+                <dd className="text-ink">{fmtDate(opened.updatedAt)}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-ink-3">Type</dt>
+                <dd>
+                  <FileTypeChip source={opened.file_path} />
+                </dd>
+              </div>
+            </dl>
+            <div className="space-y-2">
+              {opened.downloadUrl ? (
+                <a href={opened.downloadUrl} className={ACTION_BTN}>
+                  <Download className="h-4 w-4" />
+                  Download
+                </a>
+              ) : (
+                <p className="rounded-none bg-paper-2 px-3 py-2.5 text-[13.5px] text-ink-2">
+                  {opened.downloadEnabled
+                    ? "This file’s link couldn’t be generated. Reload the page and try again."
+                    : "Download is disabled for this file."}
+                </p>
+              )}
+              {opened.viewUrl && (
+                <a
+                  href={opened.viewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={ACTION_BTN}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in new tab
+                </a>
+              )}
+              {canManage(opened) && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(opened)}
+                    className={ACTION_BTN}
+                  >
+                    Edit details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(opened)}
+                    disabled={isPending}
+                    className="flex w-full items-center justify-center gap-2 rounded-none bg-neg-soft px-3 py-2.5 text-sm font-medium text-neg transition-colors hover:bg-neg-soft disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

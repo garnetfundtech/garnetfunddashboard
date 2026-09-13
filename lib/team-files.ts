@@ -38,6 +38,10 @@ export type TeamFileRow = {
   sector: string;
   folderId: string | null;
   title: string;
+  /** Storage path, `bucket/object`. Carried for its extension — the title is
+   *  only seeded from the filename and can be edited to something without
+   *  one. See lib/file-types.ts. */
+  filePath: string;
   fileSize: number | null;
   mimeType: string | null;
   downloadEnabled: boolean;
@@ -244,6 +248,7 @@ export async function getTeamBrowseData({
         sector: row.sector,
         folderId: row.folder_id,
         title: row.title,
+        filePath: row.file_path,
         fileSize: row.file_size,
         mimeType: row.mime_type,
         downloadEnabled: row.download_enabled,
