@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Download, ExternalLink, Minus, Plus, Printer, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
@@ -8,12 +8,13 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
-import { usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { usePreviewPrint } from "@/components/dashboard/use-preview-print";
 import { FilePreview } from "@/components/dashboard/file-preview";
 import { FileTypeChip } from "@/components/dashboard/file-type-chip";
 import { signFile } from "@/lib/sign-client";
-import { canPreview, previewKindOf } from "@/lib/file-types";
+import { canPreview, hasRenderedContent, previewKindOf } from "@/lib/file-types";
 import type { ResourceWithLinks } from "@/lib/data";
+import { RESOURCE_CATEGORIES } from "@/lib/types";
 import type { UserRole } from "@/lib/types";
 import { canManageContent } from "@/lib/roles";
 import {
@@ -70,7 +71,14 @@ export function ResourcesTableClient({
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const doPrint = usePdfPrint(opened?.viewUrl);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const openedKind = opened ? previewKindOf({ path: opened.file_path }) : "none";
+  const doPrint = usePreviewPrint({
+    kind: openedKind,
+    url: opened?.viewUrl,
+    title: opened?.title ?? "",
+    contentRef: previewRef,
+  });
 
   const categories = useMemo(
     () => [...new Set(resources.map((r) => r.category))],
@@ -257,10 +265,11 @@ export function ResourcesTableClient({
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
             <FilePreview
-              kind={previewKindOf({ path: opened.file_path })}
+              kind={openedKind}
               url={opened.viewUrl}
               name={opened.title}
               scale={zoom}
+              contentRef={previewRef}
               onLoadTotalPages={(n) => setTotalPages(n)}
               onPageChange={setCurrentPage}
             />
@@ -302,9 +311,9 @@ export function ResourcesTableClient({
                 </dl>
               </div>
               <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
-                {/* Zooming only means something where there's a rendered
-                    page or picture to scale. */}
-                {(previewKindOf({ path: opened.file_path }) === "pdf" || previewKindOf({ path: opened.file_path }) === "image") && (
+                {/* Everything with rendered content scales — a model's grid
+                    and a memo's text as much as a PDF's pages. */}
+                {hasRenderedContent(openedKind) && (
                   <div className="flex w-full gap-1">
                     <button
                       type="button"
@@ -338,9 +347,19 @@ export function ResourcesTableClient({
                     Edit details
                   </button>
                 )}
-                {/* Print drives a hidden iframe of the PDF; there's nothing
-                    equivalent for a spreadsheet or a video. */}
-                {previewKindOf({ path: opened.file_path }) === "pdf" && (
+                {/* The preview panel offered no way to download at all: the
+                    only Download button on this page was the one on the modal
+                    for files there's no renderer for. */}
+                {opened.downloadUrl && (
+                  <a href={opened.downloadUrl} className={ACTION_BTN}>
+                    <Download className="h-4 w-4" />
+                    Download
+                  </a>
+                )}
+                {/* A PDF prints as the file; everything else prints the
+                    markup on screen. Video and audio print as nothing, so
+                    they get no button. See usePreviewPrint. */}
+                {hasRenderedContent(openedKind) && (
                   <button
                     type="button"
                     onClick={() => doPrint()}
@@ -410,9 +429,8 @@ export function ResourcesTableClient({
                 </a>
               ) : (
                 <p className="rounded-none bg-paper-2 px-3 py-2.5 text-[13.5px] text-ink-2">
-                  {opened.downloadEnabled
-                    ? "This file’s link couldn’t be generated. Reload the page and try again."
-                    : "Download is disabled for this file."}
+                  This file’s link couldn’t be generated. Reload the page and try
+                  again.
                 </p>
               )}
               {opened.viewUrl && (
@@ -487,26 +505,19 @@ export function ResourcesTableClient({
                 placeholder="Title"
                 required
               />
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  className="glass-input flex-1 px-3 py-2.5 text-sm text-ink transition-colors hover:bg-paper-2"
-                  onClick={() =>
-                    setEditing((prev) =>
-                      prev
-                        ? { ...prev, downloadEnabled: !prev.downloadEnabled }
-                        : prev,
-                    )
-                  }
-                >
-                  {editing.downloadEnabled ? "Downloadable" : "View only"}
-                </button>
-                <input
-                  type="hidden"
-                  name="downloadEnabled"
-                  value={String(editing.downloadEnabled)}
-                />
-              </div>
+              {/* Editing is where someone would expect to re-file a resource,
+                  and until this was here the form sent no category at all. */}
+              <select
+                name="category"
+                defaultValue={editing.category}
+                className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-ink outline-none"
+              >
+                {RESOURCE_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {titleCase(value)}
+                  </option>
+                ))}
+              </select>
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"

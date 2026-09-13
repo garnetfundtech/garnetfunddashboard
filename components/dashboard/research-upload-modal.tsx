@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
+import { FilePlus2, X, Upload } from "lucide-react";
 import { recordResearchAction } from "@/app/(dashboard)/research/actions";
 import { COVERAGE_TEAMS } from "@/lib/sectors";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
@@ -16,7 +16,6 @@ export function ResearchUploadForm({
   onCancel?: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
-  const [downloadEnabled, setDownloadEnabled] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -33,7 +32,6 @@ export function ResearchUploadForm({
     }
 
     const formData = new FormData(e.currentTarget);
-    formData.set("downloadEnabled", String(downloadEnabled));
     const picked = file as File;
     const sector = String(formData.get("sector") ?? "");
     setError("");
@@ -57,7 +55,6 @@ export function ResearchUploadForm({
       }
       formRef.current?.reset();
       setFile(null);
-      setDownloadEnabled(false);
       onSuccess?.();
     });
   }
@@ -138,22 +135,6 @@ export function ResearchUploadForm({
         required
         className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
       />
-
-      {/* Download toggle */}
-      <button
-        type="button"
-        onClick={() => setDownloadEnabled((v) => !v)}
-        className={`glass-input flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
-          downloadEnabled ? "text-ink" : "text-ink-3"
-        }`}
-      >
-        {downloadEnabled ? (
-          <Download className="h-4 w-4" />
-        ) : (
-          <Ban className="h-4 w-4" />
-        )}
-        {downloadEnabled ? "Downloadable" : "View only"}
-      </button>
 
       <div className="flex justify-end gap-2 pt-1">
         {onCancel && (

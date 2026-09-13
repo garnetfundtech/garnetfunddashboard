@@ -126,6 +126,19 @@ export function previewKindOf(file: {
   return BY_EXTENSION[fileExtension(file.path)] ?? "none";
 }
 
+/**
+ * Whether a preview draws content that can be scaled on screen and put on
+ * paper — a PDF's pages, a spreadsheet's grid, a document, an image, text.
+ *
+ * Zoom and print were both pinned to PDFs, which left a model or a memo with
+ * neither, even though both are laid out on screen exactly like the PDF next
+ * to them. The two that genuinely have nothing to scale or print are video
+ * and audio.
+ */
+export function hasRenderedContent(kind: PreviewKind): boolean {
+  return kind !== "video" && kind !== "audio" && kind !== "none";
+}
+
 /** Whether the viewer has anything to show, or should offer the file instead. */
 export function canPreview(file: {
   path?: string | null;

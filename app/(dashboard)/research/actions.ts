@@ -37,7 +37,6 @@ export async function recordResearchAction(
   const ticker = String(formData.get("ticker") ?? "").trim().toUpperCase();
   const companyName = String(formData.get("companyName") ?? "").trim() || null;
   const analystName = String(formData.get("analystName") ?? "").trim();
-  const downloadEnabled = formData.get("downloadEnabled") === "true";
   const grantToken = String(formData.get("grant") ?? "");
 
   if (!title) return { ok: false, error: "A report title is required." };
@@ -79,7 +78,6 @@ export async function recordResearchAction(
     file_path: `${RESEARCH_BUCKET}/${objectPath}`,
     created_by: profile.id,
     author_override: authorName,
-    download_enabled: downloadEnabled,
     uploader_role: profile.role,
     sector,
     analyst_name: analystName,
@@ -95,7 +93,7 @@ export async function recordResearchAction(
   await logAuditEvent({
     action: "research.upload",
     entity_type: "research_post",
-    metadata: { title, ticker, downloadEnabled, size: stored.size },
+    metadata: { title, ticker, size: stored.size },
   });
 
   revalidatePath("/research");
@@ -107,16 +105,19 @@ export async function updateResearchAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const ticker = String(formData.get("ticker") ?? "").trim().toUpperCase();
-  const downloadEnabled = formData.get("downloadEnabled") === "true";
   const sector = String(formData.get("sector") ?? "").trim() || null;
   const analystName = String(formData.get("analystName") ?? "").trim() || null;
-  const companyName = String(formData.get("companyName") ?? "").trim() || null;
+  // Same trap as the resource category, with the opposite default: the edit
+  // modal has no company-name input, and reading the missing field as "" wrote
+  // null over the stored name on every edit — quietly costing the coverage
+  // panel the name matches it makes for tickers.
+  const companyName = formData.get("companyName");
   if (!id || !title) return;
 
   const admin = createAdminClient();
   const { data: row } = await admin
     .from("research_posts")
-    .select("id,created_by,uploader_role,download_enabled")
+    .select("id,created_by,uploader_role")
     .eq("id", id)
     .maybeSingle();
 
@@ -126,23 +127,23 @@ export async function updateResearchAction(formData: FormData) {
     row.created_by === actor.id || isRoleHigher(actor.role, uploaderRole);
   if (!canManage) return;
 
-  await admin
-    .from("research_posts")
-    .update({
-      title,
-      ticker: ticker || null,
-      company_name: companyName,
-      download_enabled: downloadEnabled,
-      sector,
-      analyst_name: analystName,
-    })
-    .eq("id", id);
+  const patch: Record<string, string | null> = {
+    title,
+    ticker: ticker || null,
+    sector,
+    analyst_name: analystName,
+  };
+  if (typeof companyName === "string") {
+    patch.company_name = companyName.trim() || null;
+  }
+
+  await admin.from("research_posts").update(patch).eq("id", id);
 
   await logAuditEvent({
     action: "research.update",
     entity_type: "research_post",
     entity_id: id,
-    metadata: { title, ticker, downloadEnabled, sector },
+    metadata: { title, ticker, sector },
   });
 
   revalidatePath("/research");

@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Ref } from "react";
 import ReactMarkdown from "react-markdown";
 // Tables, strikethrough and task lists. react-markdown is CommonMark-only
 // without this, and a markdown memo's table would render as rows of pipes.
@@ -113,7 +114,15 @@ function useFileBytes(url: string | undefined): FetchState {
 
 type SheetData = { names: string[]; rows: string[][]; truncated: boolean };
 
-function SheetPreview({ url }: { url?: string }) {
+function SheetPreview({
+  url,
+  scale,
+  contentRef,
+}: {
+  url?: string;
+  scale: number;
+  contentRef?: Ref<HTMLDivElement>;
+}) {
   const file = useFileBytes(url);
   const [active, setActive] = useState(0);
   const [book, setBook] = useState<{ names: string[] } | null>(null);
@@ -209,7 +218,11 @@ function SheetPreview({ url }: { url?: string }) {
           ))}
         </div>
       )}
-      <div className={SCROLL}>
+      {/* Zoom goes on the scroller, not the table: CSS zoom reflows, so the
+          grid keeps its scrollbars instead of being clipped the way a
+          transform would clip it. It also stays off the markup that gets
+          printed, which should be at its natural size. */}
+      <div className={SCROLL} style={{ zoom: scale }} ref={contentRef}>
         {sheet.rows.length === 0 ? (
           <Notice>This sheet is empty.</Notice>
         ) : (
@@ -300,7 +313,15 @@ function sanitizeDocxHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-function DocxPreview({ url }: { url?: string }) {
+function DocxPreview({
+  url,
+  scale,
+  contentRef,
+}: {
+  url?: string;
+  scale: number;
+  contentRef?: Ref<HTMLDivElement>;
+}) {
   const file = useFileBytes(url);
   const [html, setHtml] = useState<string | null>(null);
   const [failed, setFailed] = useState("");
@@ -344,7 +365,7 @@ function DocxPreview({ url }: { url?: string }) {
 
   return (
     <Frame>
-      <div className={SCROLL}>
+      <div className={SCROLL} style={{ zoom: scale }} ref={contentRef}>
         <div
           className="doc-body mx-auto max-w-[70ch] bg-paper p-8 text-[14px] leading-relaxed text-ink"
           dangerouslySetInnerHTML={{ __html: html }}
@@ -356,7 +377,17 @@ function DocxPreview({ url }: { url?: string }) {
 
 // ── Plain text and markdown ─────────────────────────────────────────────────
 
-function TextPreview({ url, markdown }: { url?: string; markdown: boolean }) {
+function TextPreview({
+  url,
+  markdown,
+  scale,
+  contentRef,
+}: {
+  url?: string;
+  markdown: boolean;
+  scale: number;
+  contentRef?: Ref<HTMLDivElement>;
+}) {
   const file = useFileBytes(url);
 
   // Plain derivation of the bytes, so it belongs in render rather than an
@@ -374,7 +405,7 @@ function TextPreview({ url, markdown }: { url?: string; markdown: boolean }) {
 
   return (
     <Frame>
-      <div className={SCROLL}>
+      <div className={SCROLL} style={{ zoom: scale }} ref={contentRef}>
         {markdown ? (
           <div className="doc-body mx-auto max-w-[70ch] bg-paper p-8 text-[14px] leading-relaxed text-ink">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
@@ -396,7 +427,17 @@ function TextPreview({ url, markdown }: { url?: string; markdown: boolean }) {
 
 // ── Images and media ────────────────────────────────────────────────────────
 
-function ImagePreview({ url, name, scale }: { url?: string; name: string; scale: number }) {
+function ImagePreview({
+  url,
+  name,
+  scale,
+  contentRef,
+}: {
+  url?: string;
+  name: string;
+  scale: number;
+  contentRef?: Ref<HTMLDivElement>;
+}) {
   const [failed, setFailed] = useState(false);
   if (!url) return <Frame><Spinner /></Frame>;
   if (failed) return <Frame><Notice tone="bad">This image couldn&apos;t be displayed.</Notice></Frame>;
@@ -408,7 +449,10 @@ function ImagePreview({ url, name, scale }: { url?: string; name: string; scale:
             width: a width of 100% would blow a small chart up to the width of
             the panel and leave it blurry, while a large screenshot still needs
             to be shrunk to fit. */}
-        <div style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
+        <div
+          style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}
+          ref={contentRef}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
@@ -457,8 +501,13 @@ export type FilePreviewProps = {
   url?: string;
   /** Filename or title, used as image alt text. */
   name: string;
-  /** Applies to the two kinds where zooming means anything: PDF and images. */
+  /** Applies to every kind that draws something — see hasRenderedContent. */
   scale?: number;
+  /**
+   * Set to the node holding the rendered content, so the surrounding page can
+   * print what's on screen. See usePreviewPrint.
+   */
+  contentRef?: Ref<HTMLDivElement>;
   onLoadTotalPages?: (count: number) => void;
   onPageChange?: (page: number) => void;
 };
@@ -468,6 +517,7 @@ export function FilePreview({
   url,
   name,
   scale = 1,
+  contentRef,
   onLoadTotalPages,
   onPageChange,
 }: FilePreviewProps) {
@@ -482,18 +532,20 @@ export function FilePreview({
         />
       );
     case "image":
-      return <ImagePreview url={url} name={name} scale={scale} />;
+      return <ImagePreview url={url} name={name} scale={scale} contentRef={contentRef} />;
     case "video":
     case "audio":
       return <MediaPreview url={url} kind={kind} />;
     case "sheet":
-      return <SheetPreview url={url} />;
+      return <SheetPreview url={url} scale={scale} contentRef={contentRef} />;
     case "docx":
-      return <DocxPreview url={url} />;
+      return <DocxPreview url={url} scale={scale} contentRef={contentRef} />;
     case "markdown":
-      return <TextPreview url={url} markdown />;
+      return <TextPreview url={url} markdown scale={scale} contentRef={contentRef} />;
     case "text":
-      return <TextPreview url={url} markdown={false} />;
+      return (
+        <TextPreview url={url} markdown={false} scale={scale} contentRef={contentRef} />
+      );
     default:
       return <Frame><Notice>There&apos;s no preview for this file type.</Notice></Frame>;
   }

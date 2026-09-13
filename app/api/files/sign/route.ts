@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data: row, error } = await admin
     .from(TABLES[source])
-    .select("file_path, download_enabled")
+    .select("file_path")
     .eq("id", id)
     .maybeSingle();
 
@@ -49,16 +49,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Invalid file path." }, { status: 404 });
   }
 
+  // Anyone who can open a file can download it. There used to be a per-file
+  // "downloadable" flag, and a file marked view-only simply got no download
+  // URL here — which is what left uploaders looking at a dead Download button
+  // on their own reports. Both URLs are always signed now.
   const [view, dl] = await Promise.all([
     admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10),
-    row.download_enabled
-      ? admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10, { download: true })
-      : Promise.resolve(null),
+    admin.storage.from(bucket).createSignedUrl(objectPath, 60 * 10, { download: true }),
   ]);
 
   return NextResponse.json({
     ok: true,
     viewUrl: view.data?.signedUrl ?? null,
-    downloadUrl: dl?.data?.signedUrl ?? null,
+    downloadUrl: dl.data?.signedUrl ?? null,
   });
 }

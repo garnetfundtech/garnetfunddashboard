@@ -1,16 +1,16 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { FilePlus2, X, Upload, Ban, Download } from "lucide-react";
+import { FilePlus2, X, Upload } from "lucide-react";
 import { PrimaryBtn } from "@/components/dashboard/buttons";
 import { recordResourceAction } from "@/app/(dashboard)/resources/actions";
 import { MAX_UPLOAD_LABEL, checkUploadSize } from "@/lib/uploads";
+import { RESOURCE_CATEGORIES } from "@/lib/types";
 import { uploadToStorage } from "@/lib/upload-client";
 
 export function ResourcesUploadModal() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [downloadEnabled, setDownloadEnabled] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -18,7 +18,6 @@ export function ResourcesUploadModal() {
   function handleClose() {
     setOpen(false);
     setFile(null);
-    setDownloadEnabled(false);
     setError("");
     formRef.current?.reset();
   }
@@ -32,7 +31,6 @@ export function ResourcesUploadModal() {
     }
 
     const formData = new FormData(e.currentTarget);
-    formData.set("downloadEnabled", downloadEnabled ? "on" : "");
     const picked = file as File;
     setError("");
 
@@ -117,32 +115,17 @@ export function ResourcesUploadModal() {
                 className="glass-input w-full px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3"
               />
 
-              {/* Category + Download toggle */}
-              <div className="flex gap-3">
-                <select
-                  name="category"
-                  className="glass-input flex-1 bg-transparent px-3 py-2.5 text-sm text-ink outline-none"
-                >
-                  <option value="training">Training</option>
-                  <option value="pitch">Pitch</option>
-                  <option value="playbook">Playbook</option>
-                  <option value="research">Research</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setDownloadEnabled((v) => !v)}
-                  className={`glass-input flex items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
-                    downloadEnabled ? "text-ink" : "text-ink-3"
-                  }`}
-                >
-                  {downloadEnabled ? (
-                    <Download className="h-4 w-4" />
-                  ) : (
-                    <Ban className="h-4 w-4" />
-                  )}
-                  {downloadEnabled ? "Downloadable" : "View only"}
-                </button>
-              </div>
+              {/* Category */}
+              <select
+                name="category"
+                className="glass-input w-full bg-transparent px-3 py-2.5 text-sm text-ink outline-none"
+              >
+                {RESOURCE_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value.charAt(0).toUpperCase() + value.slice(1)}
+                  </option>
+                ))}
+              </select>
 
               <div className="flex justify-end gap-2 pt-1">
                 <button

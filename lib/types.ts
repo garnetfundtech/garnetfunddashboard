@@ -149,7 +149,6 @@ export type ResearchItem = {
   uploaderRole: UserRole;
   filePath?: string;
   viewUrl?: string;
-  downloadEnabled: boolean;
   downloadUrl?: string;
   sector: string | null;
   thesisStatus: ThesisStatus;
@@ -157,11 +156,36 @@ export type ResearchItem = {
   aiAnalysis: StoredAnalysis | null;
 };
 
+/**
+ * The categories a resource can be filed under — the file_category enum in
+ * 0001_initial.sql, in the order the pickers list it.
+ *
+ * One list, so the upload form, the edit form and the server can't drift
+ * apart. They had: the upload form offered a fourth category this type didn't
+ * admit, and the edit form offered none at all, which is how editing a
+ * resource's title quietly refiled it as training.
+ */
+export const RESOURCE_CATEGORIES = [
+  "training",
+  "pitch",
+  "playbook",
+  "research",
+] as const;
+
+export type ResourceCategory = (typeof RESOURCE_CATEGORIES)[number];
+
+/** Whether a submitted value is one the database will actually accept. */
+export function isResourceCategory(value: unknown): value is ResourceCategory {
+  return (
+    typeof value === "string" &&
+    (RESOURCE_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
 export type ResourceItem = {
   id: string;
   title: string;
-  category: "training" | "pitch" | "playbook";
-  downloadEnabled: boolean;
+  category: ResourceCategory;
   updatedAt: string;
 };
 

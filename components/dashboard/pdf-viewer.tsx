@@ -20,5 +20,3 @@ export type { PdfViewerProps };
 export function PdfViewer(props: PdfViewerProps) {
   return <PdfViewerClient {...props} />;
 }
-
-export { usePdfPrint } from "./use-pdf-print";

@@ -57,7 +57,7 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
   const { data, error } = await supabase
     .from("research_posts")
     .select(
-      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
+      "id, title, ticker, created_at, file_path, author_override, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
     )
     .order("created_at", { ascending: false })
     .limit(40);
@@ -84,7 +84,6 @@ export async function getResearchItems(): Promise<ResearchItem[]> {
       createdBy: row.created_by ?? null,
       uploaderRole: (row.uploader_role as UserRole) ?? "analyst",
       filePath: row.file_path ?? undefined,
-      downloadEnabled: row.download_enabled ?? false,
       sector: (row as { sector?: string | null }).sector ?? null,
       thesisStatus: validThesis,
       analystName: (row as { analyst_name?: string | null }).analyst_name ?? null,
@@ -108,7 +107,7 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resources_files")
-    .select("id,title,category,download_enabled,created_at,file_path,uploader_name,created_by,uploader_role")
+    .select("id,title,category,created_at,file_path,uploader_name,created_by,uploader_role")
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -119,7 +118,6 @@ export async function getResourcesWithUrls(): Promise<ResourceWithLinks[]> {
     id: resource.id,
     title: resource.title,
     category: resource.category as ResourceItem["category"],
-    downloadEnabled: resource.download_enabled,
     updatedAt: new Date(resource.created_at).toLocaleDateString(),
     file_path: resource.file_path,
     uploadedBy: resource.uploader_name ?? "Unknown",
@@ -418,7 +416,7 @@ export async function getResearchItemsForUser(userId: string): Promise<ResearchI
   const { data, error } = await admin
     .from("research_posts")
     .select(
-      "id, title, ticker, created_at, file_path, author_override, download_enabled, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
+      "id, title, ticker, created_at, file_path, author_override, created_by, uploader_role, sector, thesis_status, analyst_name, ai_analysis",
     )
     .eq("created_by", userId)
     .order("created_at", { ascending: false });
@@ -450,7 +448,6 @@ export async function getResearchItemsForUser(userId: string): Promise<ResearchI
       uploaderRole: (row.uploader_role as UserRole) ?? "analyst",
       filePath: row.file_path ?? undefined,
       viewUrl,
-      downloadEnabled: row.download_enabled ?? false,
       downloadUrl: undefined,
       sector: (row as { sector?: string | null }).sector ?? null,
       thesisStatus: validThesis,

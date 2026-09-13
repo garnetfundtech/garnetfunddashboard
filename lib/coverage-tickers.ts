@@ -31,7 +31,6 @@ export type TickerFile = {
   location: string;
   addedBy: string;
   createdAt: string;
-  downloadEnabled: boolean;
   /** The page this file lives on, for a "show me where" link. */
   href: string;
   /** Why it matched, so the panel can say so rather than looking magic. */
@@ -126,12 +125,12 @@ export async function getFilesByTicker(
     admin
       .from("research_posts")
       .select(
-        "id,title,ticker,company_name,sector,created_at,analyst_name,author_override,download_enabled",
+        "id,title,ticker,company_name,sector,created_at,analyst_name,author_override",
       )
       .order("created_at", { ascending: false }),
     admin
       .from("team_files")
-      .select("id,title,sector,folder_id,created_at,uploader_name,download_enabled")
+      .select("id,title,sector,folder_id,created_at,uploader_name")
       .order("created_at", { ascending: false }),
     admin.from("team_folders").select("id,name,parent_id,sector"),
   ]);
@@ -145,7 +144,6 @@ export async function getFilesByTicker(
     created_at: string;
     analyst_name: string | null;
     author_override: string | null;
-    download_enabled: boolean | null;
   }[];
 
   const teamFiles = (filesRes.data ?? []) as {
@@ -155,7 +153,6 @@ export async function getFilesByTicker(
     folder_id: string | null;
     created_at: string;
     uploader_name: string | null;
-    download_enabled: boolean | null;
   }[];
 
   const folders = (foldersRes.data ?? []) as {
@@ -207,7 +204,6 @@ export async function getFilesByTicker(
         location: post.sector ? `Research · ${post.sector}` : "Research",
         addedBy: post.analyst_name ?? post.author_override ?? "Unknown",
         createdAt: post.created_at,
-        downloadEnabled: post.download_enabled ?? false,
         href: `/research?open=${post.id}`,
         matchedOn: byTicker ? "ticker" : "name",
       });
@@ -229,7 +225,6 @@ export async function getFilesByTicker(
         location: path,
         addedBy: file.uploader_name ?? "Unknown",
         createdAt: file.created_at,
-        downloadEnabled: file.download_enabled ?? false,
         href: `/files?${params.toString()}`,
         matchedOn,
       });

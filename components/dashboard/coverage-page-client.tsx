@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRightLeft, ExternalLink, Eye, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Download, ExternalLink, Eye, Plus, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { TableShell } from "@/components/dashboard/table-shell";
@@ -103,7 +103,9 @@ export function CoveragePageClient({
   const [addOpen, setAddOpen] = useState(false);
   const [formError, setFormError] = useState("");
   const [selected, setSelected] = useState<string | null>(initialTicker);
-  const [opened, setOpened] = useState<{ title: string; url: string } | null>(null);
+  const [opened, setOpened] = useState<
+    { title: string; url: string; downloadUrl: string | null } | null
+  >(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   // Add-ticker form. Ticker and company are controlled so picking a suggestion
@@ -351,9 +353,9 @@ export function CoveragePageClient({
 
   function openFile(file: TickerFile) {
     setOpeningId(file.id);
-    void signFile(file.source, file.id).then(({ viewUrl }) => {
+    void signFile(file.source, file.id).then(({ viewUrl, downloadUrl }) => {
       setOpeningId(null);
-      if (viewUrl) setOpened({ title: file.title, url: viewUrl });
+      if (viewUrl) setOpened({ title: file.title, url: viewUrl, downloadUrl });
     });
   }
 
@@ -658,13 +660,24 @@ export function CoveragePageClient({
           <div className="panel flex h-[85vh] w-full max-w-5xl flex-col p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm text-ink">{opened.title}</p>
-              <button
-                type="button"
-                onClick={() => setOpened(null)}
-                className="rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {opened.downloadUrl && (
+                  <a
+                    href={opened.downloadUrl}
+                    className="glass-input inline-flex h-[30px] items-center gap-1.5 rounded-none px-3 text-xs font-medium text-ink transition-colors hover:bg-paper-2"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOpened(null)}
+                  className="rounded-none p-1.5 text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <iframe src={opened.url} className="min-h-0 flex-1 rounded-none" title={opened.title} />
           </div>

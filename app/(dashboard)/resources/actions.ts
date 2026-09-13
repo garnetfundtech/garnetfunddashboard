@@ -7,6 +7,7 @@ import { parseFilePath, statStorageObject } from "@/lib/storage";
 import { verifyUploadGrant } from "@/lib/upload-grant";
 import { logAuditEvent } from "@/lib/audit";
 import { isRoleHigher } from "@/lib/roles";
+import { RESOURCE_CATEGORIES, isResourceCategory } from "@/lib/types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -30,8 +31,10 @@ export async function recordResourceAction(
   const profile = await requireRole(["risk_manager", "developer", "admin"]);
 
   const title = String(formData.get("title") ?? "").trim();
-  const category = String(formData.get("category") ?? "training");
-  const downloadEnabled = formData.get("downloadEnabled") === "on";
+  // An unrecognized category would be refused by the enum and take the whole
+  // insert down with it, so it falls back rather than reaching the database.
+  const requested = formData.get("category");
+  const category = isResourceCategory(requested) ? requested : RESOURCE_CATEGORIES[0];
   const grantToken = String(formData.get("grant") ?? "");
 
   if (!title) return { ok: false, error: "A file title is required." };
@@ -66,7 +69,6 @@ export async function recordResourceAction(
       title,
       category,
       file_path: `${RESOURCES_BUCKET}/${objectPath}`,
-      download_enabled: downloadEnabled,
       created_by: profile.id,
       uploader_name: uploaderName,
       uploader_role: profile.role,
@@ -83,42 +85,22 @@ export async function recordResourceAction(
     action: "resource.upload",
     entity_type: "resource_file",
     entity_id: data?.id ?? null,
-    metadata: { title, category, downloadEnabled, size: stored.size },
+    metadata: { title, category, size: stored.size },
   });
 
   revalidatePath("/resources");
   return { ok: true };
 }
 
-export async function toggleResourceDownloadAction(formData: FormData) {
-  await requireRole(["risk_manager", "developer", "admin"]);
-  const id = String(formData.get("id") ?? "");
-  const downloadEnabled = formData.get("downloadEnabled") === "true";
-  if (!id) return;
-
-  const admin = createAdminClient();
-  await admin
-    .from("resources_files")
-    .update({ download_enabled: downloadEnabled })
-    .eq("id", id);
-
-  await logAuditEvent({
-    action: "resource.toggle_download",
-    entity_type: "resource_file",
-    entity_id: id,
-    metadata: { downloadEnabled },
-  });
-
-  revalidatePath("/resources");
-  revalidatePath("/admin");
-}
-
 export async function updateResourceAction(formData: FormData) {
   const actor = await requireRole(["risk_manager", "developer", "admin"]);
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
-  const category = String(formData.get("category") ?? "training");
-  const downloadEnabled = formData.get("downloadEnabled") === "true";
+  // Only written when the form actually sends one. This used to read a
+  // missing field as "training", and since the edit form carried no category
+  // at all, editing a pitch's title refiled it as training.
+  const requested = formData.get("category");
+  const category = isResourceCategory(requested) ? requested : null;
   if (!id || !title) return;
 
   const admin = createAdminClient();
@@ -136,14 +118,14 @@ export async function updateResourceAction(formData: FormData) {
 
   await admin
     .from("resources_files")
-    .update({ title, category, download_enabled: downloadEnabled })
+    .update(category ? { title, category } : { title })
     .eq("id", id);
 
   await logAuditEvent({
     action: "resource.update",
     entity_type: "resource_file",
     entity_id: id,
-    metadata: { title, category, downloadEnabled },
+    metadata: { title, category: category ?? "unchanged" },
   });
 
   revalidatePath("/resources");

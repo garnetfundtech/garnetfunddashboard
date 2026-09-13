@@ -44,7 +44,6 @@ export type TeamFileRow = {
   filePath: string;
   fileSize: number | null;
   mimeType: string | null;
-  downloadEnabled: boolean;
   createdBy: string | null;
   uploaderName: string;
   uploaderRole: UserRole;
@@ -173,7 +172,7 @@ export async function getTeamBrowseData({
     admin
       .from("team_files")
       .select(
-        "id,sector,folder_id,title,file_path,file_size,mime_type,download_enabled,created_by,uploader_name,uploader_role,created_at",
+        "id,sector,folder_id,title,file_path,file_size,mime_type,created_by,uploader_name,uploader_role,created_at",
       )
       .eq("sector", sector)
       .order("created_at", { ascending: false }),
@@ -236,7 +235,6 @@ export async function getTeamBrowseData({
         file_path: string;
         file_size: number | null;
         mime_type: string | null;
-        download_enabled: boolean;
         created_by: string | null;
         uploader_name: string | null;
         uploader_role: UserRole | null;
@@ -251,7 +249,6 @@ export async function getTeamBrowseData({
         filePath: row.file_path,
         fileSize: row.file_size,
         mimeType: row.mime_type,
-        downloadEnabled: row.download_enabled,
         createdBy: row.created_by,
         uploaderName: row.uploader_name ?? "Unknown",
         uploaderRole: row.uploader_role ?? "analyst",

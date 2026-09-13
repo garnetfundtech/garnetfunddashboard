@@ -193,7 +193,6 @@ export async function recordTeamFileAction(
   const profile = await requireProfile();
   const title = String(formData.get("title") ?? "").trim();
   const grantToken = String(formData.get("grant") ?? "");
-  const downloadEnabled = formData.get("downloadEnabled") !== "false";
 
   if (!title) return { ok: false, error: "A title is required." };
   if (title.length > 200) {
@@ -259,7 +258,6 @@ export async function recordTeamFileAction(
       file_path: `${TEAM_FILES_BUCKET}/${objectPath}`,
       file_size: fileSize || null,
       mime_type: stored.mimeType,
-      download_enabled: downloadEnabled,
       created_by: profile.id,
       uploader_name: uploaderName,
       uploader_role: profile.role,

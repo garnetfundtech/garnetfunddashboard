@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight,
@@ -22,14 +22,14 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { FileTypeChip } from "@/components/dashboard/file-type-chip";
-import { usePdfPrint } from "@/components/dashboard/pdf-viewer";
+import { usePreviewPrint } from "@/components/dashboard/use-preview-print";
 import { FilePreview } from "@/components/dashboard/file-preview";
 import { canManageContent } from "@/lib/roles";
 import { signFile } from "@/lib/sign-client";
 import type { UserRole } from "@/lib/types";
 import type { TeamBrowseData, TeamFileRow } from "@/lib/team-files";
 import { MAX_UPLOAD_LABEL, checkUploadSize } from "@/lib/uploads";
-import { canPreview, previewKindOf } from "@/lib/file-types";
+import { canPreview, hasRenderedContent, previewKindOf } from "@/lib/file-types";
 import { canDeleteFolder } from "@/lib/team-files";
 import {
   createFolderAction,
@@ -94,7 +94,14 @@ export function TeamFilesClient({
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const doPrint = usePdfPrint(opened?.viewUrl);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const openedKind = opened ? fileKind(opened) : "none";
+  const doPrint = usePreviewPrint({
+    kind: openedKind,
+    url: opened?.viewUrl,
+    title: opened?.title ?? "",
+    contentRef: previewRef,
+  });
 
   const { sector, folderId, breadcrumb, folders, files, sectorFileCounts, canWrite } =
     data;
@@ -438,10 +445,11 @@ export function TeamFilesClient({
         <div className="fixed inset-0 z-50 flex bg-ink/50 backdrop-blur-md">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
             <FilePreview
-              kind={fileKind(opened)}
+              kind={openedKind}
               url={opened.viewUrl}
               name={opened.title}
               scale={zoom}
+              contentRef={previewRef}
               onLoadTotalPages={(n) => setTotalPages(n)}
               onPageChange={setCurrentPage}
             />
@@ -489,9 +497,9 @@ export function TeamFilesClient({
                 </dl>
               </div>
               <div className="shrink-0 space-y-2 border-t border-line p-5 pt-4">
-                {/* Zooming only means something where there's a rendered
-                    page or picture to scale. */}
-                {(fileKind(opened) === "pdf" || fileKind(opened) === "image") && (
+                {/* Everything with rendered content scales — a model's grid
+                    and a memo's text as much as a PDF's pages. */}
+                {hasRenderedContent(openedKind) && (
                   <div className="flex w-full gap-1">
                     <button
                       type="button"
@@ -522,9 +530,10 @@ export function TeamFilesClient({
                     Download
                   </a>
                 )}
-                {/* Print drives a hidden iframe of the PDF; there's nothing
-                    equivalent for a spreadsheet or a video. */}
-                {fileKind(opened) === "pdf" && (
+                {/* A PDF prints as the file; everything else prints the
+                    markup on screen. Video and audio print as nothing, so
+                    they get no button. See usePreviewPrint. */}
+                {hasRenderedContent(openedKind) && (
                   <button type="button" onClick={() => doPrint()} className={ACTION_BTN}>
                     <Printer className="h-4 w-4" />
                     Print
@@ -585,9 +594,8 @@ export function TeamFilesClient({
                 </a>
               ) : (
                 <p className="rounded-none bg-paper-2 px-3 py-2.5 text-[13.5px] text-ink-2">
-                  {opened.downloadEnabled
-                    ? "This file’s link couldn’t be generated. Reload the page and try again."
-                    : "Download is disabled for this file."}
+                  This file’s link couldn’t be generated. Reload the page and try
+                  again.
                 </p>
               )}
               {opened.viewUrl && (
