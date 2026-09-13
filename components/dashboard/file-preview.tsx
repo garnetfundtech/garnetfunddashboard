@@ -61,6 +61,25 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * The "there is more of this file than you're looking at" line.
+ *
+ * Rendered twice: pinned under the scroller, where it stays in view, and
+ * again as a hidden copy *inside* the scrolled content. Only the inner copy
+ * travels with the markup that gets printed, and usePreviewPrint reveals it
+ * there — otherwise a printed model would stop at row 300 without saying so.
+ */
+function Truncated({ children, forPrint }: { children: React.ReactNode; forPrint?: boolean }) {
+  return (
+    <p
+      {...(forPrint ? { "data-print-only": "true", style: { display: "none" } } : {})}
+      className="shrink-0 border-t border-line bg-paper px-3 py-1.5 text-[12px] text-ink-3"
+    >
+      {children}
+    </p>
+  );
+}
+
+/**
  * Fetches the file once as bytes.
  *
  * A signed URL is good for ten minutes and each renderer wants the whole file
@@ -197,6 +216,9 @@ function SheetPreview({
   if (!sheet) return <Frame><Spinner /></Frame>;
 
   const [headerRow, ...bodyRows] = sheet.rows;
+  const note = sheet.truncated
+    ? `Showing the first ${MAX_SHEET_ROWS} rows. Download the file for the rest.`
+    : null;
 
   return (
     <Frame>
@@ -256,12 +278,9 @@ function SheetPreview({
             </tbody>
           </table>
         )}
+        {note && <Truncated forPrint>{note}</Truncated>}
       </div>
-      {sheet.truncated && (
-        <p className="shrink-0 border-t border-line bg-paper px-3 py-1.5 text-[12px] text-ink-3">
-          Showing the first {MAX_SHEET_ROWS} rows. Download the file for the rest.
-        </p>
-      )}
+      {note && <Truncated>{note}</Truncated>}
     </Frame>
   );
 }
@@ -399,6 +418,9 @@ function TextPreview({
   );
   const truncated = decoded !== null && decoded.length > MAX_TEXT_CHARS;
   const text = decoded === null ? null : decoded.slice(0, MAX_TEXT_CHARS);
+  const note = truncated
+    ? `Showing the first ${(MAX_TEXT_CHARS / 1000).toFixed(0)}k characters. Download the file for the rest.`
+    : null;
 
   if (file.status === "error") return <Frame><Notice tone="bad">{file.message}</Notice></Frame>;
   if (text === null) return <Frame><Spinner /></Frame>;
@@ -415,12 +437,9 @@ function TextPreview({
             {text}
           </pre>
         )}
+        {note && <Truncated forPrint>{note}</Truncated>}
       </div>
-      {truncated && (
-        <p className="shrink-0 border-t border-line bg-paper px-3 py-1.5 text-[12px] text-ink-3">
-          Showing the first {(MAX_TEXT_CHARS / 1000).toFixed(0)}k characters. Download the file for the rest.
-        </p>
-      )}
+      {note && <Truncated>{note}</Truncated>}
     </Frame>
   );
 }

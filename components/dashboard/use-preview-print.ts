@@ -116,6 +116,15 @@ async function printMarkup(markup: string, title: string) {
   doc.head.appendChild(page);
 
   doc.body.innerHTML = markup;
+
+  // Lines the viewer keeps pinned outside the scrolled content — "showing the
+  // first 300 rows" — ride along as hidden copies inside it, and are shown
+  // here so the paper says what the screen says. See Truncated in
+  // file-preview.tsx.
+  doc.body.querySelectorAll<HTMLElement>("[data-print-only]").forEach((el) => {
+    el.style.display = "";
+  });
+
   printFrame(frame);
 }
 
