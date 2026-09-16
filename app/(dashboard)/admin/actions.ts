@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/types";
 import { normalizeClassYear } from "@/lib/class-years";
 import { logAuditEvent } from "@/lib/audit";
+import { siteUrl } from "@/lib/site-url";
 
 export type InviteResult = { ok: boolean; error?: string };
 
@@ -21,8 +22,7 @@ export type InviteResult = { ok: boolean; error?: string };
  * exactly, instead of relying on the allow list carrying a wildcard.
  */
 function inviteRedirectTo() {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return `${base}/auth/callback`;
+  return `${siteUrl()}/auth/callback`;
 }
 
 /**

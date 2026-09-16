@@ -26,6 +26,7 @@ import {
   testAlertEmail,
   type EmailBreach,
 } from "@/lib/risk-email";
+import { siteUrl } from "@/lib/site-url";
 
 export type NotificationChannel = "console" | "email" | "push";
 
@@ -64,9 +65,8 @@ export function alwaysRecipients(): string[] {
 }
 
 /** The board, for the button in every alert. */
-function dashboardUrl(): string | null {
-  const base = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  return base ? `${base}/risk` : null;
+function dashboardUrl(): string {
+  return `${siteUrl()}/risk`;
 }
 
 export type ResolvedRecipients = {

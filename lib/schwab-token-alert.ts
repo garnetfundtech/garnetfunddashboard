@@ -17,6 +17,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { schwabReauthEmail } from "@/lib/risk-email";
 import { alwaysRecipients, sendOpsEmail } from "@/lib/notify";
+import { siteUrl } from "@/lib/site-url";
 
 /**
  * How far ahead to warn. Two days rather than one because the cron runs daily
@@ -55,9 +56,8 @@ export function alertRecipients(): string[] {
 }
 
 /** /admin, where the re-auth button lives. */
-function adminUrl(): string | null {
-  const base = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  return base ? `${base}/admin` : null;
+function adminUrl(): string {
+  return `${siteUrl()}/admin`;
 }
 
 /**
