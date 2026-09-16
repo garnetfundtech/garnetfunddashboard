@@ -40,16 +40,27 @@ const ROLE_ENV: Record<string, string> = {
 };
 
 /**
+ * The fund's own mailbox, copied on everything the system sends.
+ *
+ * In code rather than in env because it is not deployment configuration: it
+ * is the fund's permanent archive of what its systems said, and it should not
+ * be one forgotten Vercel variable away from being silently dropped. Personal
+ * addresses still come and go through RISK_EMAIL_ALWAYS, which is added to
+ * this rather than replacing it.
+ */
+const FUND_ARCHIVE_EMAIL = "garnetinvestmentfund@gmail.com";
+
+/**
  * Addresses added to every message regardless of which §4.4 tier fired.
  *
  * The routing table decides who is responsible for acting on a breach; this is
  * separate, for whoever needs a copy of everything — the person maintaining
  * the system, and an archive of what was actually sent. Comma-separated.
  */
-function alwaysRecipients(): string[] {
+export function alwaysRecipients(): string[] {
   const raw = process.env.RISK_EMAIL_ALWAYS;
-  if (!raw) return [];
-  return raw.split(",").map((a) => a.trim()).filter(Boolean);
+  const configured = raw ? raw.split(",").map((a) => a.trim()).filter(Boolean) : [];
+  return [...new Set([...configured, FUND_ARCHIVE_EMAIL])];
 }
 
 /** The board, for the button in every alert. */
@@ -330,6 +341,8 @@ export type EmailDiagnostics = {
   from: string | null;
   /** Every §4.4 role and the address it currently resolves to. */
   routing: { role: string; addresses: string[] }[];
+  /** Addresses copied on every message, whichever role it routed to. */
+  alwaysCopy: string[];
   problems: string[];
 };
 
@@ -368,7 +381,16 @@ export function inspectEmailConfig(): EmailDiagnostics {
     if (!addresses.length) problems.push(`No address configured for "${role}" — alerts routed there go nowhere.`);
   }
 
-  return { configured: Boolean(user && pass && from), host, port, user, from, routing, problems };
+  return {
+    configured: Boolean(user && pass && from),
+    host,
+    port,
+    user,
+    from,
+    routing,
+    alwaysCopy: alwaysRecipients(),
+    problems,
+  };
 }
 
 /**
@@ -416,7 +438,10 @@ export async function sendOpsEmail(params: {
   text: string;
   html?: string;
 }): Promise<{ ok: boolean; message: string }> {
-  const { to, subject, text, html } = params;
+  const { subject, text, html } = params;
+  // The copy list applies to operational mail too — a token that is about to
+  // expire is exactly the kind of thing the archive should hold.
+  const to = [...new Set([...params.to, ...alwaysRecipients()])];
   if (!to.length) return { ok: false, message: "No recipient configured." };
 
   const diag = inspectEmailConfig();

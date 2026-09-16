@@ -16,7 +16,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { schwabReauthEmail } from "@/lib/risk-email";
-import { sendOpsEmail } from "@/lib/notify";
+import { alwaysRecipients, sendOpsEmail } from "@/lib/notify";
 
 /**
  * How far ahead to warn. Two days rather than one because the cron runs daily
@@ -41,10 +41,17 @@ export type TokenAlertResult = {
   recipients: string[];
 };
 
-/** Recipients for this alert, falling back to the risk table's catch-all. */
+/**
+ * Recipients for this alert, falling back to the risk table's catch-all.
+ *
+ * The standing copy list is folded in here rather than only inside the mailer
+ * so that what the admin page and the cron's JSON report as the recipients is
+ * what actually received it.
+ */
 export function alertRecipients(): string[] {
   const raw = process.env.SCHWAB_ALERT_EMAILS || process.env.RISK_ALERT_EMAIL || "";
-  return [...new Set(raw.split(",").map((a) => a.trim()).filter(Boolean))];
+  const configured = raw.split(",").map((a) => a.trim()).filter(Boolean);
+  return [...new Set([...configured, ...alwaysRecipients()])];
 }
 
 /** /admin, where the re-auth button lives. */

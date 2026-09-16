@@ -246,6 +246,12 @@ function EmailStatus({ email }: { email: EmailDiagnostics }) {
             </span>
           </li>
         ))}
+        {email.alwaysCopy.length > 0 && (
+          <li className="flex items-baseline justify-between gap-3 border-t border-line pt-1 text-[12px]">
+            <span className="text-ink-2">Copied on everything</span>
+            <span className="num text-ink-3">{email.alwaysCopy.join(", ")}</span>
+          </li>
+        )}
       </ul>
 
       {email.problems.length > 0 && (

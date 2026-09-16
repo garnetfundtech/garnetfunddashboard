@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { alwaysRecipients } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,9 @@ export function GET() {
         cronSecret: set("CRON_SECRET"),
         alertSmtp: set("SMTP_USER") && set("SMTP_APP_PASSWORD"),
         alertRecipients: set("RISK_ALERT_EMAIL") || set("RISK_EMAIL_RISK_MANAGER"),
-        alertAlwaysCopy: set("RISK_EMAIL_ALWAYS"),
+        // Never false now that the fund's own mailbox is copied in code, but
+        // kept so the shape of this response doesn't change under anyone.
+        alertAlwaysCopy: alwaysRecipients().length > 0,
       },
     },
     { headers: { "Cache-Control": "no-store" } },
