@@ -81,10 +81,58 @@ export async function getResearchEmail(id: string): Promise<ResearchEmail | null
   return (data as ResearchEmail | null) ?? null;
 }
 
-// An opening tag, allowing ">" inside quoted attribute values.
-const LINK_TAG = /<(a|area|base|form)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
-const LINK_ATTR = /\s(?:href|action|target|ping)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
-const URL_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+/**
+ * Link attributes, on any tag. Outlook-targeted emails put their buttons in
+ * VML (<v:roundrect href=...>), and SVG uses xlink:href, so this is not
+ * limited to <a>.
+ */
+const LINK_ATTR =
+  /\s(?:xlink:)?(?:href|action|formaction|target|ping)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+
+/**
+ * A web address written out as text. Three shapes: anything with a scheme,
+ * anything starting www., and a bare host with a path such as
+ * research.truist.com/reports — the last needs the path so that a firm name
+ * in a sentence ("Truist.com") or an email address is left alone.
+ */
+const URL_TEXT =
+  /\b(?:https?:\/\/|www\.)[^\s<>"']+|(?<![@\w.-])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|us|info|biz)\/[^\s<>"']*/gi;
+
+/** Sentence punctuation that ends up glued to the end of a written-out address. */
+const TRAILING_PUNCTUATION = /[.,;:!?)\]]+$/;
+
+/**
+ * Walks HTML one piece at a time: a comment, a <style> or <script> block, a
+ * tag, or text.
+ *
+ *   comments  dropped. Nothing renders them, and Outlook-only markup — often
+ *             a second copy of the "View" button — hides inside them.
+ *   <script>  dropped. The sandbox would never run it anyway.
+ *   <style>   kept as is; its url(...) values are backgrounds and fonts.
+ *   tags      link attributes removed, except on <link>, whose href is a
+ *             stylesheet. Image src is untouched so charts still show.
+ *   text      written-out addresses replaced with "[link removed]".
+ */
+const HTML_PIECE =
+  /<!--[\s\S]*?(?:-->|$)|<(style|script)\b[\s\S]*?(?:<\/\1\s*>|$)|<(?:[^>"']|"[^"]*"|'[^']*')*>|[^<]+|</gi;
+
+function stripUrls(text: string) {
+  return text.replace(URL_TEXT, (url) => {
+    const trailing = url.match(TRAILING_PUNCTUATION)?.[0] ?? "";
+    return `[link removed]${trailing}`;
+  });
+}
+
+function stripHtmlLinks(html: string) {
+  return html.replace(HTML_PIECE, (piece, block: string | undefined) => {
+    if (piece.startsWith("<!--")) return "";
+    if (block) return block.toLowerCase() === "script" ? "" : piece;
+    if (piece.length > 1 && piece.startsWith("<")) {
+      return /^<link\b/i.test(piece) ? piece : piece.replace(LINK_ATTR, "");
+    }
+    return stripUrls(piece);
+  });
+}
 
 /**
  * The email as members may see it: every link's destination removed.
@@ -95,7 +143,9 @@ const URL_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
  * the viewer would not be enough, because the URL would still be sitting in
  * the page source, so the addresses are stripped here, on the server, before
  * anything reaches the browser. The link text and styling stay, so the email
- * reads as sent; the buttons simply go nowhere.
+ * reads as sent; the buttons simply go nowhere. Addresses written out in the
+ * text itself — the disclosures print one — are replaced with
+ * "[link removed]".
  *
  * Applied at display time, not at import, so the stored email is untouched
  * and this can be loosened later without re-importing. Only the body the
@@ -106,11 +156,11 @@ export function withoutLinks(email: ResearchEmail): ResearchEmail {
   if (email.html_body) {
     return {
       ...email,
-      html_body: email.html_body.replace(LINK_TAG, (tag) => tag.replace(LINK_ATTR, "")),
+      html_body: stripHtmlLinks(email.html_body),
       text_body: null,
     };
   }
-  return { ...email, text_body: (email.text_body ?? "").replace(URL_TEXT, "[link removed]") };
+  return { ...email, text_body: stripUrls(email.text_body ?? "") };
 }
 
 /** When the newest stored email arrived — where the next import picks up from. */
