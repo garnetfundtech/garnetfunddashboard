@@ -41,6 +41,15 @@ const OVERLAP_DAYS = 3;
  */
 const MAX_PER_RUN = 40;
 
+/**
+ * Stop starting new downloads after this long. The route's maxDuration is
+ * 60s and Vercel kills the function outright at that point, which the button
+ * can only report as a failure; 40 emails heavy with inline charts were
+ * enough to hit it. Stopping early instead returns a normal result, and the
+ * emails not reached count as `remaining` for the next run.
+ */
+const TIME_BUDGET_MS = 40_000;
+
 export type SyncResult = {
   mailbox: string;
   since: string;
@@ -64,6 +73,7 @@ export async function syncResearchInbox(): Promise<SyncResult> {
     throw new Error("RESEARCH_INBOX_USER and RESEARCH_INBOX_APP_PASSWORD are not set.");
   }
 
+  const startedAt = Date.now();
   const latest = await latestResearchEmailAt();
   const since = latest
     ? new Date(latest.getTime() - OVERLAP_DAYS * 86_400_000)
@@ -120,7 +130,10 @@ export async function syncResearchInbox(): Promise<SyncResult> {
 
       const errors: string[] = [];
       let imported = 0;
+      let attempted = 0;
       for (const c of batch) {
+        if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+        attempted++;
         try {
           const msg = await client.fetchOne(String(c.uid), { source: true }, { uid: true });
           if (!msg || !msg.source) throw new Error("message has no body");
@@ -135,7 +148,7 @@ export async function syncResearchInbox(): Promise<SyncResult> {
         since: since.toISOString(),
         found: candidates.length,
         imported,
-        remaining: fresh.length - batch.length,
+        remaining: fresh.length - attempted,
         errors,
       };
     } finally {
