@@ -12,6 +12,7 @@ export const config = {
     "/risk-admin/:path*",
     "/users/:path*",
     "/research/:path*",
+    "/corporate-research/:path*",
     "/resources/:path*",
     "/files/:path*",
     "/admin/:path*",

@@ -49,6 +49,7 @@ npm run dev
 
 - `/home` Dashboard
 - `/research` Research archive
+- `/corporate-research` Sell-side research emails (Truist), imported from the fund inbox
 - `/resources` Resources library
 - `/admin` Admin workspace
 - `/login` Login page
@@ -95,6 +96,7 @@ the wrong environment or under a different name, not merely stale.
 | `SCHWAB_CLIENT_ID` / `SCHWAB_CLIENT_SECRET` | Positions, orders and quotes. |
 | `FMP_API_KEY` | 3-month T-bill benchmark. |
 | `FRED_API_KEY` | Macro release calendar (§5.4 catalysts). |
+| `RESEARCH_INBOX_USER` / `RESEARCH_INBOX_APP_PASSWORD` | Gmail account and app password the Corporate Research tab imports from. |
 | `CRON_SECRET` | Required by the daily cron routes; they return 401 without it. |
 | `SMTP_USER` / `SMTP_APP_PASSWORD` | Gmail app password for breach alerts. |
 | `RISK_ALERT_EMAIL` | Where §4.4 routes alerts when a role has no address. |
