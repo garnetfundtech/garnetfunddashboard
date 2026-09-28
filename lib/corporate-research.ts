@@ -81,6 +81,38 @@ export async function getResearchEmail(id: string): Promise<ResearchEmail | null
   return (data as ResearchEmail | null) ?? null;
 }
 
+// An opening tag, allowing ">" inside quoted attribute values.
+const LINK_TAG = /<(a|area|base|form)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+const LINK_ATTR = /\s(?:href|action|target|ping)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+const URL_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+/**
+ * The email as members may see it: every link's destination removed.
+ *
+ * Research emails carry buttons like "View HTML" and "Download PDF" that go
+ * to the firm's portal, often with a token that signs the reader in as the
+ * fund — a download route the page otherwise withholds. Blocking clicks in
+ * the viewer would not be enough, because the URL would still be sitting in
+ * the page source, so the addresses are stripped here, on the server, before
+ * anything reaches the browser. The link text and styling stay, so the email
+ * reads as sent; the buttons simply go nowhere.
+ *
+ * Applied at display time, not at import, so the stored email is untouched
+ * and this can be loosened later without re-importing. Only the body the
+ * viewer shows is returned: a plain-text alternative would carry the same
+ * URLs written out.
+ */
+export function withoutLinks(email: ResearchEmail): ResearchEmail {
+  if (email.html_body) {
+    return {
+      ...email,
+      html_body: email.html_body.replace(LINK_TAG, (tag) => tag.replace(LINK_ATTR, "")),
+      text_body: null,
+    };
+  }
+  return { ...email, text_body: (email.text_body ?? "").replace(URL_TEXT, "[link removed]") };
+}
+
 /** When the newest stored email arrived — where the next import picks up from. */
 export async function latestResearchEmailAt(): Promise<Date | null> {
   const admin = createAdminClient();

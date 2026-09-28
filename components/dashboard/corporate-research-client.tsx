@@ -37,9 +37,10 @@ function escapeHtml(text: string) {
  *
  * Sell-side emails are laid out with their own tables and inline styles, so
  * they are shown as sent rather than stripped down to the app's typography.
- * The sandbox carries no allow-scripts and no allow-same-origin: the email
- * cannot run code or reach the dashboard's cookies, and the CSP keeps it from
- * loading anything but images, styles and fonts. Links open in a new tab.
+ * The sandbox grants nothing: the email cannot run code, reach the
+ * dashboard's cookies or open a window, and the CSP keeps it from loading
+ * anything but images, styles and fonts. Its links arrive with their
+ * destinations already removed (withoutLinks, on the server).
  *
  * The head tags go first; the parser hoists them into the head even when the
  * email brings its own <html>, and ignores the email's doctype after them.
@@ -48,8 +49,7 @@ function emailDocument(email: ResearchEmail) {
   const head =
     `<meta charset="utf-8">` +
     `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https:; font-src https: data:">` +
-    `<base target="_blank">` +
-    `<style>html{background:#fff}body{margin:16px;color:#111;font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif}</style>`;
+    `<style>html{background:#fff}a{cursor:default}body{margin:16px;color:#111;font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif}</style>`;
   const body = email.html_body
     ? email.html_body
     : `<pre style="white-space:pre-wrap;font:inherit;margin:0">${escapeHtml(email.text_body ?? "")}</pre>`;
@@ -225,7 +225,7 @@ function EmailViewer({ email }: { email: ResearchEmail }) {
           <iframe
             title={email.subject}
             srcDoc={emailDocument(email)}
-            sandbox="allow-popups allow-popups-to-escape-sandbox"
+            sandbox=""
             className="h-full w-full border-0 bg-white"
           />
         ) : attachment.contentType === "application/pdf" ? (

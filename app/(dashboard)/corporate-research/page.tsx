@@ -4,6 +4,7 @@ import {
   findFirm,
   getResearchEmail,
   listResearchEmails,
+  withoutLinks,
 } from "@/lib/corporate-research";
 import { CorporateResearchClient } from "@/components/dashboard/corporate-research-client";
 
@@ -27,7 +28,7 @@ export default async function CorporateResearchPage({
       firm={firm.slug}
       emails={emails}
       // An id from another firm's tab would otherwise open under this one.
-      opened={opened?.firm === firm.slug ? opened : null}
+      opened={opened?.firm === firm.slug ? withoutLinks(opened) : null}
     />
   );
 }
