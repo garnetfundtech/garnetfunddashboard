@@ -82,7 +82,14 @@ export function CorporateResearchClient({
     setSyncMessage(null);
     startRefresh(async () => {
       const res = await fetch("/api/corporate-research/sync", { method: "POST" });
-      const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => null);
+      if (!body) {
+        // Not our JSON at all — the platform answered instead, most often a
+        // timeout. Whatever was imported before it stopped is kept.
+        setSyncMessage(`Check didn't finish (HTTP ${res.status}). Try again.`);
+        router.refresh();
+        return;
+      }
       if (!res.ok || !body.ok) {
         setSyncMessage(body.message ?? "Couldn't reach the inbox.");
         return;
