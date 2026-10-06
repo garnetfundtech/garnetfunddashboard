@@ -481,13 +481,13 @@ export const CONFIG_DEFS: ConfigDef[] = [
   },
   {
     key: "inception_capital",
-    label: "Fund starting capital",
-    defaultValue: 100_000,
+    label: "Fund capital contributed",
+    defaultValue: 100_500,
     unit: "$",
     source: "Fund records",
     status: "operating",
     section: "method",
-    note: "What the fund started with. Total P&L is NAV less this, less any later deposits and plus any withdrawals recorded as external flows on the NAV series, so coupons, interest, dividends and fees are all counted.",
+    note: "Everything put into the fund, net of anything taken out. Total P&L on Home is NAV less this one number, so update it when a donation comes in or money is withdrawn.",
   },
 ];
 

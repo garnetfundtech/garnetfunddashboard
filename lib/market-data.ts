@@ -219,18 +219,19 @@ let lastGoodPortfolio: PortfolioSummary | null = null;
 const REALIZED_SYNC_INTERVAL_MS = 5 * 60_000;
 let lastRealizedSync = 0;
 
-/** NAV against starting capital plus net external flows; nulls when unconfigured. */
+/**
+ * NAV against the capital put into the fund, a single Risk Admin setting.
+ *
+ * Deliberately not combined with the external flows on the NAV series: those
+ * can include the original funding itself, and adding them to a starting
+ * figure counted that money twice. One number, kept current by hand, is the
+ * only version that cannot double up.
+ */
 async function capitalPnl(nav: number): Promise<{ totalPnl: number | null; capitalBase: number | null }> {
   try {
-    const config = await getRiskConfig();
-    const capital = cfg(config, "inception_capital");
+    const capital = cfg(await getRiskConfig(), "inception_capital");
     if (capital == null || !(capital > 0) || !(nav > 0)) return { totalPnl: null, capitalBase: null };
-
-    const admin = createAdminClient();
-    const { data } = await admin.from("nav_daily").select("external_flow").neq("external_flow", 0);
-    const flows = (data ?? []).reduce((s, r) => s + Number(r.external_flow ?? 0), 0);
-    const capitalBase = capital + flows;
-    return { totalPnl: nav - capitalBase, capitalBase };
+    return { totalPnl: nav - capital, capitalBase: capital };
   } catch {
     return { totalPnl: null, capitalBase: null };
   }
@@ -403,8 +404,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     // open and realized P&L only sees price moves: Treasury coupons, interest
     // on cash, dividends and fees land in cash without ever appearing in
     // either, so the trade-based figure drifted from "what we have less what
-    // we started with". Deposits and withdrawals are the external flows
-    // already recorded on the NAV series.
+    // we started with".
     const { totalPnl, capitalBase } = await capitalPnl(liquidationValue);
 
     const result: PortfolioSummary = {
