@@ -90,7 +90,8 @@ export type ConfigKey =
   // Method
   | "var_lookback_days"
   | "sharpe_min_observations"
-  | "stale_hours";
+  | "stale_hours"
+  | "inception_capital";
 
 /**
  * §7 Configuration table, verbatim initial values. Order here is display
@@ -477,6 +478,16 @@ export const CONFIG_DEFS: ConfigDef[] = [
     status: "operating",
     section: "method",
     note: "Hours. Past this a card shows STALE in grey rather than a silently old number.",
+  },
+  {
+    key: "inception_capital",
+    label: "Fund starting capital",
+    defaultValue: 100_000,
+    unit: "$",
+    source: "Fund records",
+    status: "operating",
+    section: "method",
+    note: "What the fund started with. Total P&L is NAV less this, less any later deposits and plus any withdrawals recorded as external flows on the NAV series, so coupons, interest, dividends and fees are all counted.",
   },
 ];
 

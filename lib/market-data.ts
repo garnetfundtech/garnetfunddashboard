@@ -5,6 +5,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { closedTodayDayPnl, syncRealizedGains } from "@/lib/realized-gains";
+import { cfg, getRiskConfig } from "@/lib/risk-config";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -218,6 +219,23 @@ let lastGoodPortfolio: PortfolioSummary | null = null;
 const REALIZED_SYNC_INTERVAL_MS = 5 * 60_000;
 let lastRealizedSync = 0;
 
+/** NAV against starting capital plus net external flows; nulls when unconfigured. */
+async function capitalPnl(nav: number): Promise<{ totalPnl: number | null; capitalBase: number | null }> {
+  try {
+    const config = await getRiskConfig();
+    const capital = cfg(config, "inception_capital");
+    if (capital == null || !(capital > 0) || !(nav > 0)) return { totalPnl: null, capitalBase: null };
+
+    const admin = createAdminClient();
+    const { data } = await admin.from("nav_daily").select("external_flow").neq("external_flow", 0);
+    const flows = (data ?? []).reduce((s, r) => s + Number(r.external_flow ?? 0), 0);
+    const capitalBase = capital + flows;
+    return { totalPnl: nav - capitalBase, capitalBase };
+  } catch {
+    return { totalPnl: null, capitalBase: null };
+  }
+}
+
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();
   if (!token) return lastGoodPortfolio;
@@ -381,6 +399,14 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       /* non-fatal — realized gains table may not exist yet */
     }
 
+    // Total P&L from the account's value, not from adding up trades. Summing
+    // open and realized P&L only sees price moves: Treasury coupons, interest
+    // on cash, dividends and fees land in cash without ever appearing in
+    // either, so the trade-based figure drifted from "what we have less what
+    // we started with". Deposits and withdrawals are the external flows
+    // already recorded on the NAV series.
+    const { totalPnl, capitalBase } = await capitalPnl(liquidationValue);
+
     const result: PortfolioSummary = {
       liquidationValue,
       cashAvailable,
@@ -390,6 +416,8 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       netMarketValue,
       unrealizedPnl,
       realizedPnl,
+      totalPnl,
+      capitalBase,
       dayPnl,
       positionCount: positions.length,
       positions,
