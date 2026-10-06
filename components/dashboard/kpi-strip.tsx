@@ -54,8 +54,14 @@ export function KpiStrip({
   const dayPnlPct = aum > 0 ? (dayPnl / aum) * 100 : 0;
   const unrealized = portfolio.unrealizedPnl;
   const realized = portfolio.realizedPnl ?? 0;
-  const totalPnl = unrealized + realized;
-  const totalPnlPct = aum > 0 ? (totalPnl / aum) * 100 : 0;
+  // Account-based when starting capital is configured, so income and fees
+  // are in it; the trade-based sum is only the fallback.
+  const capitalBase = portfolio.capitalBase;
+  const totalPnl = portfolio.totalPnl ?? unrealized + realized;
+  const totalPnlPct =
+    capitalBase != null && capitalBase > 0 ? (totalPnl / capitalBase) * 100 : aum > 0 ? (totalPnl / aum) * 100 : 0;
+  // What price moves do not explain: coupons, interest, dividends, fees.
+  const incomeAndFees = portfolio.totalPnl != null ? portfolio.totalPnl - unrealized - realized : null;
   const cashWeightPct = aum > 0 ? (cash / aum) * 100 : 0;
   const benchmarkYtd = benchmarkSpark.length > 0 ? (benchmarkSpark[benchmarkSpark.length - 1] ?? 0) : null;
 
@@ -83,7 +89,17 @@ export function KpiStrip({
     {
       label: "Total P&L",
       value: <span className={totalPnl >= 0 ? "text-pos" : "text-neg"}>{fmtSigned(totalPnl)}</span>,
-      sub: <span className="text-ink-3">open + realized{realized !== 0 ? ` (${fmtSigned(realized)} closed)` : ""}</span>,
+      sub:
+        capitalBase != null ? (
+          <span
+            className="text-ink-3"
+            title={`Open ${fmtSigned(unrealized)} · closed ${fmtSigned(realized)} · income & fees ${fmtSigned(incomeAndFees ?? 0)}`}
+          >
+            {fmtPct(totalPnlPct)} vs {fmtCompact(capitalBase)} start
+          </span>
+        ) : (
+          <span className="text-ink-3">open + realized{realized !== 0 ? ` (${fmtSigned(realized)} closed)` : ""}</span>
+        ),
       tone: totalPnl >= 0 ? "pos" : "neg",
       spark: benchmarkSpark.slice(-30),
     },

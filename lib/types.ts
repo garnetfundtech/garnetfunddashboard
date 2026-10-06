@@ -116,6 +116,12 @@ export type PortfolioSummary = {
   netMarketValue: number;
   unrealizedPnl: number;
   realizedPnl: number;
+  /** NAV less starting capital and net external flows: the fund's actual
+   *  gain or loss, income and fees included. null when no starting capital
+   *  is configured. */
+  totalPnl: number | null;
+  /** Starting capital plus net external flows — what Total P&L is measured against. */
+  capitalBase: number | null;
   dayPnl: number;
   positionCount: number;
   positions: LivePosition[];
