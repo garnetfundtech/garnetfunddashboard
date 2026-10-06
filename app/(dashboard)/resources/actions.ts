@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireApprovedProfile, requireRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseFilePath, statStorageObject } from "@/lib/storage";
 import { verifyUploadGrant } from "@/lib/upload-grant";
 import { logAuditEvent } from "@/lib/audit";
-import { isRoleHigher } from "@/lib/roles";
-import { RESOURCE_CATEGORIES, isResourceCategory } from "@/lib/types";
+import { canManageContent, isRoleHigher } from "@/lib/roles";
+import { RESOURCE_CATEGORIES, isResourceCategory, type UserRole } from "@/lib/types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -167,4 +167,120 @@ export async function deleteResourceAction(formData: FormData) {
 
   revalidatePath("/resources");
   revalidatePath("/admin");
+}
+
+// ── Meeting overviews ─────────────────────────────────────────────────────
+
+/** Reads the shared fields of the add and edit forms. */
+function meetingFields(formData: FormData):
+  | { ok: true; meetingDate: string; title: string; overview: string }
+  | { ok: false; error: string } {
+  const meetingDate = String(formData.get("meetingDate") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const overview = String(formData.get("overview") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) return { ok: false, error: "Pick the meeting date." };
+  if (!title) return { ok: false, error: "Give the meeting a title." };
+  if (!overview) return { ok: false, error: "Write the overview." };
+  if (title.length > 200) return { ok: false, error: "Keep the title under 200 characters." };
+  if (overview.length > 20000) return { ok: false, error: "Keep the overview under 20,000 characters." };
+  return { ok: true, meetingDate, title, overview };
+}
+
+/** Any approved member can write up a meeting. */
+export async function addMeetingOverviewAction(formData: FormData): Promise<ActionResult> {
+  const profile = await requireApprovedProfile();
+  const fields = meetingFields(formData);
+  if (!fields.ok) return fields;
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("meeting_overviews")
+    .insert({
+      meeting_date: fields.meetingDate,
+      title: fields.title,
+      overview: fields.overview,
+      created_by: profile.id,
+      author_role: profile.role,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: "Could not save the overview." };
+
+  await logAuditEvent({
+    action: "meeting_overview.create",
+    entity_type: "meeting_overview",
+    entity_id: data?.id ?? null,
+    metadata: { title: fields.title, meeting_date: fields.meetingDate },
+  });
+
+  revalidatePath("/resources");
+  return { ok: true };
+}
+
+/** The author, or anyone senior to the author's role — same rule as files. */
+async function loadManageableOverview(id: string) {
+  const actor = await requireApprovedProfile();
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("meeting_overviews")
+    .select("id, created_by, author_role")
+    .eq("id", id)
+    .maybeSingle();
+  if (!row) return null;
+  const allowed = canManageContent({
+    actorId: actor.id,
+    actorRole: actor.role,
+    ownerId: (row.created_by as string | null) ?? null,
+    ownerRole: (row.author_role as UserRole) ?? "analyst",
+  });
+  return allowed ? admin : null;
+}
+
+export async function updateMeetingOverviewAction(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing overview." };
+  const fields = meetingFields(formData);
+  if (!fields.ok) return fields;
+
+  const admin = await loadManageableOverview(id);
+  if (!admin) return { ok: false, error: "Only the author or someone senior can edit this overview." };
+
+  const { error } = await admin
+    .from("meeting_overviews")
+    .update({
+      meeting_date: fields.meetingDate,
+      title: fields.title,
+      overview: fields.overview,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return { ok: false, error: "Could not save the overview." };
+
+  await logAuditEvent({
+    action: "meeting_overview.update",
+    entity_type: "meeting_overview",
+    entity_id: id,
+    metadata: { title: fields.title, meeting_date: fields.meetingDate },
+  });
+
+  revalidatePath("/resources");
+  return { ok: true };
+}
+
+export async function deleteMeetingOverviewAction(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing overview." };
+  const admin = await loadManageableOverview(id);
+  if (!admin) return { ok: false, error: "Only the author or someone senior can delete this overview." };
+
+  await admin.from("meeting_overviews").delete().eq("id", id);
+
+  await logAuditEvent({
+    action: "meeting_overview.delete",
+    entity_type: "meeting_overview",
+    entity_id: id,
+  });
+
+  revalidatePath("/resources");
+  return { ok: true };
 }

@@ -41,7 +41,10 @@ export default async function HomePage() {
   const purchaseDates = await getFirstBuyDates(enrichedPositions.map((p) => p.ticker)).catch(() => ({}));
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    // min-h-full, not h-full: the holdings table has to be able to push the
+    // page taller than the window. Pinned to the window height, the table got
+    // whatever sliver was left under the chart row and the page never scrolled.
+    <div className="flex min-h-full flex-col gap-3">
       <PageHeader title="Home" />
       <KpiStrip portfolio={portfolio} benchmarkSpark={benchmarkSpark} riskStats={riskStats} fundYtdPct={fundYtdPct} />
 
@@ -61,9 +64,9 @@ export default async function HomePage() {
         />
       </div>
 
-      {/* Row 3: Holdings + Sector Exposure — fills remaining height */}
+      {/* Row 3: Holdings + Sector Exposure — every holding shown, page scrolls */}
       <div
-        className="grid min-h-0 flex-1 gap-3"
+        className="grid flex-1 gap-3"
         style={{ gridTemplateColumns: "minmax(0, 1.55fr) minmax(200px, 0.45fr)" }}
       >
         <HoldingsTable livePositions={enrichedPositions} purchaseDates={purchaseDates} />

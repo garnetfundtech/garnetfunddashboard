@@ -8,6 +8,9 @@ import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
 import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
+import { MeetingOverviews } from "@/components/dashboard/meeting-overviews";
+import type { MeetingOverview } from "@/lib/meeting-overviews";
+import { cn } from "@/lib/utils";
 import { usePreviewPrint } from "@/components/dashboard/use-preview-print";
 import { FilePreview } from "@/components/dashboard/file-preview";
 import { FileTypeChip } from "@/components/dashboard/file-type-chip";
@@ -23,6 +26,13 @@ import {
 } from "@/app/(dashboard)/resources/actions";
 
 type CategoryFilter = "All" | string;
+
+type ResourcesTab = "library" | "meetings";
+
+const TABS: { value: ResourcesTab; label: string }[] = [
+  { value: "library", label: "Library" },
+  { value: "meetings", label: "Meeting Overview" },
+];
 
 function fmtSize(bytes?: number) {
   if (!bytes) return "—";
@@ -58,12 +68,24 @@ export function ResourcesTableClient({
   actor,
   initialOpenId = "",
   initialMode = "view",
+  meetingOverviews,
+  initialTab = "library",
 }: {
   resources: ResourceWithLinks[];
   actor: { id: string; role: UserRole };
   initialOpenId?: string;
   initialMode?: "view" | "edit";
+  meetingOverviews: MeetingOverview[];
+  initialTab?: ResourcesTab;
 }) {
+  const [activeTab, setActiveTab] = useState<ResourcesTab>(initialTab);
+  // Local state, with the URL kept in step so a pasted link opens the same tab.
+  const selectTab = (next: ResourcesTab) => {
+    setActiveTab(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", next);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+  };
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
   const [opened, setOpened] = useState<ResourceWithLinks | null>(null);
   const [editing, setEditing] = useState<ResourceWithLinks | null>(null);
@@ -178,10 +200,36 @@ export function ResourcesTableClient({
     <div className="flex h-full flex-col gap-3">
       <PageHeader
         title="Resource Library"
-        meta={`${resources.length} file${resources.length === 1 ? "" : "s"}`}
-        actions={<ResourcesUploadModal />}
+        meta={
+          activeTab === "library"
+            ? `${resources.length} file${resources.length === 1 ? "" : "s"}`
+            : `${meetingOverviews.length} meeting${meetingOverviews.length === 1 ? "" : "s"}`
+        }
+        actions={activeTab === "library" ? <ResourcesUploadModal /> : undefined}
       />
 
+      <nav className="flex items-end gap-0 border-b border-line">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => selectTab(t.value)}
+            className={cn(
+              "-mb-px border-b-2 px-3.5 py-2 text-[13.5px] transition-colors",
+              activeTab === t.value
+                ? "border-garnet font-medium text-ink"
+                : "border-transparent text-ink-3 hover:text-ink",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "meetings" ? (
+        <MeetingOverviews overviews={meetingOverviews} actor={actor} />
+      ) : (
+      <>
       <KpiRow tiles={kpiTiles} />
 
       <TableShell
@@ -259,6 +307,8 @@ export function ResourcesTableClient({
           </tbody>
         </table>
       </TableShell>
+      </>
+      )}
 
       {/* Preview modal — the renderer depends on the file. */}
       {opened && canPreview({ path: opened.file_path }) && (

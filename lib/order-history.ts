@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAccountNumbers, getAccountOrders } from "@/lib/schwab";
 import { normalizeSchwabOrders, type NormalizedOrderRow } from "@/lib/schwab-orders";
 import { loadValidTraderToken } from "@/lib/market-data";
+import { syncRealizedGains } from "@/lib/realized-gains";
 
 /**
  * Pulls Schwab orders for the given window and upserts them into
@@ -48,6 +49,10 @@ export async function syncOrderHistory(days: number): Promise<{ synced: number }
 
   const { error } = await admin.from("order_history").upsert(rows, { onConflict: "order_id" });
   if (error) throw error;
+
+  // Realized P&L comes from the same fills. Failing here must not fail the
+  // order sync that already succeeded.
+  await syncRealizedGains(orders).catch((err) => console.error("[order-sync] realized gains:", err));
 
   return { synced: rows.length };
 }

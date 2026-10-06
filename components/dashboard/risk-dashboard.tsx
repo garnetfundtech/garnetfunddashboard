@@ -14,6 +14,7 @@ import type { PositionRow, RiskModel } from "@/lib/risk-engine";
 import type { AlertLogRow } from "@/lib/risk-episodes";
 import type { PackDef, PeriodKey, ReportingModel } from "@/lib/risk-reporting";
 import type { CatalystFeed } from "@/lib/risk-catalysts";
+import type { PositionNote } from "@/lib/position-notes";
 
 export type RiskTab = "alerts" | "reporting";
 
@@ -50,6 +51,8 @@ export function RiskDashboard({
   analysts,
   sectors,
   canEdit,
+  positionNotes,
+  viewerId,
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
@@ -63,6 +66,8 @@ export function RiskDashboard({
   analysts: AnalystOption[];
   sectors: string[];
   canEdit: boolean;
+  positionNotes: PositionNote[];
+  viewerId: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -167,6 +172,8 @@ export function RiskDashboard({
           canEdit={canEdit}
           fullBoard={fullBoard}
           onEditApproval={(row) => setEditing({ row })}
+          positionNotes={positionNotes}
+          viewerId={viewerId}
         />
       ) : report ? (
         <div className={cn("transition-opacity", isPending && "pointer-events-none opacity-60")}>

@@ -6,6 +6,10 @@ export type NormalizedOrderRow = {
   fillPrice: number;
   status: string;
   timestamp: string;
+  /** Schwab's leg instruction, e.g. SELL, SELL_SHORT, SELL_TO_CLOSE. */
+  instruction?: string;
+  /** The leg instrument's assetType, e.g. EQUITY, FIXED_INCOME, OPTION. */
+  assetType?: string;
 };
 
 /** Normalize Schwab Trader API `GET /accounts/{hash}/orders` JSON array */
@@ -48,6 +52,8 @@ export function normalizeSchwabOrders(raw: unknown): NormalizedOrderRow[] {
       fillPrice,
       status,
       timestamp,
+      instruction,
+      assetType: inst?.assetType != null ? String(inst.assetType).toUpperCase() : undefined,
     });
   }
 

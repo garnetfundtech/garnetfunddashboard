@@ -21,6 +21,8 @@ import { NOTIFY_RECIPIENTS, type RiskStatus } from "@/lib/risk-parameters";
 import type { MonitorRow, PositionRow, RiskModel, SectorRow } from "@/lib/risk-engine";
 import type { AlertLogRow } from "@/lib/risk-episodes";
 import type { CatalystFeed } from "@/lib/risk-catalysts";
+import type { PositionNote } from "@/lib/position-notes";
+import { PositionNotes } from "@/components/dashboard/risk-position-notes";
 import { PositionSizeChart, SectorGrossChart } from "@/components/dashboard/risk-position-chart";
 import {
   CatalystPanel,
@@ -547,6 +549,8 @@ export function RiskAlertsTab({
   canEdit,
   fullBoard,
   onEditApproval,
+  positionNotes,
+  viewerId,
 }: {
   model: RiskModel;
   alertLog: AlertLogRow[];
@@ -554,6 +558,8 @@ export function RiskAlertsTab({
   canEdit: boolean;
   fullBoard: boolean;
   onEditApproval: (row: PositionRow | null) => void;
+  positionNotes: PositionNote[];
+  viewerId: string;
 }) {
   const cfgv = model.config.values;
   return (
@@ -575,6 +581,15 @@ export function RiskAlertsTab({
       />
 
       <PositionTable model={model} canEdit={canEdit} fullBoard={fullBoard} onEdit={onEditApproval} />
+
+      {fullBoard && (
+        <PositionNotes
+          notes={positionNotes}
+          symbols={model.positions.map((row) => row.position.symbol)}
+          viewerId={viewerId}
+          canModerate={canEdit}
+        />
+      )}
 
       {fullBoard && (
         <>

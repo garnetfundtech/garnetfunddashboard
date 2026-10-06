@@ -2,7 +2,7 @@ import { SkeletonKpiRow, SkeletonPanel } from "@/components/dashboard/skeleton";
 
 export default function Loading() {
   return (
-    <div className="flex h-full animate-pulse flex-col gap-3">
+    <div className="flex min-h-full animate-pulse flex-col gap-3">
       <SkeletonKpiRow count={6} />
       <div
         className="grid shrink-0 gap-3"
@@ -16,7 +16,7 @@ export default function Loading() {
         </div>
         <SkeletonPanel />
       </div>
-      <div className="grid min-h-0 flex-1 gap-3" style={{ gridTemplateColumns: "minmax(0, 1.55fr) minmax(200px, 0.45fr)" }}>
+      <div className="grid min-h-[360px] flex-1 gap-3" style={{ gridTemplateColumns: "minmax(0, 1.55fr) minmax(200px, 0.45fr)" }}>
         <SkeletonPanel />
         <SkeletonPanel />
       </div>
