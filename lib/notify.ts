@@ -41,15 +41,16 @@ const ROLE_ENV: Record<string, string> = {
 };
 
 /**
- * The fund's own mailbox, copied on everything the system sends.
+ * The fund's own mailboxes, copied on everything the system sends: the
+ * general archive and the risk team's inbox.
  *
- * In code rather than in env because it is not deployment configuration: it
- * is the fund's permanent archive of what its systems said, and it should not
- * be one forgotten Vercel variable away from being silently dropped. Personal
- * addresses still come and go through RISK_EMAIL_ALWAYS, which is added to
- * this rather than replacing it.
+ * In code rather than in env because they are not deployment configuration:
+ * they are the fund's permanent record of what its systems said, and should
+ * not be one forgotten Vercel variable away from being silently dropped.
+ * Personal addresses still come and go through RISK_EMAIL_ALWAYS, which is
+ * added to these rather than replacing them.
  */
-const FUND_ARCHIVE_EMAIL = "garnetinvestmentfund@gmail.com";
+const FUND_MAILBOXES = ["garnetinvestmentfund@gmail.com", "garnetfundrisk@gmail.com"];
 
 /**
  * Addresses added to every message regardless of which §4.4 tier fired.
@@ -61,7 +62,7 @@ const FUND_ARCHIVE_EMAIL = "garnetinvestmentfund@gmail.com";
 export function alwaysRecipients(): string[] {
   const raw = process.env.RISK_EMAIL_ALWAYS;
   const configured = raw ? raw.split(",").map((a) => a.trim()).filter(Boolean) : [];
-  return [...new Set([...configured, FUND_ARCHIVE_EMAIL])];
+  return [...new Set([...configured, ...FUND_MAILBOXES])];
 }
 
 /** The board, for the button in every alert. */

@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireApprovedProfile } from "@/lib/auth";
-import { isRiskManager } from "@/lib/nav-access";
+import { canReadFullRiskBoard, isRiskManager } from "@/lib/nav-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { closeApproval, upsertApproval } from "@/lib/risk-approvals";
 import { acknowledgeEpisode } from "@/lib/risk-episodes";
 import { sendAllocationEscalation } from "@/lib/notify";
 import type { Team } from "@/lib/risk-engine";
+import { isNoteAction } from "@/lib/position-notes";
+import { addPositionNote, deletePositionNote, getNoteAuthorId } from "@/lib/position-notes-store";
 
 /**
  * Spec §6 Access: "Risk Manager: full access and edit rights on limits and
@@ -142,5 +144,46 @@ export async function markPostMortemAction(formData: FormData) {
     })
     .eq("id", id);
 
+  revalidatePath("/risk");
+}
+
+/**
+ * Position notes — the write-up on why a name was trimmed or added to. Anyone
+ * with the full board (Risk Manager, President, PMs, faculty) can write one,
+ * since the decision is the committee's, not only the Risk Manager's. Only the
+ * author or the Risk Manager can delete one.
+ */
+export async function addPositionNoteAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
+  const profile = await requireApprovedProfile();
+  if (!canReadFullRiskBoard(profile.role)) {
+    return { ok: false, message: "Only the full risk board can write position notes." };
+  }
+  const symbol = String(formData.get("symbol") ?? "").trim().toUpperCase();
+  const action = String(formData.get("action") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  if (!symbol) return { ok: false, message: "Pick a position." };
+  if (!isNoteAction(action)) return { ok: false, message: "Pick what was done." };
+  if (!note) return { ok: false, message: "Write a short note on why." };
+  if (note.length > 5000) return { ok: false, message: "Keep the note under 5,000 characters." };
+
+  try {
+    await addPositionNote({ symbol, action, note, createdBy: profile.id });
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Could not save the note." };
+  }
+  revalidatePath("/risk");
+  return { ok: true };
+}
+
+export async function deletePositionNoteAction(formData: FormData) {
+  const profile = await requireApprovedProfile();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const existing = await getNoteAuthorId(id);
+  if (!existing) return;
+  if (existing.createdBy !== profile.id && !isRiskManager(profile.role)) {
+    throw new Error("Only the author or the Risk Manager can delete a position note.");
+  }
+  await deletePositionNote(id);
   revalidatePath("/risk");
 }

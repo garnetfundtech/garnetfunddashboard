@@ -3,6 +3,8 @@
  * fetching all live market/portfolio data used by the homepage and admin panel.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeSchwabOrders } from "@/lib/schwab-orders";
+import { closedTodayDayPnl, syncRealizedGains } from "@/lib/realized-gains";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -212,9 +214,16 @@ export const fetchAccountOrders = unstable_cache(loadAccountOrders, ["account-or
 // blank the instant one request fails. Resets on a cold start/deploy.
 let lastGoodPortfolio: PortfolioSummary | null = null;
 
+// How often a portfolio load also refreshes realized_gains, per server instance.
+const REALIZED_SYNC_INTERVAL_MS = 5 * 60_000;
+let lastRealizedSync = 0;
+
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();
   if (!token) return lastGoodPortfolio;
+
+  // Started alongside the positions call rather than after it; see dayPnl.
+  const ordersPromise = fetchAccountOrders().catch(() => null);
 
   try {
     const accounts = await getAccountPositions(token);
@@ -337,7 +346,21 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
       });
 
     const unrealizedPnl = positions.reduce((s, p) => s + p.unrealizedPnl, 0);
-    const dayPnl = positions.reduce((s, p) => s + p.dayPnl, 0);
+
+    // Day P&L has to include what was sold today. Schwab's per-position day
+    // P&L only covers what is still held, so a Treasury sold at a loss this
+    // morning simply vanished from the total. The orders are the same 60s
+    // cached fetch as the account orders view.
+    const orders = normalizeSchwabOrders(await ordersPromise);
+    const soldTodayPnl = await closedTodayDayPnl(orders).catch(() => 0);
+    const dayPnl = positions.reduce((s, p) => s + p.dayPnl, 0) + soldTodayPnl;
+
+    // Keep realized_gains current through the day rather than only at the
+    // nightly sync, so Total P&L picks up a sale within minutes of it filling.
+    if (orders.length && Date.now() - lastRealizedSync > REALIZED_SYNC_INTERVAL_MS) {
+      lastRealizedSync = Date.now();
+      await syncRealizedGains(orders).catch(() => undefined);
+    }
     // Split the book by side so net / gross exposure is available downstream.
     const positionsLongMV = positions
       .filter((p) => p.side !== "short")

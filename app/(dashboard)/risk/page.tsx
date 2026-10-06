@@ -8,6 +8,7 @@ import type { RiskModel } from "@/lib/risk-engine";
 import { getAlertLog } from "@/lib/risk-episodes";
 import { getNavSeries } from "@/lib/risk-nav";
 import { getCatalysts } from "@/lib/risk-catalysts";
+import { getPositionNotes } from "@/lib/position-notes-store";
 import { buildReportingModel, REPORT_PACKS, type PeriodKey } from "@/lib/risk-reporting";
 
 export const dynamic = "force-dynamic";
@@ -64,12 +65,14 @@ export default async function RiskPage({
   const tab: RiskTab = sp.tab === "reporting" && fullBoard ? "reporting" : "alerts";
   const period: PeriodKey = PERIODS.has(sp.period as PeriodKey) ? (sp.period as PeriodKey) : "mtd";
 
-  const [fullModel, fullAlertLog, navSeries, tbill, analysts] = await Promise.all([
+  const [fullModel, fullAlertLog, navSeries, tbill, analysts, positionNotes] = await Promise.all([
     getRiskModel(),
     getAlertLog(200),
     getNavSeries(),
     fetchTreasuryRate(),
     getAnalysts(),
+    // Notes cover the whole book, so they go to the full board only.
+    fullBoard ? getPositionNotes() : Promise.resolve([]),
   ]);
 
   // Scoping happens here rather than in the component: an analyst's browser
@@ -117,6 +120,8 @@ export default async function RiskPage({
       analysts={analysts}
       sectors={model.config.coverageSectors}
       canEdit={isRiskManager(profile.role)}
+      positionNotes={positionNotes}
+      viewerId={profile.id}
     />
   );
 }
