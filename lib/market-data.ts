@@ -4,7 +4,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeSchwabOrders } from "@/lib/schwab-orders";
-import { closedTodayDayPnl, syncRealizedGains } from "@/lib/realized-gains";
+import { closedTodayDayPnl, nyDate, syncRealizedGains } from "@/lib/realized-gains";
 import { cfg, getRiskConfig } from "@/lib/risk-config";
 import {
   refreshAccessToken,
@@ -237,6 +237,12 @@ async function capitalPnl(nav: number): Promise<{ totalPnl: number | null; capit
   }
 }
 
+/** Whether it is Saturday or Sunday in New York. */
+function isNyWeekend(at = new Date()) {
+  const day = new Date(`${nyDate(at)}T12:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+}
+
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();
   if (!token) return lastGoodPortfolio;
@@ -284,6 +290,11 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
 
+    // Nothing trades on a Saturday or Sunday, so there is no day P&L to show.
+    // Schwab's per-position figure is not reliable then: on Sunday Oct 11 it
+    // added up to +$3.6K while the NAV had not moved since Friday's close.
+    const marketClosedToday = isNyWeekend();
+
     const positions: LivePosition[] = rawPositions
       .filter((p) => {
         const inst = p.instrument as Record<string, unknown> | undefined;
@@ -323,8 +334,8 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
         // Negative pct = losing: for a long that's a drop from cost, for a short
         // that's the name moving against us. Both feed the kill-trigger rows.
         const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
-        const dayPnl = Number(p.currentDayProfitLoss ?? 0);
-        const dayPnlPct = Number(p.currentDayProfitLossPercentage ?? 0);
+        const dayPnl = marketClosedToday ? 0 : Number(p.currentDayProfitLoss ?? 0);
+        const dayPnlPct = marketClosedToday ? 0 : Number(p.currentDayProfitLossPercentage ?? 0);
         // Use liquidationValue (cash + securities) as denominator so weights
         // reflect true portfolio allocation including uninvested cash. Shorts
         // carry a negative marketValue and therefore a negative weight.
