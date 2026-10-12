@@ -2,10 +2,12 @@ import { randomUUID } from "crypto";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchMissingPdfs } from "@/lib/corporate-research-pdf";
 import {
   RESEARCH_FIRMS,
   firmForSender,
   latestResearchEmailAt,
+  sectorFromBody,
   type ResearchAttachment,
 } from "@/lib/corporate-research";
 
@@ -50,12 +52,22 @@ const MAX_PER_RUN = 40;
  */
 const TIME_BUDGET_MS = 40_000;
 
+/**
+ * Report PDFs are fetched after the import, with whatever time is left up to
+ * this point. Each is one download from BlueMatrix of up to ten seconds, so
+ * this leaves room for the last one to finish inside maxDuration.
+ */
+const PDF_DEADLINE_MS = 45_000;
+
 export type SyncResult = {
   mailbox: string;
   since: string;
   found: number;
   imported: number;
   remaining: number;
+  /** Report PDFs fetched this run, and emails still waiting for one. */
+  pdfsSaved: number;
+  pdfsRemaining: number;
   errors: string[];
 };
 
@@ -66,6 +78,21 @@ export function isResearchInboxConfigured() {
 }
 
 export async function syncResearchInbox(): Promise<SyncResult> {
+  const startedAt = Date.now();
+  const imported = await importFromInbox(startedAt);
+  // After the IMAP session is closed, so a slow portal never holds it open.
+  const pdfs = await fetchMissingPdfs(startedAt + PDF_DEADLINE_MS);
+  return {
+    ...imported,
+    pdfsSaved: pdfs.saved,
+    pdfsRemaining: pdfs.remaining,
+    errors: [...imported.errors, ...pdfs.errors],
+  };
+}
+
+async function importFromInbox(
+  startedAt: number,
+): Promise<Omit<SyncResult, "pdfsSaved" | "pdfsRemaining">> {
   const user = process.env.RESEARCH_INBOX_USER?.trim();
   // Google shows app passwords in groups of four with spaces; accept it pasted either way.
   const pass = process.env.RESEARCH_INBOX_APP_PASSWORD?.replace(/\s+/g, "");
@@ -73,7 +100,6 @@ export async function syncResearchInbox(): Promise<SyncResult> {
     throw new Error("RESEARCH_INBOX_USER and RESEARCH_INBOX_APP_PASSWORD are not set.");
   }
 
-  const startedAt = Date.now();
   const latest = await latestResearchEmailAt();
   const since = latest
     ? new Date(latest.getTime() - OVERLAP_DAYS * 86_400_000)
@@ -235,6 +261,7 @@ async function importMessage(firm: string, messageId: string, source: Buffer): P
     html_body: parsed.html || null,
     text_body: parsed.text ?? null,
     attachments,
+    ...sectorFromBody(parsed.text ?? null, parsed.html || null),
   });
 
   if (error) {

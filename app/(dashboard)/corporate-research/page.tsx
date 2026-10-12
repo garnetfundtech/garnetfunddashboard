@@ -11,7 +11,7 @@ import { CorporateResearchClient } from "@/components/dashboard/corporate-resear
 export default async function CorporateResearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ firm?: string; open?: string }>;
+  searchParams: Promise<{ firm?: string; sector?: string; open?: string }>;
 }) {
   await enforceNavAccess("/corporate-research");
   const sp = await searchParams;
@@ -26,6 +26,7 @@ export default async function CorporateResearchPage({
     <CorporateResearchClient
       firms={RESEARCH_FIRMS.map((f) => ({ slug: f.slug, label: f.label }))}
       firm={firm.slug}
+      sector={sp.sector ?? null}
       emails={emails}
       // An id from another firm's tab would otherwise open under this one.
       opened={opened?.firm === firm.slug ? withoutLinks(opened) : null}
