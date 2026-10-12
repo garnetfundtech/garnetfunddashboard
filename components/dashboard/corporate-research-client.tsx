@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Paperclip, RefreshCw } from "lucide-react";
+import { FileText, Mail, Paperclip, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { TableShell } from "@/components/dashboard/table-shell";
 import { FilterTabs } from "@/components/dashboard/filter-tabs";
@@ -56,14 +56,23 @@ function emailDocument(email: ResearchEmail) {
   return head + body;
 }
 
+/** The tab for emails with no coverage label — macro and strategy notes. */
+const OTHER = "Other";
+
+function sectorOf(email: ResearchEmailSummary) {
+  return email.sector || OTHER;
+}
+
 export function CorporateResearchClient({
   firms,
   firm,
+  sector,
   emails,
   opened,
 }: {
   firms: { slug: string; label: string }[];
   firm: string;
+  sector: string | null;
   emails: ResearchEmailSummary[];
   opened: ResearchEmail | null;
 }) {
@@ -72,8 +81,19 @@ export function CorporateResearchClient({
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const firmLabel = firms.find((f) => f.slug === firm)?.label ?? firm;
 
-  function go(nextFirm: string, open?: string) {
+  // Sector tabs, alphabetical with Other last, each with its count.
+  const counts = new Map<string, number>();
+  for (const e of emails) counts.set(sectorOf(e), (counts.get(sectorOf(e)) ?? 0) + 1);
+  const sectors = [...counts.keys()].sort((a, b) =>
+    a === OTHER ? 1 : b === OTHER ? -1 : a.localeCompare(b),
+  );
+  // A sector from an old link that has no emails now falls back to All.
+  const activeSector = sector && counts.has(sector) ? sector : null;
+  const visible = activeSector ? emails.filter((e) => sectorOf(e) === activeSector) : emails;
+
+  function go(nextFirm: string, open?: string, nextSector = activeSector) {
     const params = new URLSearchParams({ firm: nextFirm });
+    if (nextSector) params.set("sector", nextSector);
     if (open) params.set("open", open);
     router.push(`/corporate-research?${params}`);
   }
@@ -94,12 +114,17 @@ export function CorporateResearchClient({
         setSyncMessage(body.message ?? "Couldn't reach the inbox.");
         return;
       }
-      setSyncMessage(
+      const parts = [
         body.imported === 0
-          ? "Up to date."
+          ? "Up to date"
           : `${body.imported} new email${body.imported === 1 ? "" : "s"}` +
-              (body.remaining > 0 ? ` — ${body.remaining} more on the next check.` : "."),
-      );
+            (body.remaining > 0 ? ` (${body.remaining} more on the next check)` : ""),
+      ];
+      if (body.pdfsSaved > 0) {
+        parts.push(`${body.pdfsSaved} report PDF${body.pdfsSaved === 1 ? "" : "s"} saved`);
+      }
+      if (body.pdfsRemaining > 0) parts.push(`${body.pdfsRemaining} PDFs left to fetch`);
+      setSyncMessage(`${parts.join(" · ")}.`);
       router.refresh();
     });
   }
@@ -121,15 +146,15 @@ export function CorporateResearchClient({
 
       <div className="flex min-h-0 flex-1 gap-3">
         <TableShell
-          title={firmLabel}
-          count={emails.length}
+          title={activeSector ? `${firmLabel} · ${activeSector}` : firmLabel}
+          count={visible.length}
           className="w-[400px] shrink-0"
           actions={
             firms.length > 1 ? (
               <FilterTabs
                 options={firms.map((f) => ({ value: f.slug, label: f.label }))}
                 value={firm}
-                onChange={(slug) => go(slug)}
+                onChange={(slug) => go(slug, undefined, null)}
               />
             ) : null
           }
@@ -140,32 +165,46 @@ export function CorporateResearchClient({
               “Check for new”.
             </p>
           ) : (
-            <ul>
-              {emails.map((email) => (
-                <li key={email.id}>
-                  <button
-                    type="button"
-                    onClick={() => go(firm, email.id)}
-                    className={`block w-full border-b border-line px-3 py-2.5 text-left transition hover:bg-paper-3 ${
-                      opened?.id === email.id ? "bg-paper-3" : ""
-                    }`}
-                  >
-                    <span className="flex items-start gap-2">
-                      <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink">
-                        {email.subject || "(no subject)"}
+            <>
+              <div className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-line bg-paper-3 px-3 py-2">
+                <ViewTab active={activeSector == null} onClick={() => go(firm, opened?.id, null)}>
+                  All <span className="num text-ink-3">{emails.length}</span>
+                </ViewTab>
+                {sectors.map((s) => (
+                  <ViewTab key={s} active={activeSector === s} onClick={() => go(firm, opened?.id, s)}>
+                    {s} <span className="num text-ink-3">{counts.get(s)}</span>
+                  </ViewTab>
+                ))}
+              </div>
+              <ul>
+                {visible.map((email) => (
+                  <li key={email.id}>
+                    <button
+                      type="button"
+                      onClick={() => go(firm, email.id)}
+                      className={`block w-full border-b border-line px-3 py-2.5 text-left transition hover:bg-paper-3 ${
+                        opened?.id === email.id ? "bg-paper-3" : ""
+                      }`}
+                    >
+                      <span className="flex items-start gap-2">
+                        <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink">
+                          {email.subject || "(no subject)"}
+                        </span>
+                        {email.attachments.some((a) => a.source === "portal") ? (
+                          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3" />
+                        ) : email.attachments.length > 0 ? (
+                          <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3" />
+                        ) : null}
                       </span>
-                      {email.attachments.length > 0 && (
-                        <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3" />
-                      )}
-                    </span>
-                    <span className="mt-0.5 block text-[12.5px] text-ink-3">
-                      {fmtDate(email.received_at)}
-                      {email.from_name ? ` · ${email.from_name}` : ""}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      <span className="mt-0.5 block text-[12.5px] text-ink-3">
+                        {fmtDate(email.received_at)}
+                        {labelOf(email, activeSector)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </TableShell>
 
@@ -189,8 +228,10 @@ export function CorporateResearchClient({
  * as a signed Storage link.
  */
 function EmailViewer({ email }: { email: ResearchEmail }) {
-  // null shows the email itself; a number shows that attachment.
-  const [view, setView] = useState<number | null>(null);
+  // null shows the email itself; a number shows that attachment. Opens on the
+  // report PDF when the import fetched one, since that is what people came for.
+  const report = email.attachments.findIndex((a) => a.source === "portal");
+  const [view, setView] = useState<number | null>(report === -1 ? null : report);
   const attachment = view == null ? null : email.attachments[view];
   const attachmentUrl = `/api/corporate-research/attachment?email=${email.id}&n=${view}`;
 
@@ -212,8 +253,17 @@ function EmailViewer({ email }: { email: ResearchEmail }) {
             </ViewTab>
             {email.attachments.map((a, i) => (
               <ViewTab key={a.path} active={view === i} onClick={() => setView(i)}>
-                <Paperclip className="h-3 w-3" />
-                {a.name}
+                {a.source === "portal" ? (
+                  <>
+                    <FileText className="h-3 w-3" />
+                    Report PDF
+                  </>
+                ) : (
+                  <>
+                    <Paperclip className="h-3 w-3" />
+                    {a.name}
+                  </>
+                )}
               </ViewTab>
             ))}
           </div>
@@ -243,6 +293,14 @@ function EmailViewer({ email }: { email: ResearchEmail }) {
       </div>
     </div>
   );
+}
+
+/** The line under a subject: its coverage label, or the sender when there is none. */
+function labelOf(email: ResearchEmailSummary, activeSector: string | null) {
+  // Inside a sector's tab the sector itself goes without saying.
+  const parts = activeSector ? [email.industry] : [email.sector, email.industry];
+  const label = parts.filter(Boolean).join(" · ") || email.from_name;
+  return label ? ` · ${label}` : "";
 }
 
 function ViewTab({
