@@ -37,10 +37,10 @@ function escapeHtml(text: string) {
  *
  * Sell-side emails are laid out with their own tables and inline styles, so
  * they are shown as sent rather than stripped down to the app's typography.
- * The sandbox grants nothing: the email cannot run code, reach the
- * dashboard's cookies or open a window, and the CSP keeps it from loading
- * anything but images, styles and fonts. Its links arrive with their
- * destinations already removed (withoutLinks, on the server).
+ * The sandbox grants one thing, opening a link in a new tab, so the email's
+ * "View HTML" and "PDF" buttons work as they do in the inbox. The email
+ * still cannot run code or reach the dashboard's cookies, and the CSP keeps
+ * it from loading anything but images, styles and fonts.
  *
  * The head tags go first; the parser hoists them into the head even when the
  * email brings its own <html>, and ignores the email's doctype after them.
@@ -48,8 +48,10 @@ function escapeHtml(text: string) {
 function emailDocument(email: ResearchEmail) {
   const head =
     `<meta charset="utf-8">` +
+    `<meta name="referrer" content="no-referrer">` +
+    `<base target="_blank">` +
     `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https:; font-src https: data:">` +
-    `<style>html{background:#fff}a{cursor:default}body{margin:16px;color:#111;font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif}</style>`;
+    `<style>html{background:#fff}body{margin:16px;color:#111;font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif}</style>`;
   const body = email.html_body
     ? email.html_body
     : `<pre style="white-space:pre-wrap;font:inherit;margin:0">${escapeHtml(email.text_body ?? "")}</pre>`;
@@ -275,7 +277,7 @@ function EmailViewer({ email }: { email: ResearchEmail }) {
           <iframe
             title={email.subject}
             srcDoc={emailDocument(email)}
-            sandbox=""
+            sandbox="allow-popups allow-popups-to-escape-sandbox"
             className="h-full w-full border-0 bg-white"
           />
         ) : attachment.contentType === "application/pdf" ? (
