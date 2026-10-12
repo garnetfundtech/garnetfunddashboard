@@ -36,6 +36,16 @@ export async function POST(request: NextRequest) {
   if (!model.hasLiveData || model.nav == null) {
     return NextResponse.json({ ok: false, message: "No live data to snapshot." }, { status: 409 });
   }
+  // A zero NAV is an account the broker reports as empty, not a fund that
+  // lost everything: on Oct 12 2026 the dashboard was relinked to a new
+  // account the feed still showed at $0. Recording it would put a -100% day
+  // in the NAV series that every return, volatility and Sharpe figure reads.
+  if (!(model.nav > 0)) {
+    return NextResponse.json(
+      { ok: false, message: `NAV is ${model.nav}; not recording a snapshot of an empty account.` },
+      { status: 409 },
+    );
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const value = (id: string) => findMonitor(model, id)?.value ?? null;
