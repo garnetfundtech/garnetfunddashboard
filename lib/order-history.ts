@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAccountNumbers, getAccountOrders } from "@/lib/schwab";
+import { getAccountOrders, getFollowedAccountHash } from "@/lib/schwab";
 import { normalizeSchwabOrders, type NormalizedOrderRow } from "@/lib/schwab-orders";
 import { loadValidTraderToken } from "@/lib/market-data";
 import { syncRealizedGains } from "@/lib/realized-gains";
@@ -21,8 +21,7 @@ export async function syncOrderHistory(days: number): Promise<{ synced: number }
   const token = await loadValidTraderToken();
   if (!token) return null;
 
-  const nums = await getAccountNumbers(token);
-  const hash = nums[0]?.hashValue;
+  const hash = await getFollowedAccountHash(token);
   if (!hash) return null;
 
   const raw = await getAccountOrders(token, hash, days);

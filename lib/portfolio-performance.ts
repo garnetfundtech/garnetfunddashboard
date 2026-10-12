@@ -9,7 +9,7 @@
  */
 import { unstable_cache } from "next/cache";
 import { getValidTraderToken } from "@/lib/market-data";
-import { getAccountPositions, getPriceHistory } from "@/lib/schwab";
+import { getAccountPositions, getPriceHistory, pickAccount } from "@/lib/schwab";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PerformancePeriod = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
@@ -52,8 +52,7 @@ export async function getPortfolioPerformance(period: PerformancePeriod): Promis
 
   try {
     const raw = await getAccountPositions(token);
-    const accountList = Array.isArray(raw) ? raw : [raw];
-    const first = accountList[0];
+    const first = pickAccount(raw);
     if (!first?.securitiesAccount) return { ok: false, candles: [], latestPct: null };
 
     const sec = first.securitiesAccount;

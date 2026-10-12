@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getValidTraderToken } from "@/lib/market-data";
-import { getAccountNumbers, getAccountOrders } from "@/lib/schwab";
+import { getAccountOrders, getFollowedAccountHash } from "@/lib/schwab";
 import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { requireSessionUser } from "@/lib/require-session";
 import { syncRealizedGains } from "@/lib/realized-gains";
@@ -20,8 +20,7 @@ export async function POST() {
   }
 
   try {
-    const accounts = await getAccountNumbers(token);
-    const hash = accounts[0]?.hashValue;
+    const hash = await getFollowedAccountHash(token);
     if (!hash) throw new Error("No account hash found.");
     const orders = normalizeSchwabOrders(await getAccountOrders(token, hash, 90));
     const { upserted } = await syncRealizedGains(orders);

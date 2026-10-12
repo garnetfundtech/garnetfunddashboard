@@ -114,6 +114,56 @@ export async function getAccountPositions(accessToken: string) {
   return response.json();
 }
 
+type RawAccount = {
+  securitiesAccount?: {
+    accountNumber?: string;
+    currentBalances?: { liquidationValue?: number; cashAvailableForTrading?: number; longMarketValue?: number };
+  };
+  aggregatedBalance?: { currentLiquidationValue?: number };
+};
+
+/** SCHWAB_ACCOUNT_LAST4: the last four digits of the account to follow, if set. */
+function followedLast4(): string | null {
+  const digits = process.env.SCHWAB_ACCOUNT_LAST4?.replace(/\D/g, "") ?? "";
+  return digits.length >= 4 ? digits.slice(-4) : null;
+}
+
+function accountValue(account: RawAccount) {
+  const sec = account.securitiesAccount;
+  const b = sec?.currentBalances ?? {};
+  return Math.max(
+    Number(account.aggregatedBalance?.currentLiquidationValue ?? b.liquidationValue ?? 0),
+    Number(b.cashAvailableForTrading ?? 0) + Number(b.longMarketValue ?? 0),
+  );
+}
+
+/**
+ * The account the dashboard follows, out of an /accounts response.
+ *
+ * The Schwab login can see more than one account — the fund opened a second
+ * one in October 2026 — and the first in Schwab's list is not necessarily
+ * the fund's: an empty new account listed first put $0.00 AUM on Home. The
+ * account ending in SCHWAB_ACCOUNT_LAST4 when that is set; otherwise the one
+ * holding the most, which an empty or nearly empty account never is.
+ */
+export function pickAccount<T extends RawAccount>(raw: T | T[] | null | undefined): T | null {
+  const list = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter((a) => a?.securitiesAccount);
+  const last4 = followedLast4();
+  if (last4) {
+    return list.find((a) => String(a.securitiesAccount?.accountNumber ?? "").endsWith(last4)) ?? null;
+  }
+  return list.reduce<T | null>((best, a) => (best && accountValue(best) >= accountValue(a) ? best : a), null);
+}
+
+/** The hash of the account pickAccount chooses, for the per-account endpoints. */
+export async function getFollowedAccountHash(accessToken: string): Promise<string | null> {
+  const nums = await getAccountNumbers(accessToken);
+  if (nums.length <= 1) return nums[0]?.hashValue ?? null;
+  const picked = pickAccount((await getAccountPositions(accessToken)) as RawAccount | RawAccount[]);
+  const number = picked?.securitiesAccount?.accountNumber;
+  return nums.find((n) => n.accountNumber === number)?.hashValue ?? null;
+}
+
 export async function getAccountNumbers(accessToken: string) {
   // The account list / hash never changes — cache a full day so orders,
   // transactions, and turnover skip this round-trip entirely.
