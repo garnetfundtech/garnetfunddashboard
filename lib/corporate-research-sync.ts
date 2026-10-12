@@ -80,6 +80,12 @@ export function isResearchInboxConfigured() {
 export async function syncResearchInbox(): Promise<SyncResult> {
   const startedAt = Date.now();
   const imported = await importFromInbox(startedAt);
+  // Off unless RESEARCH_FETCH_PDFS=1. BlueMatrix links open a sign-in page
+  // that emails a verification code, not the report, so every fetch fails
+  // until Truist attaches PDFs or gives API access. See 0035.
+  if (process.env.RESEARCH_FETCH_PDFS !== "1") {
+    return { ...imported, pdfsSaved: 0, pdfsRemaining: 0 };
+  }
   // After the IMAP session is closed, so a slow portal never holds it open.
   const pdfs = await fetchMissingPdfs(startedAt + PDF_DEADLINE_MS);
   return {
