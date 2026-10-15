@@ -225,6 +225,10 @@ export function RiskReportingTab({
             <Download className="h-3.5 w-3.5" />
             {pending === "prices" ? "Preparing…" : "Daily prices"}
           </GhostBtn>
+          <GhostBtn onClick={() => window.open("/api/risk/distributions/export", "_blank")}>
+            <Download className="h-3.5 w-3.5" />
+            Distributions
+          </GhostBtn>
         </div>
       </div>
       <div className="flex flex-col gap-0.5 text-[11.5px] text-ink-3 sm:items-end sm:text-right">
@@ -237,9 +241,17 @@ export function RiskReportingTab({
               : `left out ${priceExclusions.map((e) => `${e.symbol} (${e.reason})`).join("; ")}`}
           </span>
         )}
+        {/* What each file can and cannot be used for, so nobody has to open
+            them to find out. */}
         <span>
-          Distributions: no download. The project does not store any distribution data.
+          Daily prices: Schwab closes as returned. The site adds no distributions, and Schwab does not document
+          whether its history is adjusted for them.
         </span>
+        <span>
+          Distributions: the latest distribution Schwab reports per holding, and payments the fund&apos;s accounts
+          received in the last year. Not a full history; the site stores none of its own.
+        </span>
+        <span>Dated values and weights: in Holdings, one row per security per stored nightly snapshot.</span>
       </div>
 
       {/* §5.1 Performance */}

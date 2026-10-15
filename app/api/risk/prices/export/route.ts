@@ -85,7 +85,9 @@ export async function GET() {
   const tickers = [...prices.keys()].sort();
   const dates = [...new Set(tickers.flatMap((t) => [...prices.get(t)!.keys()]))].sort();
 
-  const header = ["Date", ...tickers.map((t) => `${t} close (USD)`)];
+  // The label says what this file does, not what Schwab does: Schwab does not
+  // document whether its daily history is adjusted for distributions.
+  const header = ["Date", ...tickers.map((t) => `${t} close (USD, no distributions added)`)];
   const body = dates.map((d) => [d, ...tickers.map((t) => prices.get(t)!.get(d) ?? "")]);
 
   const response = csvResponse(header, body, "garnet-fund-daily-prices");
