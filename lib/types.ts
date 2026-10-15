@@ -1,6 +1,6 @@
 import type { ClassYear } from "@/lib/class-years";
 
-export type UserRole = "developer" | "admin" | "pm" | "risk_manager" | "analyst" | "faculty";
+export type UserRole = "developer" | "admin" | "pm" | "risk_manager" | "senior_analyst" | "analyst" | "faculty";
 
 /** Whether a self-signed-up account has been let in by an admin yet. */
 export type ApprovalStatus = "pending" | "approved" | "rejected";

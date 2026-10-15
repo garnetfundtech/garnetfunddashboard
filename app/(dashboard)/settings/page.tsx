@@ -4,6 +4,7 @@ import { updateOwnNameAction } from "@/app/(dashboard)/settings/actions";
 
 const ROLE_LABEL: Record<string, string> = {
   analyst: "Analyst",
+  senior_analyst: "Senior Analyst",
   faculty: "Faculty",
   pm: "Lead",
   admin: "Admin",

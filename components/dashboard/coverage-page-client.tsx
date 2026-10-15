@@ -22,6 +22,7 @@ import type { CoverageTickerRow, TickerFile } from "@/lib/coverage-tickers";
 import type { SymbolMatch } from "@/lib/fmp";
 import type { ResearchItem, UserRole } from "@/lib/types";
 import { SECTOR_COLORS, SECTOR_FALLBACK_COLOR } from "@/lib/sectors";
+import { canEditCoverage } from "@/lib/roles";
 
 type SectorStatus = "covered" | "thin" | "gap" | "uncovered";
 
@@ -98,7 +99,8 @@ export function CoveragePageClient({
   initialTicker: string | null;
 }) {
   const canAssign = viewerRole === "admin" || viewerRole === "developer" || viewerRole === "pm";
-  const canManageAnyTicker = canAssign;
+  // Senior analysts and above edit the whole map; analysts only read it.
+  const canEditTickers = canEditCoverage(viewerRole);
   const [assignOpen, setAssignOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [formError, setFormError] = useState("");
@@ -372,10 +374,12 @@ export function CoveragePageClient({
                 Assign analyst
               </GhostBtn>
             )}
-            <PrimaryBtn onClick={openAddForm}>
-              <Plus className="h-3.5 w-3.5" />
-              Add ticker
-            </PrimaryBtn>
+            {canEditTickers && (
+              <PrimaryBtn onClick={openAddForm}>
+                <Plus className="h-3.5 w-3.5" />
+                Add ticker
+              </PrimaryBtn>
+            )}
           </>
         }
       />
@@ -717,7 +721,7 @@ export function CoveragePageClient({
                   analysts,
                   entries.map((e) => e.ticker),
                 );
-                const leads = sAnalysts.filter((a) => a.role !== "analyst");
+                const leads = sAnalysts.filter((a) => a.role !== "analyst" && a.role !== "senior_analyst");
                 const analystCount = sAnalysts.length;
                 const color = SECTOR_COLORS[sector] ?? SECTOR_FALLBACK_COLOR;
 
@@ -890,7 +894,7 @@ export function CoveragePageClient({
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-0.5">
-                        {row.analystId === null && (
+                        {row.analystId === null && canEditTickers && (
                           <button
                             type="button"
                             title={`Take ${selectedDetail.ticker} on`}
@@ -906,7 +910,7 @@ export function CoveragePageClient({
                             Claim
                           </button>
                         )}
-                        {(mine || canManageAnyTicker) && (
+                        {canEditTickers && (
                           <button
                             type="button"
                             title="Hand over to someone else"
@@ -924,7 +928,7 @@ export function CoveragePageClient({
                             <ArrowRightLeft className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {(mine || canManageAnyTicker) && (
+                        {canEditTickers && (
                           <button
                             type="button"
                             title={mine ? "Remove from my coverage" : "Remove"}
@@ -1025,7 +1029,11 @@ export function CoveragePageClient({
                 {myTickers.length}
               </span>
             </div>
-            {myTickers.length === 0 ? (
+            {myTickers.length === 0 && !canEditTickers ? (
+              <p className="mt-1 text-[13px] text-ink-3">
+                Nothing assigned to you yet — a senior analyst or PM adds coverage.
+              </p>
+            ) : myTickers.length === 0 ? (
               <button
                 type="button"
                 onClick={openAddForm}
@@ -1104,7 +1112,7 @@ export function CoveragePageClient({
                           <span className="tabular-nums text-[12px] text-ink-3">
                             {load} ticker{load === 1 ? "" : "s"}
                           </span>
-                          {load > 0 && (canManageAnyTicker || a.id === viewerId) && (
+                          {load > 0 && canEditTickers && (
                             <button
                               type="button"
                               title={`Hand over everything ${a.name} covers`}
