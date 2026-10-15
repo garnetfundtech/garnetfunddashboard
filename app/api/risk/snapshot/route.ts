@@ -3,8 +3,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRiskModel, snapshotPositions } from "@/lib/risk-live";
 import { findMonitor } from "@/lib/risk-engine";
 import { evaluateEpisodes, recordStopLossEvents } from "@/lib/risk-episodes";
-import { recordNav } from "@/lib/risk-nav";
+import { getNavSeries, recordNav } from "@/lib/risk-nav";
 import { fetchTreasuryRate } from "@/lib/fmp";
+import { checkBrokerValues } from "@/lib/broker-check";
+import { addressesForRole, sendOpsEmail } from "@/lib/notify";
+import { siteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,10 @@ export const dynamic = "force-dynamic";
  *   3. Records any stop that fired, opening its post-mortem requirement.
  *   4. Runs the close-of-day episode batch, which sends at most one email per
  *      tier no matter how many limits went red.
+ *
+ * Before any of it, the broker figures are checked against live quotes and
+ * the last recorded NAV (lib/broker-check.ts). A day that fails is not
+ * recorded, and the Risk Manager is emailed to enter it by hand.
  *
  * Guarded by CRON_SECRET when set. Never snapshots anything but live data.
  */
@@ -48,6 +55,38 @@ export async function POST(request: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // A wrong day in the NAV series poisons every return read across it, so a
+  // day whose broker figures do not hold up is not recorded at all. The Risk
+  // Manager is told and enters the day's NAV from Schwab's own statement
+  // through the NAV log import, which is how a missing day is filled.
+  const series = await getNavSeries(5);
+  const lastRecorded = series.points.filter((p) => p.captured_on < today).at(-1) ?? null;
+  const check = await checkBrokerValues(model, lastRecorded);
+  if (!check.ok) {
+    const lines = [
+      `The ${today} snapshot was not recorded because Schwab's figures did not pass the check:`,
+      "",
+      ...check.problems.map((p) => `- ${p}`),
+      "",
+      "If the figures are wrong, look up the account's closing value for the day on Schwab's website",
+      `and enter it on the Risk Admin page as "${today},<value>" in the NAV log import:`,
+      `${siteUrl()}/risk-admin`,
+      "",
+      "If they are right (a real deposit or withdrawal), enter the NAV the same way and include the",
+      `amount as a third value: "${today},<value>,<deposit or -withdrawal>".`,
+    ];
+    const mail = await sendOpsEmail({
+      to: addressesForRole("Risk Manager"),
+      subject: `NAV not recorded for ${today}: Schwab figures need checking`,
+      text: lines.join("\n"),
+    }).catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Send failed." }));
+    return NextResponse.json(
+      { ok: false, held: true, problems: check.problems, unchecked: check.unchecked, emailed: mail },
+      { status: 409 },
+    );
+  }
+
   const value = (id: string) => findMonitor(model, id)?.value ?? null;
 
   // 1. NAV first, and on its own error boundary: a snapshot without a NAV row
@@ -103,6 +142,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       captured_on: today,
       navRecorded,
+      unchecked: check.unchecked,
       positions: model.positions.length,
       stopLossEvents: stops,
       opened: episodes?.opened ?? 0,
