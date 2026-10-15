@@ -5,17 +5,17 @@ import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit";
 import { isCoverageTeam, toCoverageTeam } from "@/lib/sectors";
-import type { UserRole } from "@/lib/types";
+import { canEditCoverage } from "@/lib/roles";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-/** Roles that may add or remove a ticker on someone else's behalf. */
-const MANAGE_ANY_ROLES: UserRole[] = ["pm", "risk_manager", "admin", "developer"];
+const NOT_AN_EDITOR = "Coverage is edited by senior analysts, PMs and admins.";
 
 const TICKER_RE = /^[A-Z0-9.\-]{1,12}$/;
 
 /**
- * Adds a ticker to the coverage map, owned by whoever added it.
+ * Adds a ticker to the coverage map, owned by whoever added it. Senior
+ * analysts and above only — see canEditCoverage.
  *
  * The team defaults to the adder's own coverage team; an explicit team is
  * accepted so someone unassigned (or covering a name that sits with another
@@ -26,6 +26,7 @@ export async function addCoverageTickerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const profile = await requireProfile();
+  if (!canEditCoverage(profile.role)) return { ok: false, error: NOT_AN_EDITOR };
 
   const ticker = String(formData.get("ticker") ?? "")
     .trim()
@@ -89,7 +90,7 @@ export async function addCoverageTickerAction(
   return { ok: true };
 }
 
-/** Removes a ticker. Yours to remove, or anyone's for pm/admin/developer. */
+/** Removes a ticker — anyone's, for senior analysts and above. */
 export async function deleteCoverageTickerAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -107,11 +108,7 @@ export async function deleteCoverageTickerAction(
   if (!row) return { ok: false, error: "That ticker is already gone." };
 
   const target = row as { id: string; ticker: string; analyst_id: string };
-  const mayManage =
-    MANAGE_ANY_ROLES.includes(profile.role) || target.analyst_id === profile.id;
-  if (!mayManage) {
-    return { ok: false, error: "You can only remove tickers you added." };
-  }
+  if (!canEditCoverage(profile.role)) return { ok: false, error: NOT_AN_EDITOR };
 
   const { error } = await admin.from("coverage_tickers").delete().eq("id", id);
   if (error) return { ok: false, error: "Could not remove that ticker." };
@@ -130,9 +127,9 @@ export async function deleteCoverageTickerAction(
 /**
  * Hands one ticker to someone else, and/or refiles it under another team.
  *
- * Three ways this is allowed: pm/admin/developer may move anything; the owner
- * may hand their own name to a teammate; and anyone may claim a name whose
- * owner is gone (analyst_id null, see migration 0027).
+ * Senior analysts and above may move any ticker, including claiming one whose
+ * owner is gone (analyst_id null, see migration 0027) for themselves or
+ * anyone else.
  */
 export async function transferCoverageTickerAction(
   formData: FormData,
@@ -160,14 +157,7 @@ export async function transferCoverageTickerAction(
     analyst_id: string | null;
   };
 
-  const mayMove =
-    MANAGE_ANY_ROLES.includes(profile.role) ||
-    target.analyst_id === profile.id ||
-    // An unclaimed name is fair game, but only to pick up yourself.
-    (target.analyst_id === null && toAnalystId === profile.id);
-  if (!mayMove) {
-    return { ok: false, error: "You can only hand over tickers you cover." };
-  }
+  if (!canEditCoverage(profile.role)) return { ok: false, error: NOT_AN_EDITOR };
 
   const { data: recipient } = await admin
     .from("user_profiles")
@@ -229,11 +219,7 @@ export async function transferAllCoverageAction(
     return { ok: false, error: "That's the same person." };
   }
 
-  const mayMove =
-    MANAGE_ANY_ROLES.includes(profile.role) || fromAnalystId === profile.id;
-  if (!mayMove) {
-    return { ok: false, error: "Only PMs and admins can hand over someone else's coverage." };
-  }
+  if (!canEditCoverage(profile.role)) return { ok: false, error: NOT_AN_EDITOR };
 
   const admin = createAdminClient();
   const { data: recipient } = await admin

@@ -18,6 +18,7 @@ type RoleFilter = "All" | "Analyst" | "Lead" | "Risk" | "Admin" | "Faculty";
 
 const ROLE_TONE: Record<UserRole, Tone> = {
   analyst: "blue",
+  senior_analyst: "blue",
   faculty: "neutral",
   risk_manager: "rose",
   pm: "accent",
@@ -27,6 +28,7 @@ const ROLE_TONE: Record<UserRole, Tone> = {
 
 const ROLE_LABEL: Record<UserRole, string> = {
   analyst: "Analyst",
+  senior_analyst: "Senior Analyst",
   faculty: "Faculty",
   risk_manager: "Risk Manager",
   pm: "Lead",
@@ -75,13 +77,13 @@ export function UsersTableClient({
   }, [highlightId]);
 
   const onlineCount = users.filter((u) => u.isOnline).length;
-  const analystCount = users.filter((u) => u.role === "analyst").length;
+  const analystCount = users.filter((u) => u.role === "analyst" || u.role === "senior_analyst").length;
   const leadCount = users.filter((u) => u.role === "pm").length;
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
       if (roleFilter === "All") return true;
-      if (roleFilter === "Analyst") return u.role === "analyst";
+      if (roleFilter === "Analyst") return u.role === "analyst" || u.role === "senior_analyst";
       if (roleFilter === "Lead") return u.role === "pm";
       if (roleFilter === "Risk") return u.role === "risk_manager";
       if (roleFilter === "Admin") return u.role === "admin";
@@ -209,6 +211,7 @@ export function UsersTableClient({
                   className="border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none"
                 >
                   <option value="analyst">Analyst</option>
+                  <option value="senior_analyst">Senior Analyst</option>
                   <option value="faculty">Faculty</option>
                   <option value="risk_manager">Risk Manager</option>
                   <option value="pm">Lead</option>

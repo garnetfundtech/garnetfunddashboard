@@ -64,7 +64,8 @@ export function isRiskManager(role: UserRole): boolean {
  * report, so they need the whole board.
  */
 export function canReadFullRiskBoard(role: UserRole): boolean {
-  return role !== "analyst";
+  // A senior analyst's extra rights are over coverage, not the risk board.
+  return role !== "analyst" && role !== "senior_analyst";
 }
 
 export function getSidebarNavItems(role: UserRole): { href: string; label: string }[] {

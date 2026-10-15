@@ -53,6 +53,7 @@ function roleColor(role: UserRole) {
     pm: "text-garnet",
     risk_manager: "text-neg",
     analyst: "text-info",
+    senior_analyst: "text-info",
     faculty: "text-ink-2",
   };
   return map[role];

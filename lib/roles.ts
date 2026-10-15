@@ -5,6 +5,9 @@ const ROLE_RANK: Record<UserRole, number> = {
   // the fund, they don't moderate students' research or files.
   faculty: 0,
   analyst: 0,
+  // A senior analyst's extra reach is the coverage map and nothing else, so
+  // they rank with analysts: no say over anyone's files or research.
+  senior_analyst: 0,
   pm: 1,
   // The Risk Manager sits with the administrators rather than level with the
   // PMs.
@@ -40,6 +43,19 @@ const CONTENT_ADMIN_ROLES: UserRole[] = ["risk_manager", "admin", "developer"];
  * user_profiles row belongs here.
  */
 const USER_ADMIN_ROLES: UserRole[] = ["admin", "developer"];
+
+/**
+ * Who may add, remove and hand over coverage tickers — anyone's, not just
+ * their own. Coverage is kept by the senior analysts and above; analysts read
+ * the map but do not edit it, not even their own rows.
+ *
+ * Mirrored by public.can_manage_coverage_ticker (migration 0037).
+ */
+const COVERAGE_EDITOR_ROLES: UserRole[] = ["senior_analyst", "pm", "risk_manager", "admin", "developer"];
+
+export function canEditCoverage(role: UserRole) {
+  return COVERAGE_EDITOR_ROLES.includes(role);
+}
 
 /** May administer content and configuration, but not necessarily people. */
 export function canAdministerContent(role: UserRole) {

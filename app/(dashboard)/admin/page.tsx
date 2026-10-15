@@ -98,6 +98,7 @@ export default async function AdminPage() {
                         className="rounded-none border border-line bg-surface px-2 py-1.5 text-xs text-ink outline-none"
                       >
                         <option value="analyst">Analyst</option>
+                        <option value="senior_analyst">Senior Analyst</option>
                         <option value="faculty">Faculty</option>
                         <option value="risk_manager">Risk Manager</option>
                         <option value="pm">Lead</option>
