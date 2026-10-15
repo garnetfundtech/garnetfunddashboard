@@ -284,6 +284,81 @@ export async function getOrdersByStatus(
   return out;
 }
 
+/**
+ * Every transaction type the Trader API defines. The endpoint requires
+ * `types`, and asking for all of them is the point: deposits, transfers and
+ * journals are what tell money arriving apart from a gain.
+ */
+const SCHWAB_TRANSACTION_TYPES = [
+  "TRADE",
+  "RECEIVE_AND_DELIVER",
+  "DIVIDEND_OR_INTEREST",
+  "ACH_RECEIPT",
+  "ACH_DISBURSEMENT",
+  "CASH_RECEIPT",
+  "CASH_DISBURSEMENT",
+  "ELECTRONIC_FUND",
+  "WIRE_OUT",
+  "WIRE_IN",
+  "JOURNAL",
+  "MEMORANDUM",
+  "MARGIN_CALL",
+  "MONEY_MARKET",
+  "SMA_ADJUSTMENT",
+].join(",");
+
+export type SchwabTransferItem = {
+  instrument?: { symbol?: string; assetType?: string; description?: string };
+  amount?: number;
+  cost?: number;
+  price?: number;
+  feeType?: string;
+  positionEffect?: string;
+};
+
+export type SchwabTransaction = {
+  activityId?: number;
+  time?: string;
+  tradeDate?: string;
+  type?: string;
+  status?: string;
+  description?: string;
+  netAmount?: number;
+  transferItems?: SchwabTransferItem[];
+};
+
+/**
+ * The account's transaction history: trades, transfers, deposits, dividends
+ * and fees. Walked in sub-year chunks for the same reason as orders.
+ */
+export async function getAccountTransactions(
+  accessToken: string,
+  accountHash: string,
+  days = 365,
+): Promise<SchwabTransaction[]> {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const stamp = (ms: number) => new Date(ms).toISOString().split(".")[0] + ".000Z";
+
+  const all: SchwabTransaction[] = [];
+  for (let offset = 0; offset < days; offset += SCHWAB_ORDER_WINDOW_DAYS) {
+    const chunkDays = Math.min(SCHWAB_ORDER_WINDOW_DAYS, days - offset);
+    const params = new URLSearchParams({
+      startDate: stamp(now - (offset + chunkDays) * dayMs),
+      endDate: stamp(now - offset * dayMs),
+      types: SCHWAB_TRANSACTION_TYPES,
+    });
+    const response = await fetch(`${SCHWAB_TRADER_BASE}/accounts/${accountHash}/transactions?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Transactions request failed: ${response.status}`);
+    const page = await response.json();
+    if (Array.isArray(page)) all.push(...(page as SchwabTransaction[]));
+  }
+  return all;
+}
+
 // ── Market Data API ──────────────────────────────────────────────────────────
 
 export async function getQuotes(accessToken: string, symbols: string[]) {
