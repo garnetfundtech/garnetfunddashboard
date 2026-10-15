@@ -186,6 +186,14 @@ export function RiskReportingTab({
             <Download className="h-3.5 w-3.5" />
             Daily returns
           </GhostBtn>
+          <GhostBtn onClick={() => window.open("/api/risk/holdings/export", "_blank")}>
+            <Download className="h-3.5 w-3.5" />
+            Holdings
+          </GhostBtn>
+          <GhostBtn onClick={() => window.open("/api/risk/mandate/export", "_blank")}>
+            <Download className="h-3.5 w-3.5" />
+            Benchmark &amp; mix
+          </GhostBtn>
         </div>
       </div>
 
