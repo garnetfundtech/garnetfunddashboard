@@ -2,6 +2,7 @@ import { requireApprovedProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dailyReturns, type NavPoint } from "@/lib/risk-nav";
 import { csvResponse } from "@/lib/csv";
+import { canReadFullRiskBoard } from "@/lib/nav-access";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,12 @@ const SUSPICIOUS_DAILY_MOVE = 0.05;
  * stays with them and is visible in the file.
  */
 export async function GET() {
-  await requireApprovedProfile();
+  const profile = await requireApprovedProfile();
+  // §6 Access: an analyst reads their own positions only, and the fund's NAV
+  // history is not one of them — the same reason Fund Reporting is hidden.
+  if (!canReadFullRiskBoard(profile.role)) {
+    return new Response("Not available to your role.", { status: 403 });
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin

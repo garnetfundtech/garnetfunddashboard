@@ -180,6 +180,12 @@ export function RiskReportingTab({
               {pack.title}
             </GhostBtn>
           ))}
+          {/* Every stored day, not just this period, so the reader can see
+              where the series becomes trustworthy. */}
+          <GhostBtn onClick={() => window.open("/api/risk/nav/export", "_blank")}>
+            <Download className="h-3.5 w-3.5" />
+            Daily returns
+          </GhostBtn>
         </div>
       </div>
 
