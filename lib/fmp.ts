@@ -247,3 +247,42 @@ export async function fetchDailyCloses(
     return { closes: [], unavailable: "empty" };
   }
 }
+
+export type AdjustedCloses = {
+  /** Dividend- and split-adjusted closes, oldest first. */
+  closes: DailyClose[];
+  /** FMP's HTTP status, or null when the request itself failed. */
+  status: number | null;
+  /** The fields FMP returned on its first row, so a renamed field shows up
+   *  in the coverage report instead of reading as "no data". */
+  fields: string[];
+};
+
+/**
+ * Dividend-adjusted daily closes: the series a total return is taken from.
+ *
+ * Unlike `fetchDailyCloses`, which is price only, a distribution lowers the
+ * adjusted history before it rather than showing as a drop on the ex-date, so
+ * the day-over-day change in `adjClose` is the total return. That matters for
+ * anything paying monthly, like a CLO or bond fund.
+ */
+export async function fetchAdjustedCloses(symbol: string, from: string, to: string): Promise<AdjustedCloses> {
+  const key = process.env.FMP_API_KEY;
+  if (!key) throw new Error("Missing FMP_API_KEY");
+  const url =
+    `${FMP_BASE}/historical-price-eod/dividend-adjusted?symbol=${encodeURIComponent(symbol)}` +
+    `&from=${from}&to=${to}&apikey=${encodeURIComponent(key)}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return { closes: [], status: res.status, fields: [] };
+    const data = (await res.json()) as Record<string, unknown>[];
+    if (!Array.isArray(data)) return { closes: [], status: res.status, fields: [] };
+    const closes = data
+      .map((row) => ({ date: String(row.date ?? "").slice(0, 10), close: Number(row.adjClose) }))
+      .filter((r) => r.date && Number.isFinite(r.close) && r.close > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return { closes, status: res.status, fields: data[0] ? Object.keys(data[0]) : [] };
+  } catch {
+    return { closes: [], status: null, fields: [] };
+  }
+}
