@@ -100,8 +100,18 @@ export function AlertsPageClient({
     }, 600);
   }
 
+  // Read alerts through a ref so refreshPrices stays stable. Depending on
+  // `alerts` directly meant every price update (which calls setAlerts) made a
+  // new callback, re-ran the effect below, and fetched again immediately — a
+  // request loop for as long as the page was open.
+  const alertsRef = useRef(alerts);
+  useEffect(() => {
+    alertsRef.current = alerts;
+  }, [alerts]);
+
   const refreshPrices = useCallback(async () => {
-    const active = alerts.filter((a) => a.status === "active");
+    if (document.hidden) return;
+    const active = alertsRef.current.filter((a) => a.status === "active");
     if (!active.length) return;
     const tickers = [...new Set(active.map((a) => a.ticker))];
     try {
@@ -125,13 +135,18 @@ export function AlertsPageClient({
     } catch {
       /* ignore */
     }
-  }, [alerts]);
+  }, []);
 
   useEffect(() => {
     refreshPrices();
     refreshIntervalRef.current = setInterval(refreshPrices, 30000);
+    const onVisible = () => {
+      if (!document.hidden) void refreshPrices();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refreshPrices]);
 

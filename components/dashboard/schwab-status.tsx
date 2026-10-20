@@ -23,6 +23,8 @@ export function SchwabStatus({ className = "" }: { className?: string }) {
   useEffect(() => {
     let cancelled = false;
     async function poll() {
+      // Skip while the tab is hidden; the visibility listener catches up on return.
+      if (document.hidden) return;
       try {
         const res = await fetch("/api/schwab/status");
         const json = (await res.json()) as Status;
@@ -33,9 +35,14 @@ export function SchwabStatus({ className = "" }: { className?: string }) {
     }
     void poll();
     const id = setInterval(poll, 60_000);
+    const onVisible = () => {
+      if (!document.hidden) void poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
