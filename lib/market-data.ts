@@ -242,6 +242,26 @@ function isNyWeekend(at = new Date()) {
   return day === 0 || day === 6;
 }
 
+/**
+ * True when no equity session has begun yet today in New York: a weekend, a
+ * market holiday, or the hours before pre-market. Falls back to the weekend
+ * check alone if Schwab's market hours are unavailable.
+ */
+async function sessionNotStartedToday(token: string, at = new Date()): Promise<boolean> {
+  try {
+    const hours = await getMarketHours(token);
+    const eq = hours?.equity?.EQ ?? hours?.equity?.equity;
+    if (!eq) return true; // Schwab omits the equity block on days it is shut.
+    const starts = [eq.sessionHours?.preMarket?.[0]?.start, eq.sessionHours?.regularMarket?.[0]?.start]
+      .filter((s): s is string => !!s)
+      .map((s) => new Date(s).getTime());
+    if (!starts.length) return true;
+    return at.getTime() < Math.min(...starts);
+  } catch {
+    return isNyWeekend(at);
+  }
+}
+
 async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
   const token = await loadValidTraderToken();
   if (!token) return lastGoodPortfolio;
@@ -288,10 +308,12 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
 
-    // Nothing trades on a Saturday or Sunday, so there is no day P&L to show.
-    // Schwab's per-position figure is not reliable then: on Sunday Oct 11 it
-    // added up to +$3.6K while the NAV had not moved since Friday's close.
-    const marketClosedToday = isNyWeekend();
+    // Until today's session opens there is no day P&L to show, and Schwab's
+    // per-position figure is not reliable then: on Sunday Oct 11 it added up
+    // to +$3.6K while the NAV had not moved since Friday's close, and at 2am on
+    // Tuesday Oct 20 it read +$14.1K. Weekends, holidays and the overnight
+    // hours before pre-market all read zero.
+    const marketClosedToday = await sessionNotStartedToday(token);
 
     const positions: LivePosition[] = rawPositions
       .filter((p) => {

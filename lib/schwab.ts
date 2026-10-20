@@ -531,7 +531,14 @@ export async function getMarketMovers(
 }
 
 export async function getMarketHours(accessToken: string) {
-  const today = new Date().toISOString().split("T")[0];
+  // New York's date, not UTC's: after 8pm Eastern the UTC date is already
+  // tomorrow, which asked for the next session's hours.
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const params = new URLSearchParams({ markets: "equity,option", date: today });
   const response = await fetch(`${SCHWAB_MARKET_BASE}/markets?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
