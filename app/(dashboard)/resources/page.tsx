@@ -18,7 +18,9 @@ export default async function ResourcesPage({
       initialOpenId={sp.open ?? ""}
       initialMode={sp.mode === "edit" ? "edit" : "view"}
       meetingOverviews={meetingOverviews}
-      initialTab={sp.tab === "meetings" ? "meetings" : "library"}
+      // Meeting overviews used to be their own tab; old ?tab=meetings links
+      // now open the library on that filter.
+      initialFilter={sp.tab === "meetings" ? "Meeting Overview" : "All"}
     />
   );
 }

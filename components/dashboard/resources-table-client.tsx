@@ -10,7 +10,6 @@ import { GhostBtn, PrimaryBtn } from "@/components/dashboard/buttons";
 import { ResourcesUploadModal } from "@/components/dashboard/resources-upload-modal";
 import { MeetingOverviews } from "@/components/dashboard/meeting-overviews";
 import type { MeetingOverview } from "@/lib/meeting-overviews";
-import { cn } from "@/lib/utils";
 import { usePreviewPrint } from "@/components/dashboard/use-preview-print";
 import { FilePreview } from "@/components/dashboard/file-preview";
 import { FileTypeChip } from "@/components/dashboard/file-type-chip";
@@ -27,12 +26,11 @@ import {
 
 type CategoryFilter = "All" | string;
 
-type ResourcesTab = "library" | "meetings";
+/** Written meeting overviews, shown in place of the file table. */
+const MEETINGS_FILTER = "Meeting Overview";
 
-const TABS: { value: ResourcesTab; label: string }[] = [
-  { value: "library", label: "Library" },
-  { value: "meetings", label: "Meeting Overview" },
-];
+/** Always offered, in this order, whether or not anything is filed under them yet. */
+const FIXED_FILTERS: CategoryFilter[] = ["All", "Training", "Pitch", MEETINGS_FILTER, "Recruiting"];
 
 function fmtSize(bytes?: number) {
   if (!bytes) return "—";
@@ -69,24 +67,26 @@ export function ResourcesTableClient({
   initialOpenId = "",
   initialMode = "view",
   meetingOverviews,
-  initialTab = "library",
+  initialFilter = "All",
 }: {
   resources: ResourceWithLinks[];
   actor: { id: string; role: UserRole };
   initialOpenId?: string;
   initialMode?: "view" | "edit";
   meetingOverviews: MeetingOverview[];
-  initialTab?: ResourcesTab;
+  initialFilter?: CategoryFilter;
 }) {
-  const [activeTab, setActiveTab] = useState<ResourcesTab>(initialTab);
-  // Local state, with the URL kept in step so a pasted link opens the same tab.
-  const selectTab = (next: ResourcesTab) => {
-    setActiveTab(next);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(initialFilter);
+  const showingMeetings = categoryFilter === MEETINGS_FILTER;
+  // The URL is kept in step for meetings so a pasted link opens on them.
+  const selectFilter = (next: CategoryFilter) => {
+    setCategoryFilter(next);
     const params = new URLSearchParams(window.location.search);
-    params.set("tab", next);
-    window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+    if (next === MEETINGS_FILTER) params.set("tab", "meetings");
+    else params.delete("tab");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
   };
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
   const [opened, setOpened] = useState<ResourceWithLinks | null>(null);
   const [editing, setEditing] = useState<ResourceWithLinks | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -107,7 +107,12 @@ export function ResourcesTableClient({
     [resources],
   );
 
-  const filterOptions: CategoryFilter[] = ["All", ...categories.map(titleCase)];
+  // Anything filed under another category (Playbook, Research) still gets a
+  // filter of its own, so no file is left reachable only through All.
+  const filterOptions: CategoryFilter[] = [
+    ...FIXED_FILTERS,
+    ...categories.map(titleCase).filter((c) => !FIXED_FILTERS.includes(c)),
+  ];
 
   const filtered = useMemo(() => {
     if (categoryFilter === "All") return resources;
@@ -201,32 +206,18 @@ export function ResourcesTableClient({
       <PageHeader
         title="Resource Library"
         meta={
-          activeTab === "library"
-            ? `${resources.length} file${resources.length === 1 ? "" : "s"}`
-            : `${meetingOverviews.length} meeting${meetingOverviews.length === 1 ? "" : "s"}`
+          showingMeetings
+            ? `${meetingOverviews.length} meeting${meetingOverviews.length === 1 ? "" : "s"}`
+            : `${resources.length} file${resources.length === 1 ? "" : "s"}`
         }
-        actions={activeTab === "library" ? <ResourcesUploadModal /> : undefined}
+        actions={showingMeetings ? undefined : <ResourcesUploadModal />}
       />
 
-      <nav className="flex items-end gap-0 border-b border-line">
-        {TABS.map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            onClick={() => selectTab(t.value)}
-            className={cn(
-              "-mb-px border-b-2 px-3.5 py-2 text-[13.5px] transition-colors",
-              activeTab === t.value
-                ? "border-garnet font-medium text-ink"
-                : "border-transparent text-ink-3 hover:text-ink",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <div className="flex justify-end">
+        <FilterTabs options={filterOptions} value={categoryFilter} onChange={selectFilter} />
+      </div>
 
-      {activeTab === "meetings" ? (
+      {showingMeetings ? (
         <MeetingOverviews overviews={meetingOverviews} actor={actor} />
       ) : (
       <>
@@ -236,13 +227,6 @@ export function ResourcesTableClient({
         title="Library"
         count={filtered.length}
         className="min-h-0 flex-1"
-        actions={
-          <FilterTabs
-            options={filterOptions}
-            value={categoryFilter}
-            onChange={setCategoryFilter}
-          />
-        }
       >
         <table className="w-full">
           <thead>
