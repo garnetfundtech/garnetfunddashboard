@@ -175,6 +175,7 @@ export const RESOURCE_CATEGORIES = [
   "pitch",
   "playbook",
   "research",
+  "recruiting", // needs migration 0038
 ] as const;
 
 export type ResourceCategory = (typeof RESOURCE_CATEGORIES)[number];
