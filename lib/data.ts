@@ -29,7 +29,7 @@ export type HomepageData = {
   portfolio: PortfolioSummary | null;
   market: MarketOverview | null;
   benchmarkYtd: BenchmarkCandle[];
-  /** The fund's own YTD return, computed the same way as the chart's Alpha
+  /** The fund's own YTD return, computed the same way as the chart's "vs S&P 500"
    *  badge — null when there's no valid session or no price history yet. */
   fundYtdPct: number | null;
 };

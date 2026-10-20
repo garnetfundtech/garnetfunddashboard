@@ -11,6 +11,8 @@ import { unstable_cache } from "next/cache";
 import { getValidTraderToken } from "@/lib/market-data";
 import { getAccountPositions, getPriceHistory, pickAccount } from "@/lib/schwab";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dailyReturns, getNavSeries, type NavPoint } from "@/lib/risk-nav";
+import { nyDate } from "@/lib/realized-gains";
 
 export type PerformancePeriod = "1D" | "1W" | "2W" | "1M" | "3M" | "6M" | "1Y" | "YTD";
 
@@ -43,7 +45,69 @@ export type PortfolioPerformanceResult = {
   candles: { date: string; portfolio: number }[];
   /** The single most recent cumulative return %, i.e. "our return so far this period." */
   latestPct: number | null;
+  /** "nav" when drawn from the stored daily NAV; "estimate" when rebuilt from
+   *  today's holdings (intraday ranges, or NAV history too short for the range). */
+  source?: "nav" | "estimate";
 };
+
+/**
+ * The line from the stored daily NAV (nav_daily), chain-linking the same
+ * flow-adjusted daily returns the risk pages use. This is what the fund was
+ * actually worth each day, so trades made during the period and positions
+ * outside the top ten are all counted, and a past day never changes.
+ *
+ * Returns null when the stored history does not reach back to the first day
+ * of the range: starting the line later than SPY's would make the gap between
+ * them meaningless.
+ */
+async function navCandles(
+  axis: { datetime: number; date: string }[],
+  liveNav: number,
+): Promise<PortfolioPerformanceResult | null> {
+  const axisDays = axis.map((d) => nyDate(new Date(d.datetime)));
+  const firstDay = axisDays[0];
+  const lastDay = axisDays[axisDays.length - 1];
+  if (!firstDay || !lastDay) return null;
+
+  let points: NavPoint[] = (await getNavSeries(400)).points;
+
+  // Today's row is written by the close-of-day snapshot cron; until it lands,
+  // the live account value stands in so the line reaches today like SPY's does.
+  const lastStored = points[points.length - 1]?.captured_on ?? "";
+  if (liveNav > 0 && lastStored < lastDay) {
+    points = [...points, { captured_on: lastDay, nav: liveNav, external_flow: 0, source: "broker" }];
+  }
+
+  let baseIdx = -1;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].captured_on <= firstDay) { baseIdx = i; break; }
+  }
+  if (baseIdx < 0) return null;
+
+  const fromBase = points.slice(baseIdx);
+  const returns = dailyReturns(fromBase);
+  const growth: { day: string; value: number }[] = [{ day: fromBase[0].captured_on, value: 1 }];
+  for (let i = 0; i < returns.length; i++) {
+    growth.push({ day: fromBase[i + 1].captured_on, value: growth[i].value * (1 + returns[i]) });
+  }
+
+  const candles = axis.map((d, i) => {
+    // Last NAV on or before this candle's day, so a missed snapshot holds flat
+    // rather than dropping the line.
+    let g = 1;
+    for (let j = growth.length - 1; j >= 0; j--) {
+      if (growth[j].day <= axisDays[i]) { g = growth[j].value; break; }
+    }
+    return { date: d.date, portfolio: parseFloat(((g - 1) * 100).toFixed(2)) };
+  });
+
+  return {
+    ok: true,
+    candles,
+    latestPct: candles.length ? candles[candles.length - 1].portfolio : null,
+    source: "nav",
+  };
+}
 
 export async function getPortfolioPerformance(period: PerformancePeriod): Promise<PortfolioPerformanceResult> {
   const params = PERIOD_PARAMS[period];
@@ -97,6 +161,13 @@ export async function getPortfolioPerformance(period: PerformancePeriod): Promis
       datetime: Number(c.datetime),
       date: formatDate(Number(c.datetime), period),
     }));
+
+    // Daily ranges come from the stored NAV. Intraday ranges (1D/1W/2W) still
+    // need the estimate below, since NAV is only recorded once a day.
+    if (params.frequencyType === "daily") {
+      const fromNav = await navCandles(dateAxis, liquidationValue);
+      if (fromNav) return fromNav;
+    }
 
     const histByTicker: Record<string, { datetime: number; close: number }[]> = {};
     if (heldPositions.length) {
@@ -153,7 +224,7 @@ export async function getPortfolioPerformance(period: PerformancePeriod): Promis
       return { date: d.date, portfolio: parseFloat(pct.toFixed(2)) };
     });
 
-    return { ok: true, candles, latestPct: candles.length ? candles[candles.length - 1].portfolio : null };
+    return { ok: true, candles, latestPct: candles.length ? candles[candles.length - 1].portfolio : null, source: "estimate" };
   } catch {
     return { ok: false, candles: [], latestPct: null };
   }
@@ -163,6 +234,6 @@ export async function getPortfolioPerformance(period: PerformancePeriod): Promis
  *  every open tab/user hitting the home page or the chart shouldn't each trigger it fresh. */
 export const getCachedPortfolioPerformance = unstable_cache(
   getPortfolioPerformance,
-  ["portfolio-performance-v1"],
+  ["portfolio-performance-v2"],
   { revalidate: 60, tags: ["schwab-portfolio-performance"] },
 );
