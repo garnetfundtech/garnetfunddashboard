@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { closedTodayDayPnl, nyDate, syncRealizedGains } from "@/lib/realized-gains";
 import { cfg, getRiskConfig } from "@/lib/risk-config";
+import { assetClassOf } from "@/lib/risk-engine";
+import { correctBadMarks } from "@/lib/mark-check";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -304,7 +306,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     // larger of the API value and (cash + securities) so weights and P&L % are
     // always relative to true AUM.
     const apiLiqValue = Number(aggBalance.currentLiquidationValue ?? balances.liquidationValue ?? 0);
-    const liquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
+    const brokerLiquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
 
     const rawPositions: Record<string, unknown>[] = sec.positions ?? [];
 
@@ -315,7 +317,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     // hours before pre-market all read zero.
     const marketClosedToday = await sessionNotStartedToday(token);
 
-    const positions: LivePosition[] = rawPositions
+    const brokerPositions: LivePosition[] = rawPositions
       .filter((p) => {
         const inst = p.instrument as Record<string, unknown> | undefined;
         return inst?.symbol;
@@ -356,11 +358,6 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
         const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
         const dayPnl = marketClosedToday ? 0 : Number(p.currentDayProfitLoss ?? 0);
         const dayPnlPct = marketClosedToday ? 0 : Number(p.currentDayProfitLossPercentage ?? 0);
-        // Use liquidationValue (cash + securities) as denominator so weights
-        // reflect true portfolio allocation including uninvested cash. Shorts
-        // carry a negative marketValue and therefore a negative weight.
-        const weight = liquidationValue > 0 ? (marketValue / liquidationValue) * 100 : 0;
-
         // Option and bond specifics come straight off the instrument block.
         // Anything the broker does not report stays undefined rather than
         // being guessed — the risk spec forbids silent approximation, and a
@@ -390,10 +387,28 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
           unrealizedPnlPct,
           dayPnl,
           dayPnlPct,
-          weight,
+          weight: 0, // set below, once NAV is corrected for any bad marks
           side,
         };
       });
+
+    // Reprice any stock or fund whose broker value matches no live quote; see
+    // mark-check.ts. A quote outage leaves the broker's figures as they are.
+    const quoteSymbols = brokerPositions.filter((p) => assetClassOf(p.assetType) === "Equity").map((p) => p.ticker);
+    const quotes = quoteSymbols.length ? await getQuotes(token, quoteSymbols).catch(() => null) : null;
+    const marks = correctBadMarks(brokerPositions, quotes, !marketClosedToday);
+    const liquidationValue = brokerLiquidationValue - marks.gap;
+    // Use liquidationValue (cash + securities) as denominator so weights
+    // reflect true portfolio allocation including uninvested cash. Shorts
+    // carry a negative marketValue and therefore a negative weight.
+    const positions = marks.positions.map((p) => ({
+      ...p,
+      weight: liquidationValue > 0 ? (p.marketValue / liquidationValue) * 100 : 0,
+    }));
+    const longMarkGap = brokerPositions.reduce(
+      (s, p, i) => (p.side === "short" ? s : s + p.marketValue - marks.positions[i].marketValue),
+      0,
+    );
 
     const unrealizedPnl = positions.reduce((s, p) => s + p.unrealizedPnl, 0);
 
@@ -441,7 +456,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     const result: PortfolioSummary = {
       liquidationValue,
       cashAvailable,
-      longMarketValue,
+      longMarketValue: longMarketValue - longMarkGap,
       shortMarketValue,
       grossMarketValue,
       netMarketValue,

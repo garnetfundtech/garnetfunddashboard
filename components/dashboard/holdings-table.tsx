@@ -146,7 +146,13 @@ export function HoldingsTable({
                     <td className="whitespace-nowrap px-3 py-1 tabular-nums text-ink-2">{fmtDate(purchaseDates[pos.ticker])}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{pos.quantity.toLocaleString()}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.avgCost)}</td>
-                    <td className="px-3 py-1 text-right tabular-nums font-medium text-ink">{fmtUsd(pos.currentPrice)}</td>
+                    <td
+                      className="px-3 py-1 text-right tabular-nums font-medium text-ink"
+                      title={pos.brokerPrice != null ? `Schwab's account valued this at ${fmtUsd(pos.brokerPrice)}, which matches no quote. Showing the live quote.` : undefined}
+                    >
+                      {pos.brokerPrice != null && <span className="mr-1 text-neg">*</span>}
+                      {fmtUsd(pos.currentPrice)}
+                    </td>
                     <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.marketValue)}</td>
                     <td className={`px-3 py-1 text-right tabular-nums font-medium ${colorClass(pos.unrealizedPnl)}`}>{fmtUsd(pos.unrealizedPnl)}</td>
                     <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.unrealizedPnlPct)}`}>{fmtPct(pos.unrealizedPnlPct)}</td>
