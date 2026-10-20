@@ -102,6 +102,9 @@ export type LivePosition = {
   /** Futures only: contract multiplier, straight from the broker. Never
    *  inferred — without it the notional cannot be computed [Risk spec §6]. */
   futuresMultiplier?: number;
+  /** Set when the broker's implied price matched no quote and the position
+   *  was repriced from the quote: the price the broker had. */
+  brokerPrice?: number;
 };
 
 export type PortfolioSummary = {

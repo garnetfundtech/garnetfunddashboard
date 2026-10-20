@@ -3,6 +3,8 @@
  * Every assertion below is a sentence from Cooper's acceptance checklist.
  */
 import { getRiskConfig } from "@/lib/risk-config";
+import { correctBadMarks } from "@/lib/mark-check";
+import type { LivePosition } from "@/lib/types";
 import { scoreMonitor, MONITORS_BY_ID, POSITION_RULES_BY_ID, NOTIFY_RECIPIENTS } from "@/lib/risk-parameters";
 import {
   evaluatePosition, computeExposure, computeSectorExposure, expectedStopPrice,
@@ -289,6 +291,30 @@ check("what the index explains is reported separately, not as alpha", split.fact
 check("no betas means no split, with a reason",
   alphaSplit({ longReturnPct: 10, shortReturnPct: -2, longBeta: null, shortBeta: null, benchmarkReturnPct: 6 }).note,
   "betas unavailable — no price history for one or more holdings");
+
+section("Live marks — broker value against quotes");
+{
+  const cloa: LivePosition = {
+    ticker: "CLOA", name: "iShares AAA CLO", assetType: "COLLECTIVE_INVESTMENT", quantity: 1815,
+    avgCost: 51.5, currentPrice: 59.63, marketValue: 108228.45, unrealizedPnl: 108228.45 - 93472.5,
+    unrealizedPnlPct: 0, dayPnl: 14120.72, dayPnlPct: 15, weight: 0, side: "long",
+  };
+  const quotes = { CLOA: { quote: { lastPrice: 51.86, mark: 51.86, closePrice: 51.85 } } };
+  const fixed = correctBadMarks([cloa], quotes, true);
+  const p = fixed.positions[0];
+  check("Oct 20: CLOA at $59.63 against a $51.86 quote is repriced", p.currentPrice, 51.86);
+  check("its value is shares times the quote", Number(p.marketValue.toFixed(2)), 94125.9);
+  check("NAV is over by the difference", Number(fixed.gap.toFixed(2)), 14102.55);
+  check("Day P&L is the quote's move, not the bad mark", Number(p.dayPnl.toFixed(2)), 18.15);
+  check("open P&L is against the same cost", Number(p.unrealizedPnl.toFixed(2)), 653.4);
+  check("the broker's price is kept for the flag", p.brokerPrice, 59.63);
+  check("before the session, a repriced position has no day P&L", correctBadMarks([cloa], quotes, false).positions[0].dayPnl, 0);
+  const fine = { ...cloa, currentPrice: 51.9, marketValue: 94198.5, dayPnl: 90.75 };
+  check("a broker price near the quote is left alone", correctBadMarks([fine], quotes, true).positions[0], fine);
+  check("no quotes, no change", correctBadMarks([cloa], null, true).gap, 0);
+  const bond = { ...cloa, ticker: "912828XX", assetType: "FIXED_INCOME" };
+  check("bonds are not priced from quotes", correctBadMarks([bond], { "912828XX": quotes.CLOA }, true).gap, 0);
+}
 
 console.log(`\n${"═".repeat(64)}\n  GRAND TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);
 if (failures.length) { console.log("\nAll failures:"); failures.forEach((f) => console.log("  • " + f)); }
