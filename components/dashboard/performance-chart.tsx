@@ -35,9 +35,12 @@ function tickInterval(totalPoints: number, range: Range): number {
 
 type ChartPoint = { date: string; value: number; portfolio: number | null };
 
+type PortfolioSource = "nav" | "estimate" | undefined;
+
 type RangeCacheEntry = {
   benchmarkData: BenchmarkCandle[];
   portfolioCandles: { date: string; portfolio: number | null }[];
+  portfolioSource: PortfolioSource;
 };
 
 function CustomTooltip({
@@ -79,11 +82,10 @@ async function fetchOneRange(r: Range): Promise<RangeCacheEntry | null> {
         ? (benchRes.value.candles as BenchmarkCandle[])
         : null;
     if (!benchmarkData) return null;
-    const portfolioCandles =
-      portRes.status === "fulfilled" && portRes.value.ok && portRes.value.candles?.length
-        ? portRes.value.candles
-        : [];
-    return { benchmarkData, portfolioCandles };
+    const portOk = portRes.status === "fulfilled" && portRes.value.ok && portRes.value.candles?.length;
+    const portfolioCandles = portOk ? portRes.value.candles : [];
+    const portfolioSource: PortfolioSource = portOk ? portRes.value.source : undefined;
+    return { benchmarkData, portfolioCandles, portfolioSource };
   } catch {
     return null;
   }
@@ -99,6 +101,7 @@ export function PerformanceChart({
   const [range, setRange] = useState<Range>("YTD");
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkCandle[]>(initialBenchmark);
   const [portfolioCandles, setPortfolioCandles] = useState<{ date: string; portfolio: number | null }[]>([]);
+  const [portfolioSource, setPortfolioSource] = useState<PortfolioSource>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -117,6 +120,7 @@ export function PerformanceChart({
     if (cached) {
       setBenchmarkData(cached.benchmarkData);
       setPortfolioCandles(cached.portfolioCandles);
+      setPortfolioSource(cached.portfolioSource);
       setError(false);
       return;
     }
@@ -128,9 +132,11 @@ export function PerformanceChart({
       cacheRef.current.set(r, result);
       setBenchmarkData(result.benchmarkData);
       setPortfolioCandles(result.portfolioCandles);
+      setPortfolioSource(result.portfolioSource);
     } else {
       setError(true);
       setPortfolioCandles([]);
+      setPortfolioSource(undefined);
     }
     if (showLoading) setLoading(false);
   }, []);
@@ -143,14 +149,15 @@ export function PerformanceChart({
 
     async function seedAndPrefetch() {
       if (initialBenchmark.length > 0) {
-        cacheRef.current.set("YTD", { benchmarkData: initialBenchmark, portfolioCandles: [] });
+        cacheRef.current.set("YTD", { benchmarkData: initialBenchmark, portfolioCandles: [], portfolioSource: undefined });
         const json = await fetch(`/api/schwab/portfolio/performance?period=YTD`)
           .then((r) => r.json())
           .catch(() => null);
         if (cancelled) return;
         if (json?.ok && json.candles?.length) {
           setPortfolioCandles(json.candles);
-          cacheRef.current.set("YTD", { benchmarkData: initialBenchmark, portfolioCandles: json.candles });
+          setPortfolioSource(json.source);
+          cacheRef.current.set("YTD", { benchmarkData: initialBenchmark, portfolioCandles: json.candles, portfolioSource: json.source });
         }
       } else {
         await fetchRange("YTD");
@@ -241,12 +248,23 @@ export function PerformanceChart({
           const gfEnd = portfolioCandles[portfolioCandles.length - 1]?.portfolio;
           const spyEnd = benchmarkData[benchmarkData.length - 1]?.value;
           if (gfEnd == null || spyEnd == null) return null;
-          const alpha = gfEnd - spyEnd;
+          // Plain return gap (active return), not regression alpha — that one
+          // adjusts for beta and lives on the risk pages.
+          const gap = gfEnd - spyEnd;
+          const estimated = portfolioSource === "estimate";
           return (
-            <span className="whitespace-nowrap rounded-none border border-line bg-paper-3 px-2 py-[1px] text-[12px] text-ink">
-              Alpha <span className={`tabular-nums ${alpha >= 0 ? "text-pos" : "text-neg"}`}>
-                {alpha >= 0 ? "+" : ""}{alpha.toFixed(2)}%
+            <span
+              className="whitespace-nowrap rounded-none border border-line bg-paper-3 px-2 py-[1px] text-[12px] text-ink"
+              title={
+                estimated
+                  ? "Garnet's line is estimated from current holdings for this range, so trades made during it are not reflected."
+                  : "Garnet's return minus the S&P 500's over this range, from the fund's recorded daily NAV."
+              }
+            >
+              vs S&amp;P 500 <span className={`tabular-nums ${gap >= 0 ? "text-pos" : "text-neg"}`}>
+                {gap >= 0 ? "+" : ""}{gap.toFixed(2)}%
               </span>
+              {estimated && <span className="ml-1 text-ink-3">est.</span>}
             </span>
           );
         })()}

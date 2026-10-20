@@ -491,6 +491,10 @@ export async function getPriceHistory(
     frequencyType,
     frequency: String(frequency),
     needPreviousClose: "true",
+    // Regular session only. Left unset, Schwab includes pre-market and
+    // after-hours prints, so every chart kept moving until ~8pm ET and no
+    // longer agreed with the 4pm close the fund is valued at.
+    needExtendedHoursData: "false",
   });
   const response = await fetch(`${SCHWAB_MARKET_BASE}/pricehistory?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },

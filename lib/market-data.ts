@@ -685,7 +685,7 @@ async function loadBenchmarkHistory(period: PeriodKey = "YTD"): Promise<Benchmar
 }
 
 /** Benchmark (SPY) history per period, shared across users for 3 min. */
-export const fetchBenchmarkHistory = unstable_cache(loadBenchmarkHistory, ["benchmark-history-v1"], {
+export const fetchBenchmarkHistory = unstable_cache(loadBenchmarkHistory, ["benchmark-history-v2"], {
   revalidate: 180,
   tags: ["schwab-benchmark"],
 });
