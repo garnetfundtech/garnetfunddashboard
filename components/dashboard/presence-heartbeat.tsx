@@ -7,7 +7,9 @@ export function PresenceHeartbeat() {
     let cancelled = false;
 
     async function ping() {
-      if (cancelled) return;
+      // A background tab is not someone at the dashboard, and pinging from
+      // every forgotten tab was the largest share of the function CPU budget.
+      if (cancelled || document.hidden) return;
       try {
         await fetch("/api/presence/heartbeat", {
           method: "POST",
@@ -19,7 +21,8 @@ export function PresenceHeartbeat() {
       }
     }
 
-    const interval = setInterval(ping, 30000);
+    // Comfortably inside the 2-minute "online" window in lib/data.ts.
+    const interval = setInterval(ping, 60_000);
     const onVisible = () => {
       if (!document.hidden) {
         void ping();
