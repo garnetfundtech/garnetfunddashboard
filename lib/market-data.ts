@@ -7,7 +7,7 @@ import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { closedTodayDayPnl, nyDate, syncRealizedGains } from "@/lib/realized-gains";
 import { cfg, getRiskConfig } from "@/lib/risk-config";
 import { assetClassOf } from "@/lib/risk-engine";
-import { correctBadMarks } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks } from "@/lib/mark-check";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -394,14 +394,33 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 
     // Reprice any stock or fund whose broker value matches no live quote; see
     // mark-check.ts. A quote outage leaves the broker's figures as they are.
-    const quoteSymbols = brokerPositions.filter((p) => assetClassOf(p.assetType) === "Equity").map((p) => p.ticker);
+    // Options are quoted too, for the day P&L check below.
+    const quoteSymbols = brokerPositions
+      .filter((p) => ["Equity", "Option"].includes(assetClassOf(p.assetType)))
+      .map((p) => p.ticker);
     const quotes = quoteSymbols.length ? await getQuotes(token, quoteSymbols).catch(() => null) : null;
     const marks = correctBadMarks(brokerPositions, quotes, !marketClosedToday);
     const liquidationValue = brokerLiquidationValue - marks.gap;
+
+    // The orders are the same 60s cached fetch as the account orders view.
+    const rawOrders = await ordersPromise;
+    const orders = normalizeSchwabOrders(rawOrders);
+    // Any order today, whatever its status, so a partial fill still counts.
+    const today = nyDate();
+    const tradedToday = new Set(
+      orders.filter((o) => o.timestamp && nyDate(o.timestamp) === today).map((o) => o.ticker.toUpperCase()),
+    );
+    // Schwab's day P&L checked against the quotes; see checkDayPnl. Without
+    // the orders there is no telling what was bought today, so it is skipped.
+    const dayChecked =
+      rawOrders == null
+        ? marks.positions
+        : checkDayPnl(marks.positions, quotes, !marketClosedToday, tradedToday);
+
     // Use liquidationValue (cash + securities) as denominator so weights
     // reflect true portfolio allocation including uninvested cash. Shorts
     // carry a negative marketValue and therefore a negative weight.
-    const positions = marks.positions.map((p) => ({
+    const positions = dayChecked.map((p) => ({
       ...p,
       weight: liquidationValue > 0 ? (p.marketValue / liquidationValue) * 100 : 0,
     }));
@@ -414,9 +433,7 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
 
     // Day P&L has to include what was sold today. Schwab's per-position day
     // P&L only covers what is still held, so a Treasury sold at a loss this
-    // morning simply vanished from the total. The orders are the same 60s
-    // cached fetch as the account orders view.
-    const orders = normalizeSchwabOrders(await ordersPromise);
+    // morning simply vanished from the total.
     const soldTodayPnl = await closedTodayDayPnl(orders).catch(() => 0);
     const dayPnl = positions.reduce((s, p) => s + p.dayPnl, 0) + soldTodayPnl;
 

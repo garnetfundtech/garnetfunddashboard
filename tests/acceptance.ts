@@ -3,7 +3,7 @@
  * Every assertion below is a sentence from Cooper's acceptance checklist.
  */
 import { getRiskConfig } from "@/lib/risk-config";
-import { correctBadMarks } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks } from "@/lib/mark-check";
 import type { LivePosition } from "@/lib/types";
 import { scoreMonitor, MONITORS_BY_ID, POSITION_RULES_BY_ID, NOTIFY_RECIPIENTS } from "@/lib/risk-parameters";
 import {
@@ -314,6 +314,37 @@ section("Live marks — broker value against quotes");
   check("no quotes, no change", correctBadMarks([cloa], null, true).gap, 0);
   const bond = { ...cloa, ticker: "912828XX", assetType: "FIXED_INCOME" };
   check("bonds are not priced from quotes", correctBadMarks([bond], { "912828XX": quotes.CLOA }, true).gap, 0);
+}
+
+section("Day P&L — broker figure against the quote's move");
+{
+  const spy: LivePosition = {
+    ticker: "SPY", name: "SPDR S&P 500", assetType: "COLLECTIVE_INVESTMENT", quantity: 100,
+    avgCost: 500, currentPrice: 602, marketValue: 60200, unrealizedPnl: 10200,
+    unrealizedPnlPct: 20.4, dayPnl: -9800, dayPnlPct: -14, weight: 0, side: "long",
+  };
+  const quotes = {
+    SPY: { quote: { lastPrice: 602, mark: 602, closePrice: 600 } },
+    "SPY   261218C00600000": { quote: { lastPrice: 12, mark: 12, closePrice: 11 } },
+  };
+  const none = new Set<string>();
+  const fixed = checkDayPnl([spy], quotes, true, none)[0];
+  check("Nov 4: a day P&L the quote cannot explain is replaced by the quote's move", fixed.dayPnl, 200);
+  check("the broker's figure is kept for the flag", fixed.brokerDayPnl, -9800);
+  const ok = { ...spy, dayPnl: 210 };
+  check("a broker figure near the quote's move is left alone", checkDayPnl([ok], quotes, true, none)[0], ok);
+  check("a name traded today keeps the broker's figure", checkDayPnl([spy], quotes, true, new Set(["SPY"]))[0], spy);
+  check("before the session nothing is changed", checkDayPnl([spy], quotes, false, none)[0], spy);
+  check("no quotes, no change", checkDayPnl([spy], null, true, none)[0], spy);
+  const short = { ...spy, quantity: -100, marketValue: -60200, side: "short" as const };
+  check("a short loses as the price rises", checkDayPnl([short], quotes, true, none)[0].dayPnl, -200);
+  const call: LivePosition = {
+    ...spy, ticker: "SPY   261218C00600000", assetType: "OPTION", quantity: 2, optionMultiplier: 100,
+    currentPrice: 12, marketValue: 2400, dayPnl: -2400,
+  };
+  check("an option's move is per contract", checkDayPnl([call], quotes, true, none)[0].dayPnl, 200);
+  const bond = { ...spy, ticker: "912828XX", assetType: "FIXED_INCOME" };
+  check("bonds keep the broker's figure", checkDayPnl([bond], { "912828XX": quotes.SPY }, true, none)[0], bond);
 }
 
 console.log(`\n${"═".repeat(64)}\n  GRAND TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);

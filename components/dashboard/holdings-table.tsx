@@ -156,7 +156,13 @@ export function HoldingsTable({
                     <td className="px-3 py-1 text-right tabular-nums">{fmtUsd(pos.marketValue)}</td>
                     <td className={`px-3 py-1 text-right tabular-nums font-medium ${colorClass(pos.unrealizedPnl)}`}>{fmtUsd(pos.unrealizedPnl)}</td>
                     <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.unrealizedPnlPct)}`}>{fmtPct(pos.unrealizedPnlPct)}</td>
-                    <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.dayPnl)}`}>{fmtUsd(pos.dayPnl)}</td>
+                    <td
+                      className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.dayPnl)}`}
+                      title={pos.brokerDayPnl != null ? `Schwab reported ${fmtUsd(pos.brokerDayPnl)} for the day, which the quote's move does not support. Showing the quote's move.` : undefined}
+                    >
+                      {pos.brokerDayPnl != null && <span className="mr-1 text-neg">*</span>}
+                      {fmtUsd(pos.dayPnl)}
+                    </td>
                     <td className={`px-3 py-1 text-right tabular-nums ${colorClass(pos.dayPnlPct)}`}>{fmtPct(pos.dayPnlPct)}</td>
                     <td className="px-3 py-1 text-right tabular-nums">
                       <div className="flex items-center justify-end gap-2">
