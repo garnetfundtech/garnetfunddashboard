@@ -70,3 +70,54 @@ export function correctBadMarks(
 
   return { positions: corrected, gap };
 }
+
+/** Slack allowed between the broker's day P&L and the quote's: a share of value plus a flat amount. */
+const DAY_PNL_TOLERANCE_PCT = 0.5;
+const DAY_PNL_TOLERANCE_USD = 25;
+
+/**
+ * Day P&L checked against the quote: units × multiplier × (live − prior close).
+ *
+ * Schwab's per-position day P&L is measured against what it thinks the
+ * account held at the prior close, which is wrong after an account change.
+ * The fund moved its book to a new Schwab account on Nov 3 2026 and on Nov 4
+ * the dashboard read −$95.3K for the day while the prices behind it had
+ * barely moved. The quote knows nothing about accounts, so for a position not
+ * traded today it gives the true day P&L directly.
+ *
+ * Anything traded today keeps the broker's figure, since only the broker
+ * knows what was paid for today's shares. Stocks, funds and options are
+ * checked; bonds are quoted per 100 of par and not reliably quoted at all.
+ */
+export function checkDayPnl(
+  positions: LivePosition[],
+  quotes: Record<string, SchwabQuoteResponse> | null,
+  sessionStarted: boolean,
+  tradedToday: ReadonlySet<string>,
+): LivePosition[] {
+  if (!quotes || !sessionStarted) return positions;
+
+  return positions.map((p) => {
+    if (p.quantity === 0 || tradedToday.has(p.ticker.toUpperCase())) return p;
+    const cls = assetClassOf(p.assetType);
+    if (cls !== "Equity" && cls !== "Option") return p;
+    const multiplier = cls === "Option" ? (p.optionMultiplier ?? 100) : 1;
+    const q = quotes[p.ticker]?.quote;
+    const close = typeof q?.closePrice === "number" && q.closePrice > 0 ? q.closePrice : null;
+    const lives = [q?.lastPrice, q?.mark].filter((v): v is number => typeof v === "number" && v > 0);
+    if (close == null || !lives.length) return p;
+
+    // p.quantity is already signed, so a short gains as the price falls.
+    const expected = lives.map((live) => p.quantity * multiplier * (live - close));
+    const tolerance = (Math.abs(p.marketValue) * DAY_PNL_TOLERANCE_PCT) / 100 + DAY_PNL_TOLERANCE_USD;
+    if (expected.some((e) => Math.abs(p.dayPnl - e) <= tolerance)) return p;
+
+    const live = lives[0];
+    return {
+      ...p,
+      dayPnl: expected[0],
+      dayPnlPct: ((live - close) / close) * 100,
+      brokerDayPnl: p.dayPnl,
+    };
+  });
+}

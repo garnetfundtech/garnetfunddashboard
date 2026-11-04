@@ -105,6 +105,9 @@ export type LivePosition = {
   /** Set when the broker's implied price matched no quote and the position
    *  was repriced from the quote: the price the broker had. */
   brokerPrice?: number;
+  /** Set when the broker's day P&L disagreed with the quote's move and was
+   *  replaced by it: the day P&L the broker had. */
+  brokerDayPnl?: number;
 };
 
 export type PortfolioSummary = {
