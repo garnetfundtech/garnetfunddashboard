@@ -3,7 +3,8 @@
  * Every assertion below is a sentence from Cooper's acceptance checklist.
  */
 import { getRiskConfig } from "@/lib/risk-config";
-import { checkDayPnl, correctBadMarks } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks, filledTodaySymbols } from "@/lib/mark-check";
+import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import type { LivePosition } from "@/lib/types";
 import { scoreMonitor, MONITORS_BY_ID, POSITION_RULES_BY_ID, NOTIFY_RECIPIENTS } from "@/lib/risk-parameters";
 import {
@@ -345,6 +346,23 @@ section("Day P&L — broker figure against the quote's move");
   check("an option's move is per contract", checkDayPnl([call], quotes, true, none)[0].dayPnl, 200);
   const bond = { ...spy, ticker: "912828XX", assetType: "FIXED_INCOME" };
   check("bonds keep the broker's figure", checkDayPnl([bond], { "912828XX": quotes.SPY }, true, none)[0], bond);
+
+  // Nov 10: stops placed or replaced today exempted names nothing was traded in.
+  const leg = (symbol: string) => [{ instruction: "SELL", quantity: 10, instrument: { symbol, assetType: "EQUITY" } }];
+  const orders = normalizeSchwabOrders([
+    { orderId: 1, status: "WORKING", enteredTime: "2026-11-10T15:00:00+0000", filledQuantity: 0, orderLegCollection: leg("CPNG") },
+    { orderId: 2, status: "REPLACED", enteredTime: "2026-11-09T15:00:00+0000", closeTime: "2026-11-10T15:00:00+0000", filledQuantity: 0, orderLegCollection: leg("LNG") },
+    { orderId: 3, status: "CANCELED", enteredTime: "2026-11-10T14:00:00+0000", closeTime: "2026-11-10T15:00:00+0000", orderLegCollection: leg("ABVX") },
+    { orderId: 4, status: "FILLED", enteredTime: "2026-11-10T15:00:00+0000", closeTime: "2026-11-10T15:00:01+0000", filledQuantity: 11, orderLegCollection: [{ instruction: "BUY", quantity: 11, instrument: { symbol: "HOOD", assetType: "EQUITY" } }] },
+    { orderId: 5, status: "WORKING", enteredTime: "2026-11-06T15:00:00+0000", filledQuantity: 5, orderLegCollection: leg("SPY"),
+      orderActivityCollection: [{ executionLegs: [{ time: "2026-11-06T16:00:00+0000" }, { time: "2026-11-10T16:00:00+0000" }] }] },
+    { orderId: 6, status: "FILLED", enteredTime: "2026-11-09T15:00:00+0000", closeTime: "2026-11-09T15:00:01+0000", filledQuantity: 10, orderLegCollection: leg("CLOA") },
+  ]);
+  const filled = filledTodaySymbols(orders, "2026-11-10");
+  check("Nov 10: a working, replaced or cancelled stop is not a trade", ["CPNG", "LNG", "ABVX"].some((t) => filled.has(t)), false);
+  check("a fill today is a trade", filled.has("HOOD"), true);
+  check("a partial fill today on an order entered earlier is a trade", filled.has("SPY"), true);
+  check("yesterday's fill is not today's trade", filled.has("CLOA"), false);
 }
 
 console.log(`\n${"═".repeat(64)}\n  GRAND TOTAL: ${pass} passed, ${fail} failed\n${"═".repeat(64)}`);

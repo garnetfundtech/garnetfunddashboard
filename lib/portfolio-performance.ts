@@ -122,7 +122,7 @@ export async function getPortfolioPerformance(period: PerformancePeriod): Promis
     const sec = first.securitiesAccount;
     const balances = sec.currentBalances ?? sec.initialBalances ?? {};
     const aggBalance = first.aggregatedBalance ?? {};
-    const cashAvailable = Number(balances.cashAvailableForTrading ?? 0);
+    const cashAvailable = Number(balances.cashAvailableForTrading ?? balances.cashBalance ?? 0);
     const longMarketValue = Number(balances.longMarketValue ?? 0);
     const apiLiqValue = Number(aggBalance.currentLiquidationValue ?? balances.liquidationValue ?? 0);
     const liquidationValue = Math.max(apiLiqValue, cashAvailable + longMarketValue);
