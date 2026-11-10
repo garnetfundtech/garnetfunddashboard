@@ -17,6 +17,8 @@
 import { assetClassOf } from "@/lib/risk-engine";
 import type { SchwabQuoteResponse } from "@/lib/schwab";
 import type { LivePosition } from "@/lib/types";
+import type { NormalizedOrderRow } from "@/lib/schwab-orders";
+import { nyDate } from "@/lib/realized-gains";
 
 /** How far the broker's implied price may sit from the nearest quote price. */
 const MAX_MARK_GAP_PCT = 2;
@@ -120,4 +122,27 @@ export function checkDayPnl(
       brokerDayPnl: p.dayPnl,
     };
   });
+}
+
+/**
+ * Symbols with shares actually filled on `today` (a New York date), for
+ * checkDayPnl's exemption.
+ *
+ * Only a fill changes what the broker's day P&L has to account for. On Nov 10
+ * 2026 any order dated today counted, so stops placed or replaced on CPNG, LNG
+ * and ABVX exempted all three, and Schwab's −$7.8K for the day stood while the
+ * prices behind it had barely moved. The fill time comes from the execution
+ * legs where Schwab gives them, since a working order filled today may have
+ * been entered days ago.
+ */
+export function filledTodaySymbols(orders: NormalizedOrderRow[], today: string): Set<string> {
+  return new Set(
+    orders
+      .filter((o) => o.filledQuantity > 0)
+      .filter((o) => {
+        const at = o.lastFillTime ?? o.timestamp;
+        return !!at && nyDate(at) === today;
+      })
+      .map((o) => o.ticker.toUpperCase()),
+  );
 }

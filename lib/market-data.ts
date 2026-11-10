@@ -7,7 +7,7 @@ import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { closedTodayDayPnl, nyDate, syncRealizedGains } from "@/lib/realized-gains";
 import { cfg, getRiskConfig } from "@/lib/risk-config";
 import { assetClassOf } from "@/lib/risk-engine";
-import { checkDayPnl, correctBadMarks } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks, filledTodaySymbols } from "@/lib/mark-check";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -280,7 +280,9 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     const balances = sec.currentBalances ?? sec.initialBalances ?? {};
     const aggBalance = first.aggregatedBalance ?? {};
 
-    const cashAvailable = Number(balances.cashAvailableForTrading ?? 0);
+    // A cash account reports cashAvailableForTrading; a margin account (the
+    // fund's since the Nov 3 2026 switch) leaves it out and states cashBalance.
+    const cashAvailable = Number(balances.cashAvailableForTrading ?? balances.cashBalance ?? 0);
 
     // Pulled as discrete fields per risk spec §3.2. Undefined stays null so a
     // broker that simply omits the field reads as "unknown" on the dashboard
@@ -405,11 +407,8 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     // The orders are the same 60s cached fetch as the account orders view.
     const rawOrders = await ordersPromise;
     const orders = normalizeSchwabOrders(rawOrders);
-    // Any order today, whatever its status, so a partial fill still counts.
-    const today = nyDate();
-    const tradedToday = new Set(
-      orders.filter((o) => o.timestamp && nyDate(o.timestamp) === today).map((o) => o.ticker.toUpperCase()),
-    );
+    // Names with shares filled today, partial fills included; see filledTodaySymbols.
+    const tradedToday = filledTodaySymbols(orders, nyDate());
     // Schwab's day P&L checked against the quotes; see checkDayPnl. Without
     // the orders there is no telling what was bought today, so it is skipped.
     const dayChecked =

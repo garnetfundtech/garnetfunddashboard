@@ -10,6 +10,10 @@ export type NormalizedOrderRow = {
   instruction?: string;
   /** The leg instrument's assetType, e.g. EQUITY, FIXED_INCOME, OPTION. */
   assetType?: string;
+  /** Shares or contracts actually filled; 0 for a working, cancelled or replaced order. */
+  filledQuantity: number;
+  /** When the latest fill happened, from the execution legs, if Schwab gave one. */
+  lastFillTime?: string;
 };
 
 /** Normalize Schwab Trader API `GET /accounts/{hash}/orders` JSON array */
@@ -40,6 +44,16 @@ export function normalizeSchwabOrders(raw: unknown): NormalizedOrderRow[] {
       fillPrice = Number(o.price ?? 0);
     }
 
+    // A working stop, or one cancelled or replaced, has filled nothing.
+    const filledQuantity = Number(o.filledQuantity ?? 0) || 0;
+    const fillTimes = ((o.orderActivityCollection ?? []) as Record<string, unknown>[])
+      .flatMap((a) => (a.executionLegs ?? []) as Record<string, unknown>[])
+      .map((l) => (l.time != null ? String(l.time) : ""))
+      .filter((t) => t && !Number.isNaN(Date.parse(t)));
+    const lastFillTime = fillTimes.length
+      ? fillTimes.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a))
+      : undefined;
+
     const status = String(o.status ?? "");
     const timestamp = String(o.closeTime ?? o.enteredTime ?? "");
     const orderId = String(o.orderId ?? "");
@@ -54,6 +68,8 @@ export function normalizeSchwabOrders(raw: unknown): NormalizedOrderRow[] {
       timestamp,
       instruction,
       assetType: inst?.assetType != null ? String(inst.assetType).toUpperCase() : undefined,
+      filledQuantity,
+      lastFillTime,
     });
   }
 
