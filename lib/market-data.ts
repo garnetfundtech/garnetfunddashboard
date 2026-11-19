@@ -7,7 +7,7 @@ import { normalizeSchwabOrders } from "@/lib/schwab-orders";
 import { closedTodayDayPnl, nyDate, syncRealizedGains } from "@/lib/realized-gains";
 import { cfg, getRiskConfig } from "@/lib/risk-config";
 import { assetClassOf } from "@/lib/risk-engine";
-import { checkDayPnl, correctBadMarks, filledTodaySymbols } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks, filledToday } from "@/lib/mark-check";
 import {
   refreshAccessToken,
   getAccountPositions,
@@ -412,8 +412,8 @@ async function loadPortfolioSummary(): Promise<PortfolioSummary | null> {
     const rawOrders = await ordersPromise;
     if (rawOrders == null) console.error("[portfolio] orders unavailable; day P&L check skipped");
     const orders = normalizeSchwabOrders(rawOrders);
-    // Names with shares filled today, partial fills included; see filledTodaySymbols.
-    const tradedToday = filledTodaySymbols(orders, nyDate());
+    // What filled today, by name, partial fills included; see filledToday.
+    const tradedToday = filledToday(orders, nyDate());
     // Schwab's day P&L checked against the quotes; see checkDayPnl. Without
     // the orders there is no telling what was bought today, so it is skipped.
     const dayChecked =
