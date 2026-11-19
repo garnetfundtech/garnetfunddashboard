@@ -3,8 +3,9 @@
  * Every assertion below is a sentence from Cooper's acceptance checklist.
  */
 import { getRiskConfig } from "@/lib/risk-config";
-import { checkDayPnl, correctBadMarks, filledTodaySymbols } from "@/lib/mark-check";
+import { checkDayPnl, correctBadMarks, filledToday } from "@/lib/mark-check";
 import { normalizeSchwabOrders } from "@/lib/schwab-orders";
+import type { TodayFills } from "@/lib/mark-check";
 import type { LivePosition } from "@/lib/types";
 import { scoreMonitor, MONITORS_BY_ID, POSITION_RULES_BY_ID, NOTIFY_RECIPIENTS } from "@/lib/risk-parameters";
 import {
@@ -328,13 +329,26 @@ section("Day P&L — broker figure against the quote's move");
     SPY: { quote: { lastPrice: 602, mark: 602, closePrice: 600 } },
     "SPY   261218C00600000": { quote: { lastPrice: 12, mark: 12, closePrice: 11 } },
   };
-  const none = new Set<string>();
+  const none = new Map<string, TodayFills>();
   const fixed = checkDayPnl([spy], quotes, true, none)[0];
   check("Nov 4: a day P&L the quote cannot explain is replaced by the quote's move", fixed.dayPnl, 200);
   check("the broker's figure is kept for the flag", fixed.brokerDayPnl, -9800);
   const ok = { ...spy, dayPnl: 210 };
   check("a broker figure near the quote's move is left alone", checkDayPnl([ok], quotes, true, none)[0], ok);
-  check("a name traded today keeps the broker's figure", checkDayPnl([spy], quotes, true, new Set(["SPY"]))[0], spy);
+  const shorted = new Map([["SPY", { boughtQty: 0, boughtCost: 0, longOnly: false }]]);
+  check("a name shorted or covered today keeps the broker's figure", checkDayPnl([spy], quotes, true, shorted)[0], spy);
+  // Nov 19: an 80-share sale exempted all 1,600 CLOA and Schwab's -$86.9K stood.
+  const cloa: LivePosition = { ...spy, ticker: "CLOA", quantity: 1600, currentPrice: 51.905, marketValue: 83048, dayPnl: -86949 };
+  const cloaQuotes = { CLOA: { quote: { lastPrice: 51.905, mark: 51.905, closePrice: 51.895 } } };
+  const sold = new Map([["CLOA", { boughtQty: 0, boughtCost: 0, longOnly: true }]]);
+  check("Nov 19: a name sold from today is still checked against the quote", Math.round(checkDayPnl([cloa], cloaQuotes, true, sold)[0].dayPnl), 16);
+  // TKO bought today at 189.7505 and quoted at 185.70: Schwab's -$49 is right.
+  const tko: LivePosition = { ...spy, ticker: "TKO", quantity: 12, currentPrice: 185.7, marketValue: 2228.4, dayPnl: -48.61 };
+  const tkoQuotes = { TKO: { quote: { lastPrice: 185.7, mark: 185.7, closePrice: 190.13 } } };
+  const boughtTko = new Map([["TKO", { boughtQty: 12, boughtCost: 12 * 189.7505, longOnly: true }]]);
+  check("shares bought today are measured from what was paid", checkDayPnl([tko], tkoQuotes, true, boughtTko)[0], tko);
+  const badTko = { ...tko, dayPnl: -5000 };
+  check("a wrong figure on a name bought today is replaced", Math.round(checkDayPnl([badTko], tkoQuotes, true, boughtTko)[0].dayPnl), -49);
   check("before the session nothing is changed", checkDayPnl([spy], quotes, false, none)[0], spy);
   check("no quotes, no change", checkDayPnl([spy], null, true, none)[0], spy);
   const short = { ...spy, quantity: -100, marketValue: -60200, side: "short" as const };
@@ -358,7 +372,7 @@ section("Day P&L — broker figure against the quote's move");
       orderActivityCollection: [{ executionLegs: [{ time: "2026-11-06T16:00:00+0000" }, { time: "2026-11-10T16:00:00+0000" }] }] },
     { orderId: 6, status: "FILLED", enteredTime: "2026-11-09T15:00:00+0000", closeTime: "2026-11-09T15:00:01+0000", filledQuantity: 10, orderLegCollection: leg("CLOA") },
   ]);
-  const filled = filledTodaySymbols(orders, "2026-11-10");
+  const filled = filledToday(orders, "2026-11-10");
   check("Nov 10: a working, replaced or cancelled stop is not a trade", ["CPNG", "LNG", "ABVX"].some((t) => filled.has(t)), false);
   check("a fill today is a trade", filled.has("HOOD"), true);
   check("a partial fill today on an order entered earlier is a trade", filled.has("SPY"), true);
