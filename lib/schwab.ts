@@ -155,21 +155,34 @@ export function pickAccount<T extends RawAccount>(raw: T | T[] | null | undefine
   return list.reduce<T | null>((best, a) => (best && accountValue(best) >= accountValue(a) ? best : a), null);
 }
 
-/** The hash of the account pickAccount chooses, for the per-account endpoints. */
+/**
+ * The hash of the account pickAccount chooses, for the per-account endpoints.
+ *
+ * The account list is cached for a day, but it changes when the login is given
+ * access to another account. On Nov 19 2026 the fund's account was newly
+ * shared with the login; the cached list did not have it, no hash was found,
+ * the orders came back null, and with no orders the day P&L check was skipped,
+ * letting Schwab's −$86.9K through. A cache miss now asks Schwab again, and the
+ * single-account shortcut is gone, since a stale list of one can name the
+ * wrong account.
+ */
 export async function getFollowedAccountHash(accessToken: string): Promise<string | null> {
-  const nums = await getAccountNumbers(accessToken);
-  if (nums.length <= 1) return nums[0]?.hashValue ?? null;
   const picked = pickAccount((await getAccountPositions(accessToken)) as RawAccount | RawAccount[]);
   const number = picked?.securitiesAccount?.accountNumber;
-  return nums.find((n) => n.accountNumber === number)?.hashValue ?? null;
+  if (!number) return null;
+  const cached = await getAccountNumbers(accessToken);
+  const hit = cached.find((n) => n.accountNumber === number);
+  if (hit) return hit.hashValue;
+  const fresh = await getAccountNumbers(accessToken, { fresh: true });
+  return fresh.find((n) => n.accountNumber === number)?.hashValue ?? null;
 }
 
-export async function getAccountNumbers(accessToken: string) {
-  // The account list / hash never changes — cache a full day so orders,
-  // transactions, and turnover skip this round-trip entirely.
+export async function getAccountNumbers(accessToken: string, opts: { fresh?: boolean } = {}) {
+  // The hashes are stable, so the list is cached for a day; `fresh` skips the
+  // cache for when the login's set of accounts has changed.
   const response = await fetch(`${SCHWAB_TRADER_BASE}/accounts/accountNumbers`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    next: { revalidate: 86400 },
+    ...(opts.fresh ? { cache: "no-store" as const } : { next: { revalidate: 86400 } }),
   });
   if (!response.ok) throw new Error(`Account numbers request failed: ${response.status}`);
   return response.json() as Promise<{ accountNumber: string; hashValue: string }[]>;
